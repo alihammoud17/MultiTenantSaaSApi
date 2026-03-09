@@ -1,8 +1,10 @@
 ﻿using Domain.Entites;
 using Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -25,6 +27,30 @@ namespace Infrastructure.Data
             : base()
         {
             _tenantContext = null;
+        }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            if (!optionsBuilder.IsConfigured)
+            {
+                IConfigurationRoot configuration = new ConfigurationBuilder()
+                    .SetBasePath(Directory.GetCurrentDirectory())
+                    .AddJsonFile("appsettings.json", optional: true)
+                    .AddUserSecrets<ApplicationDbContext>()  // Add User Secrets!
+                    .AddEnvironmentVariables()
+                    .Build();
+
+                var connectionString = configuration.GetConnectionString("DefaultConnection");
+
+                if (string.IsNullOrEmpty(connectionString))
+                {
+                    throw new InvalidOperationException(
+                        "Connection string 'DefaultConnection' not found. " +
+                        "Set it via User Secrets: dotnet user-secrets set \"ConnectionStrings:DefaultConnection\" \"your-connection-string\"");
+                }
+
+                optionsBuilder.UseNpgsql(connectionString);
+            }
         }
 
         public DbSet<Tenant> Tenants => Set<Tenant>();
