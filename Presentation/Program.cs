@@ -25,6 +25,9 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(builder.Configuration["Redis:ConnectionString"]!));
 
+// Rate Limit
+builder.Services.AddScoped<IRateLimitService, RateLimitService>();
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -45,6 +48,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -56,6 +60,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseMiddleware<TenantMiddleware>();
+app.UseMiddleware<RateLimitMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 
