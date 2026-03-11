@@ -17,15 +17,18 @@ namespace Presentation.Controllers
         private readonly ApplicationDbContext _dbContext;
         private readonly IJwtService _jwtService;
         private readonly ILogger<AuthController> _logger;
+        private readonly IAuditService _auditService;
 
         public AuthController(
             ApplicationDbContext dbContext,
             IJwtService jwtService,
-            ILogger<AuthController> logger)
+            ILogger<AuthController> logger,
+            IAuditService auditService)
         {
             _dbContext = dbContext;
             _jwtService = jwtService;
             _logger = logger;
+            _auditService = auditService;
         }
 
         [HttpPost("register")]
@@ -90,6 +93,12 @@ namespace Presentation.Controllers
                 var token = _jwtService.GenerateToken(user, tenant);
 
                 _logger.LogInformation("New tenant registered: {TenantId}", tenant.Id);
+                await _auditService.LogAsync("TENANT_REGISTERED", nameof(Tenant), tenant.Id.ToString(), new
+                {
+                    tenant.Name,
+                    tenant.Subdomain,
+                    AdminUserId = user.Id
+                });
 
                 return Ok(new AuthResponse(
                     token,
@@ -123,6 +132,12 @@ namespace Presentation.Controllers
             // Update last login
             user.LastLoginAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync();
+
+            await _auditService.LogAsync("USER_LOGGED_IN", nameof(User), user.Id.ToString(), new
+            {
+                user.Email,
+                user.Role
+            });
 
             var token = _jwtService.GenerateToken(user, user.Tenant);
 

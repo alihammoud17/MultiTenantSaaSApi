@@ -18,6 +18,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // Tenant Context (scoped per request)
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddHttpContextAccessor();
 // JWT Service
 builder.Services.AddScoped<IJwtService, JwtService>();
 
@@ -27,6 +28,9 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 
 // Rate Limit
 builder.Services.AddScoped<IRateLimitService, RateLimitService>();
+
+// Audit
+builder.Services.AddScoped<IAuditService, AuditService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
