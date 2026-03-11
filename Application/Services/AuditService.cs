@@ -1,11 +1,10 @@
 ﻿using Domain.Entites;
 using Domain.Interfaces;
+using Domain.Outputs;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Http;
-using System;
-using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using System.Text;
 using System.Text.Json;
 
 namespace Application.Services
@@ -35,7 +34,7 @@ namespace Application.Services
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantContext.TenantId,
-                UserId = Guid.Parse(userId ?? Guid.Empty.ToString()),
+                UserId = Guid.TryParse(userId, out var parsedUserId) ? parsedUserId : Guid.Empty,
                 Action = action,
                 EntityType = entityType,
                 EntityId = entityId,
@@ -46,6 +45,54 @@ namespace Application.Services
 
             await _dbContext.AuditLogs.AddAsync(auditLog);
             await _dbContext.SaveChangesAsync();
+        }
+
+        public async Task<IReadOnlyCollection<TenantAuditLogItem>> GetTenantAuditLogsAsync(
+            int page = 1,
+            int pageSize = 50,
+            string? action = null,
+            DateTime? fromUtc = null,
+            DateTime? toUtc = null)
+        {
+            page = Math.Max(page, 1);
+            pageSize = Math.Clamp(pageSize, 1, 200);
+
+            var query = _dbContext.AuditLogs
+                .AsNoTracking()
+                .Where(x => x.TenantId == _tenantContext.TenantId);
+
+            if (!string.IsNullOrWhiteSpace(action))
+            {
+                query = query.Where(x => x.Action == action);
+            }
+
+            if (fromUtc.HasValue)
+            {
+                query = query.Where(x => x.Timestamp >= fromUtc.Value);
+            }
+
+            if (toUtc.HasValue)
+            {
+                query = query.Where(x => x.Timestamp <= toUtc.Value);
+            }
+
+            var logs = await query
+                .OrderByDescending(x => x.Timestamp)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new TenantAuditLogItem(
+                    x.Id,
+                    x.TenantId,
+                    x.UserId,
+                    x.Action,
+                    x.EntityType,
+                    x.EntityId,
+                    x.Changes,
+                    x.Timestamp,
+                    x.IpAddress))
+                .ToListAsync();
+
+            return logs;
         }
     }
 }
