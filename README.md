@@ -12,6 +12,8 @@ A starter ASP.NET Core 8 Web API for multi-tenant SaaS authentication.
 - Login endpoint with BCrypt password verification.
 - JWT token generation with issuer/audience/secret validation.
 - Request-scoped tenant context middleware.
+- Health checks endpoint (`/health`).
+- Plan catalog + tenant plan upgrade endpoint (`/api/plans`, `/api/plans/upgrade`).
 - PostgreSQL persistence via Entity Framework Core (Npgsql provider).
 - Redis connection registration for shared caching/session scenarios.
 

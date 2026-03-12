@@ -28,7 +28,9 @@ namespace Application.Services
         public async Task LogAsync(string action, string entityType, string entityId, object? changes = null)
         {
             var httpContext = _httpContextAccessor.HttpContext;
-            var userId = httpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var userId = httpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? httpContext?.User.FindFirst(ClaimTypes.Name)?.Value
+                ?? httpContext?.User.FindFirst("sub")?.Value;
 
             var auditLog = new AuditLog
             {
