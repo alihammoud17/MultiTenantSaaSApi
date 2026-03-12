@@ -65,9 +65,9 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+app.UseAuthorization();
 app.UseMiddleware<TenantMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
-app.UseAuthorization();
 
 app.MapControllers();
 app.MapHealthChecks("/health");
