@@ -20,7 +20,8 @@ namespace Presentation.Middleware
             var path = context.Request.Path.Value?.ToLower() ?? "";
             if (path.StartsWith("/api/auth") ||
                 path.StartsWith("/health") ||
-                path.StartsWith("/swagger"))
+                path.StartsWith("/swagger") ||
+                path.StartsWith("/api/plans"))
             {
                 await _next(context);
                 return;
