@@ -39,6 +39,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<ApplicationDbContext>();
             services.RemoveAll<IRateLimitService>();
 
+            RemoveEfProviderServices(services, "Npgsql.EntityFrameworkCore.PostgreSQL");
+
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName));
 
@@ -49,6 +51,26 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
             db.Database.EnsureDeleted();
             db.Database.EnsureCreated();
         });
+    }
+
+    private static void RemoveEfProviderServices(IServiceCollection services, string providerAssemblyName)
+    {
+        var descriptorsToRemove = services
+            .Where(d => IsFromAssembly(d.ServiceType?.Assembly.FullName, providerAssemblyName)
+                || IsFromAssembly(d.ImplementationType?.Assembly.FullName, providerAssemblyName)
+                || IsFromAssembly(d.ImplementationInstance?.GetType().Assembly.FullName, providerAssemblyName))
+            .ToList();
+
+        foreach (var descriptor in descriptorsToRemove)
+        {
+            services.Remove(descriptor);
+        }
+    }
+
+    private static bool IsFromAssembly(string? assemblyFullName, string assemblyPrefix)
+    {
+        return !string.IsNullOrWhiteSpace(assemblyFullName)
+            && assemblyFullName.StartsWith(assemblyPrefix, StringComparison.Ordinal);
     }
 
     private sealed class AlwaysAllowRateLimitService : IRateLimitService
