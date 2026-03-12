@@ -4,9 +4,11 @@ using Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace Tests.Integration;
 
@@ -16,7 +18,7 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder.UseEnvironment("Testing");
 
         builder.ConfigureAppConfiguration((_, configBuilder) =>
         {
@@ -33,44 +35,19 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
             configBuilder.AddInMemoryCollection(settings);
         });
 
-        builder.ConfigureServices(services =>
+        builder.ConfigureTestServices(services =>
         {
-            services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
             services.RemoveAll<ApplicationDbContext>();
+            services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
+            services.RemoveAll<IConfigureOptions<DbContextOptions<ApplicationDbContext>>>();
             services.RemoveAll<IRateLimitService>();
-
-            RemoveEfProviderServices(services, "Npgsql.EntityFrameworkCore.PostgreSQL");
 
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName));
 
             services.AddScoped<IRateLimitService, AlwaysAllowRateLimitService>();
-
-            using var scope = services.BuildServiceProvider().CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            db.Database.EnsureDeleted();
-            db.Database.EnsureCreated();
         });
-    }
-
-    private static void RemoveEfProviderServices(IServiceCollection services, string providerAssemblyName)
-    {
-        var descriptorsToRemove = services
-            .Where(d => IsFromAssembly(d.ServiceType?.Assembly.FullName, providerAssemblyName)
-                || IsFromAssembly(d.ImplementationType?.Assembly.FullName, providerAssemblyName)
-                || IsFromAssembly(d.ImplementationInstance?.GetType().Assembly.FullName, providerAssemblyName))
-            .ToList();
-
-        foreach (var descriptor in descriptorsToRemove)
-        {
-            services.Remove(descriptor);
-        }
-    }
-
-    private static bool IsFromAssembly(string? assemblyFullName, string assemblyPrefix)
-    {
-        return !string.IsNullOrWhiteSpace(assemblyFullName)
-            && assemblyFullName.StartsWith(assemblyPrefix, StringComparison.Ordinal);
     }
 
     private sealed class AlwaysAllowRateLimitService : IRateLimitService
