@@ -24,6 +24,16 @@ A starter ASP.NET Core 8 Web API for multi-tenant SaaS authentication.
 - `Domain/` – entities, DTOs, responses, and interfaces.
 - `Infrastructure/` – data access and tenant context implementations.
 
+
+## Auth and Tenant Headers
+
+For protected tenant endpoints (for example `/api/plans/upgrade` and `/api/tenant/audit-logs`), send:
+
+- `Authorization: Bearer <jwt-token>` (token obtained from `/api/auth/register` or `/api/auth/login`).
+
+The JWT includes a `tenant_id` claim used by tenant middleware to resolve tenant context.
+`GET /api/plans` is public and does not require tenant/auth headers.
+
 ## Prerequisites
 
 - .NET 8 SDK

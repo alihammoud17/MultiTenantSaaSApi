@@ -21,7 +21,7 @@ namespace Presentation.Middleware
             if (path.StartsWith("/api/auth") ||
                 path.StartsWith("/health") ||
                 path.StartsWith("/swagger") ||
-                path.StartsWith("/api/plans"))
+                (path == "/api/plans" && HttpMethods.IsGet(context.Request.Method)))
             {
                 await _next(context);
                 return;
