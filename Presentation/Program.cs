@@ -25,7 +25,19 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-    ConnectionMultiplexer.Connect(builder.Configuration["Redis:ConnectionString"]!));
+{
+    var connectionString = builder.Configuration["Redis:ConnectionString"];
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("Redis connection string is not configured");
+    }
+
+    var options = ConfigurationOptions.Parse(connectionString);
+    options.AbortOnConnectFail = false;
+
+    return ConnectionMultiplexer.Connect(options);
+});
 
 // Rate Limit
 builder.Services.AddScoped<IRateLimitService, RateLimitService>();
