@@ -17,6 +17,12 @@ A starter ASP.NET Core 8 Web API for multi-tenant SaaS authentication.
 - PostgreSQL persistence via Entity Framework Core (Npgsql provider).
 - Redis connection registration for shared caching/session scenarios.
 
+## Detailed V1 Documentation
+
+A full shareable V1 project and usage document is available at:
+
+- `docs/V1-Project-Documentation.md`
+
 ## Project Structure
 
 - `Presentation/` – API host, middleware, and controllers.
