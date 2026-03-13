@@ -5,8 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Net.Sockets;
 
 namespace Application.Services
 {
@@ -28,8 +27,6 @@ namespace Application.Services
 
         public async Task<RateLimitResult> CheckRateLimitAsync(Guid tenantId)
         {
-            var db = _redis.GetDatabase();
-
             // Get tenant's subscription and plan
             var subscription = await _dbContext.Subscriptions
                 .Include(s => s.Plan)
@@ -40,36 +37,53 @@ namespace Application.Services
 
             var limit = subscription.Plan.ApiCallsPerMonth;
             var now = DateTime.UtcNow;
-            var month = now.ToString("yyyy-MM");
-            var key = $"ratelimit:{tenantId}:{month}";
+            var resetDate = new DateTime(now.Year, now.Month, 1).AddMonths(1);
 
-            // Get current usage
-            var currentUsage = (int)(await db.StringGetAsync(key));
-
-            // Check if limit exceeded
-            if (currentUsage >= limit)
+            try
             {
-                var resetDate = new DateTime(now.Year, now.Month, 1).AddMonths(1);
-                return new RateLimitResult(false, limit, 0, resetDate);
+                var db = _redis.GetDatabase();
+                var month = now.ToString("yyyy-MM");
+                var key = $"ratelimit:{tenantId}:{month}";
+
+                // Get current usage
+                var currentUsage = (int)(await db.StringGetAsync(key));
+
+                // Check if limit exceeded
+                if (currentUsage >= limit)
+                {
+                    return new RateLimitResult(false, limit, 0, resetDate);
+                }
+
+                // Increment usage
+                await db.StringIncrementAsync(key);
+
+                // Set expiration to end of next month (if not already set)
+                var ttl = await db.KeyTimeToLiveAsync(key);
+                if (ttl == null)
+                {
+                    var endOfNextMonth = new DateTime(now.Year, now.Month, 1)
+                        .AddMonths(2)
+                        .AddDays(-1);
+                    await db.KeyExpireAsync(key, endOfNextMonth);
+                }
+
+                var remaining = limit - currentUsage - 1;
+                return new RateLimitResult(true, limit, remaining, resetDate);
+            }
+            catch (RedisConnectionException ex)
+            {
+                _logger.LogWarning(ex, "Redis unavailable. Skipping rate limit checks for tenant {TenantId}", tenantId);
+            }
+            catch (RedisTimeoutException ex)
+            {
+                _logger.LogWarning(ex, "Redis timeout. Skipping rate limit checks for tenant {TenantId}", tenantId);
+            }
+            catch (SocketException ex)
+            {
+                _logger.LogWarning(ex, "Redis socket error. Skipping rate limit checks for tenant {TenantId}", tenantId);
             }
 
-            // Increment usage
-            await db.StringIncrementAsync(key);
-
-            // Set expiration to end of next month (if not already set)
-            var ttl = await db.KeyTimeToLiveAsync(key);
-            if (ttl == null)
-            {
-                var endOfNextMonth = new DateTime(now.Year, now.Month, 1)
-                    .AddMonths(2)
-                    .AddDays(-1);
-                await db.KeyExpireAsync(key, endOfNextMonth);
-            }
-
-            var remaining = limit - currentUsage - 1;
-            var resetDateFinal = new DateTime(now.Year, now.Month, 1).AddMonths(1);
-
-            return new RateLimitResult(true, limit, remaining, resetDateFinal);
+            return new RateLimitResult(true, limit, limit, resetDate);
         }
     }
 }
