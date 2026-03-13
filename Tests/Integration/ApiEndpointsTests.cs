@@ -243,16 +243,13 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     {
         using var client = CreateClient();
 
-        var email = $"audit-filter-{Guid.NewGuid():N}@example.com";
-        var password = "Passw0rd!";
-
-        var auth = await RegisterTenant(client, email, password);
+        var auth = await RegisterTenant(client, $"audit-filter-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password });
-        login.StatusCode.Should().Be(HttpStatusCode.OK);
+        var upgrade = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        upgrade.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var response = await client.GetAsync("/api/tenant/audit-logs?action=USER_LOGGED_IN");
+        var response = await client.GetAsync("/api/tenant/audit-logs?action=TENANT_PLAN_CHANGED");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var logs = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -261,7 +258,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         logs.EnumerateArray()
             .Select(x => x.GetProperty("action").GetString())
             .Should()
-            .OnlyContain(x => x == "USER_LOGGED_IN");
+            .OnlyContain(x => x == "TENANT_PLAN_CHANGED");
     }
 
     private HttpClient CreateClient()
