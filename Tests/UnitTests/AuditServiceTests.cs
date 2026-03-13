@@ -81,6 +81,56 @@ public class AuditServiceTests
         logs.Single().EntityId.Should().Be("u1");
     }
 
+    [Fact]
+    public async Task LogAsync_ShouldUseGuidEmptyAndUnknownIp_WhenContextHasNoUserOrIp()
+    {
+        var tenantId = Guid.NewGuid();
+        var dbContext = CreateDbContext();
+        var tenantContext = new TestTenantContext(tenantId);
+        var httpContextAccessor = new HttpContextAccessor
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+
+        var sut = new AuditService(dbContext, tenantContext, httpContextAccessor);
+
+        await sut.LogAsync("TENANT_CHECKED", nameof(Tenant), "tenant-1");
+
+        var persisted = await dbContext.AuditLogs.SingleAsync();
+        persisted.TenantId.Should().Be(tenantId);
+        persisted.UserId.Should().Be(Guid.Empty);
+        persisted.IpAddress.Should().Be("unknown");
+        persisted.Changes.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetTenantAuditLogsAsync_ShouldClampInvalidPagingValues()
+    {
+        var tenantId = Guid.NewGuid();
+        var dbContext = CreateDbContext();
+        var now = DateTime.UtcNow;
+
+        await dbContext.AuditLogs.AddRangeAsync(
+            Enumerable.Range(1, 5).Select(i => new AuditLog
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = Guid.NewGuid(),
+                Action = "EVENT",
+                EntityType = nameof(User),
+                EntityId = i.ToString(),
+                Timestamp = now.AddMinutes(-i),
+                IpAddress = "127.0.0.1"
+            }));
+        await dbContext.SaveChangesAsync();
+
+        var sut = new AuditService(dbContext, new TestTenantContext(tenantId), new HttpContextAccessor());
+
+        var logs = await sut.GetTenantAuditLogsAsync(page: 0, pageSize: 0);
+
+        logs.Should().HaveCount(1);
+    }
+
     private static ApplicationDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()

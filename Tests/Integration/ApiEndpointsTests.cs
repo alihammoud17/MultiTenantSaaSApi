@@ -72,6 +72,54 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Register_ShouldReturnBadRequest_WhenSubdomainAlreadyExists()
+    {
+        using var client = CreateClient();
+        var subdomain = $"dup-{Guid.NewGuid():N}";
+
+        var first = await client.PostAsJsonAsync("/api/auth/register", new
+        {
+            companyName = "First Company",
+            subdomain,
+            adminEmail = $"first-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        first.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var second = await client.PostAsJsonAsync("/api/auth/register", new
+        {
+            companyName = "Second Company",
+            subdomain,
+            adminEmail = $"second-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        second.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await second.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Subdomain already taken");
+    }
+
+    [Fact]
+    public async Task Login_ShouldReturnUnauthorized_ForInvalidPassword()
+    {
+        using var client = CreateClient();
+        var email = $"wrong-pass-{Guid.NewGuid():N}@example.com";
+
+        await RegisterTenant(client, email, "Passw0rd!");
+
+        var response = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "WrongPass123!"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Invalid credentials");
+    }
+
+    [Fact]
     public async Task GetPlans_ShouldReturnAvailablePlans_WithoutAuthOrTenantHeaders()
     {
         using var client = CreateClient();
@@ -114,6 +162,51 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task UpgradePlan_ShouldReturnBadRequest_WhenPlanIdMissing()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"missing-plan-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("PlanId is required");
+    }
+
+    [Fact]
+    public async Task UpgradePlan_ShouldReturnBadRequest_WhenInvalidPlanId()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"invalid-plan-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-does-not-exist" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Invalid plan id");
+    }
+
+    [Fact]
+    public async Task UpgradePlan_ShouldReturnBadRequest_WhenAlreadyOnRequestedPlan()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"same-plan-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-free" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Tenant is already on this plan");
+    }
+
+    [Fact]
     public async Task AuditLogs_ShouldReturnUnauthorized_WhenNoBearerToken()
     {
         using var client = CreateClient();
@@ -143,6 +236,29 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
             .Select(x => x.GetProperty("action").GetString())
             .Should()
             .Contain("TENANT_PLAN_CHANGED");
+    }
+
+    [Fact]
+    public async Task AuditLogs_ShouldSupportActionFilter()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"audit-filter-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var upgrade = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        upgrade.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await client.GetAsync("/api/tenant/audit-logs?action=TENANT_PLAN_CHANGED");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var logs = await response.Content.ReadFromJsonAsync<JsonElement>();
+        logs.ValueKind.Should().Be(JsonValueKind.Array);
+        logs.GetArrayLength().Should().BeGreaterThan(0);
+        logs.EnumerateArray()
+            .Select(x => x.GetProperty("action").GetString())
+            .Should()
+            .OnlyContain(x => x == "TENANT_PLAN_CHANGED");
     }
 
     private HttpClient CreateClient()

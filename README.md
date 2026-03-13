@@ -69,6 +69,22 @@ dotnet user-secrets set "Jwt:ExpirationMinutes" "60"
 dotnet user-secrets list
 ```
 
+## Automated Testing
+
+To run the full automated test suite locally with restore/build/test in one command:
+
+```bash
+./scripts/run-tests.sh
+```
+
+If you prefer, you can still run tests directly:
+
+```bash
+dotnet test MultiTenantSaaSApi.sln
+```
+
+Note: CI workflow is intentionally not included right now. You can add one later when you start CI/CD.
+
 ## Run the API
 
 ```bash
