@@ -96,6 +96,25 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Refresh_ShouldReturnUnauthorized_WhenTenantDoesNotMatchToken()
+    {
+        using var client = CreateClient();
+
+        var authA = await RegisterTenant(client, $"refresh-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var authB = await RegisterTenant(client, $"refresh-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            tenantId = authB.TenantId,
+            refreshToken = authA.RefreshToken
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Invalid or expired refresh token");
+    }
+
+    [Fact]
     public async Task Refresh_ShouldReturnUnauthorized_ForInvalidRefreshToken()
     {
         using var client = CreateClient();

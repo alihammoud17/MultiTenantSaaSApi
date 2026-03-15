@@ -3,11 +3,8 @@ using Domain.Entites;
 using Domain.Interfaces;
 using Domain.Responses;
 using Infrastructure.Data;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using BCrypt.Net;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
 namespace Presentation.Controllers
 {
@@ -38,11 +35,9 @@ namespace Presentation.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterTenantRequest request)
         {
-            // Validate subdomain is available
             if (await _dbContext.Tenants.AnyAsync(t => t.Subdomain == request.Subdomain))
                 return BadRequest(new { error = "Subdomain already taken" });
 
-            // Validate email
             if (await _dbContext.Users.AnyAsync(u => u.Email == request.AdminEmail))
                 return BadRequest(new { error = "Email already registered" });
 
@@ -50,7 +45,6 @@ namespace Presentation.Controllers
 
             try
             {
-                // Create tenant
                 var tenant = new Tenant
                 {
                     Id = Guid.NewGuid(),
@@ -63,7 +57,6 @@ namespace Presentation.Controllers
 
                 await _dbContext.Tenants.AddAsync(tenant);
 
-                // Create admin user
                 var user = new User
                 {
                     Id = Guid.NewGuid(),
@@ -76,7 +69,6 @@ namespace Presentation.Controllers
 
                 await _dbContext.Users.AddAsync(user);
 
-                // Create free subscription
                 var subscription = new Subscription
                 {
                     Id = Guid.NewGuid(),
@@ -93,7 +85,6 @@ namespace Presentation.Controllers
                 await _dbContext.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                // Generate JWT
                 var token = _jwtService.GenerateToken(user, tenant);
 
                 _logger.LogInformation("New tenant registered: {TenantId}", tenant.Id);
@@ -141,7 +132,6 @@ namespace Presentation.Controllers
             if (user.Tenant.Status != TenantStatus.Active)
                 return StatusCode(403, new { error = "Tenant account is suspended" });
 
-            // Update last login
             user.LastLoginAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync();
 
@@ -173,14 +163,21 @@ namespace Presentation.Controllers
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
         {
             if (request.TenantId == Guid.Empty)
-            {
                 return BadRequest(new { error = "TenantId is required" });
-            }
 
             if (string.IsNullOrWhiteSpace(request.RefreshToken))
-            {
                 return BadRequest(new { error = "RefreshToken is required" });
-            }
+
+            var activeToken = await _refreshTokenService.GetActiveTokenAsync(request.TenantId, request.RefreshToken, cancellationToken);
+            if (activeToken == null)
+                return Unauthorized(new { error = "Invalid or expired refresh token" });
+
+            var user = await _dbContext.Users
+                .Include(u => u.Tenant)
+                .FirstOrDefaultAsync(u => u.Id == activeToken.UserId && u.TenantId == request.TenantId, cancellationToken);
+
+            if (user == null || user.Tenant.Status != TenantStatus.Active)
+                return Unauthorized(new { error = "Invalid refresh token context" });
 
             var rotated = await _refreshTokenService.RotateTokenAsync(
                 request.TenantId,
@@ -190,27 +187,7 @@ namespace Presentation.Controllers
                 cancellationToken);
 
             if (rotated == null)
-            {
                 return Unauthorized(new { error = "Invalid or expired refresh token" });
-            }
-
-            var refreshTokenRecord = await _dbContext.RefreshTokens
-                .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Id == rotated.RefreshTokenId && t.TenantId == request.TenantId, cancellationToken);
-
-            if (refreshTokenRecord == null)
-            {
-                return Unauthorized(new { error = "Invalid refresh token context" });
-            }
-
-            var user = await _dbContext.Users
-                .Include(u => u.Tenant)
-                .FirstOrDefaultAsync(u => u.Id == refreshTokenRecord.UserId && u.TenantId == request.TenantId, cancellationToken);
-
-            if (user == null || user.Tenant.Status != TenantStatus.Active)
-            {
-                return Unauthorized(new { error = "Invalid refresh token context" });
-            }
 
             var accessToken = _jwtService.GenerateToken(user, user.Tenant);
 
@@ -233,44 +210,48 @@ namespace Presentation.Controllers
         [HttpPost("logout")]
         public async Task<IActionResult> Logout([FromBody] RevokeRefreshTokenRequest request, CancellationToken cancellationToken)
         {
-            if (request.TenantId == Guid.Empty)
-            {
-                return BadRequest(new { error = "TenantId is required" });
-            }
-
-            if (string.IsNullOrWhiteSpace(request.RefreshToken))
-            {
-                return BadRequest(new { error = "RefreshToken is required" });
-            }
-
-            var revoked = await _refreshTokenService.RevokeTokenAsync(
-                request.TenantId,
-                request.RefreshToken,
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
-                string.IsNullOrWhiteSpace(request.Reason) ? "LOGOUT" : request.Reason,
-                cancellationToken);
-
-            if (!revoked)
-            {
-                return Unauthorized(new { error = "Invalid or expired refresh token" });
-            }
-
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                ?? User.FindFirstValue("sub");
-
-            await _auditService.LogAsync("USER_LOGGED_OUT", nameof(User), userId ?? Guid.Empty.ToString(), new
-            {
-                TenantId = request.TenantId
-            });
-
-            return Ok(new { message = "Refresh token revoked" });
+            return await RevokeRefreshTokenInternal(request, "LOGOUT", "USER_LOGGED_OUT", cancellationToken);
         }
 
         [HttpPost("revoke")]
         public async Task<IActionResult> Revoke([FromBody] RevokeRefreshTokenRequest request, CancellationToken cancellationToken)
         {
-            return await Logout(request, cancellationToken);
+            return await RevokeRefreshTokenInternal(request, request.Reason, "USER_TOKEN_REVOKED", cancellationToken);
         }
 
+        private async Task<IActionResult> RevokeRefreshTokenInternal(
+            RevokeRefreshTokenRequest request,
+            string? defaultReason,
+            string auditAction,
+            CancellationToken cancellationToken)
+        {
+            if (request.TenantId == Guid.Empty)
+                return BadRequest(new { error = "TenantId is required" });
+
+            if (string.IsNullOrWhiteSpace(request.RefreshToken))
+                return BadRequest(new { error = "RefreshToken is required" });
+
+            var activeToken = await _refreshTokenService.GetActiveTokenAsync(request.TenantId, request.RefreshToken, cancellationToken);
+            if (activeToken == null)
+                return Unauthorized(new { error = "Invalid or expired refresh token" });
+
+            var revoked = await _refreshTokenService.RevokeTokenAsync(
+                request.TenantId,
+                request.RefreshToken,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                string.IsNullOrWhiteSpace(request.Reason) ? defaultReason : request.Reason,
+                cancellationToken);
+
+            if (!revoked)
+                return Unauthorized(new { error = "Invalid or expired refresh token" });
+
+            await _auditService.LogAsync(auditAction, nameof(User), activeToken.UserId.ToString(), new
+            {
+                TenantId = request.TenantId,
+                Reason = string.IsNullOrWhiteSpace(request.Reason) ? defaultReason : request.Reason
+            });
+
+            return Ok(new { message = "Refresh token revoked" });
+        }
     }
 }
