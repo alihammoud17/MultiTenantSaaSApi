@@ -59,6 +59,7 @@ namespace Infrastructure.Data
         public DbSet<Subscription> Subscriptions => Set<Subscription>();
         //public DbSet<Product> Products => Set<Product>();
         public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+        public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -103,6 +104,34 @@ namespace Infrastructure.Data
                 entity.HasOne(e => e.Plan)
                       .WithMany()
                       .HasForeignKey(e => e.PlanId);
+            });
+
+
+            // RefreshToken
+            builder.Entity<RefreshToken>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.TokenHash).IsUnique();
+                entity.HasIndex(e => new { e.TenantId, e.UserId, e.ExpiresAt });
+                entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(64);
+                entity.Property(e => e.CreatedByIp).HasMaxLength(64);
+                entity.Property(e => e.RevokedByIp).HasMaxLength(64);
+                entity.Property(e => e.RevocationReason).HasMaxLength(200);
+
+                entity.HasOne(e => e.Tenant)
+                    .WithMany(t => t.RefreshTokens)
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.RefreshTokens)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                if (_tenantContext != null)
+                {
+                    entity.HasQueryFilter(e => e.TenantId == _tenantContext.TenantId);
+                }
             });
 
             // Product (CRITICAL: Global query filter for tenant isolation)
