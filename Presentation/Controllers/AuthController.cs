@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using BCrypt.Net;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Presentation.Controllers
 {
@@ -18,17 +19,20 @@ namespace Presentation.Controllers
         private readonly IJwtService _jwtService;
         private readonly ILogger<AuthController> _logger;
         private readonly IAuditService _auditService;
+        private readonly IRefreshTokenService _refreshTokenService;
 
         public AuthController(
             ApplicationDbContext dbContext,
             IJwtService jwtService,
             ILogger<AuthController> logger,
-            IAuditService auditService)
+            IAuditService auditService,
+            IRefreshTokenService refreshTokenService)
         {
             _dbContext = dbContext;
             _jwtService = jwtService;
             _logger = logger;
             _auditService = auditService;
+            _refreshTokenService = refreshTokenService;
         }
 
         [HttpPost("register")]
@@ -100,12 +104,20 @@ namespace Presentation.Controllers
                     AdminUserId = user.Id
                 });
 
+                var refreshTokenResult = await _refreshTokenService.IssueTokenAsync(
+                    tenant.Id,
+                    user.Id,
+                    DateTime.UtcNow.AddDays(7),
+                    HttpContext.Connection.RemoteIpAddress?.ToString());
+
                 return Ok(new AuthResponse(
                     token,
+                    refreshTokenResult.Token,
                     tenant.Id,
                     user.Id,
                     user.Email,
-                    DateTime.UtcNow.AddMinutes(60)
+                    DateTime.UtcNow.AddMinutes(60),
+                    refreshTokenResult.ExpiresAt
                 ));
             }
             catch (Exception ex)
@@ -140,14 +152,125 @@ namespace Presentation.Controllers
             });
 
             var token = _jwtService.GenerateToken(user, user.Tenant);
+            var refreshTokenResult = await _refreshTokenService.IssueTokenAsync(
+                user.TenantId,
+                user.Id,
+                DateTime.UtcNow.AddDays(7),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
 
             return Ok(new AuthResponse(
                 token,
+                refreshTokenResult.Token,
                 user.TenantId,
                 user.Id,
                 user.Email,
-                DateTime.UtcNow.AddMinutes(60)
+                DateTime.UtcNow.AddMinutes(60),
+                refreshTokenResult.ExpiresAt
             ));
         }
+
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
+        {
+            if (request.TenantId == Guid.Empty)
+            {
+                return BadRequest(new { error = "TenantId is required" });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                return BadRequest(new { error = "RefreshToken is required" });
+            }
+
+            var rotated = await _refreshTokenService.RotateTokenAsync(
+                request.TenantId,
+                request.RefreshToken,
+                DateTime.UtcNow.AddDays(7),
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                cancellationToken);
+
+            if (rotated == null)
+            {
+                return Unauthorized(new { error = "Invalid or expired refresh token" });
+            }
+
+            var refreshTokenRecord = await _dbContext.RefreshTokens
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == rotated.RefreshTokenId && t.TenantId == request.TenantId, cancellationToken);
+
+            if (refreshTokenRecord == null)
+            {
+                return Unauthorized(new { error = "Invalid refresh token context" });
+            }
+
+            var user = await _dbContext.Users
+                .Include(u => u.Tenant)
+                .FirstOrDefaultAsync(u => u.Id == refreshTokenRecord.UserId && u.TenantId == request.TenantId, cancellationToken);
+
+            if (user == null || user.Tenant.Status != TenantStatus.Active)
+            {
+                return Unauthorized(new { error = "Invalid refresh token context" });
+            }
+
+            var accessToken = _jwtService.GenerateToken(user, user.Tenant);
+
+            await _auditService.LogAsync("USER_TOKEN_REFRESHED", nameof(User), user.Id.ToString(), new
+            {
+                user.Email
+            });
+
+            return Ok(new AuthResponse(
+                accessToken,
+                rotated.Token,
+                user.TenantId,
+                user.Id,
+                user.Email,
+                DateTime.UtcNow.AddMinutes(60),
+                rotated.ExpiresAt
+            ));
+        }
+
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout([FromBody] RevokeRefreshTokenRequest request, CancellationToken cancellationToken)
+        {
+            if (request.TenantId == Guid.Empty)
+            {
+                return BadRequest(new { error = "TenantId is required" });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                return BadRequest(new { error = "RefreshToken is required" });
+            }
+
+            var revoked = await _refreshTokenService.RevokeTokenAsync(
+                request.TenantId,
+                request.RefreshToken,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                string.IsNullOrWhiteSpace(request.Reason) ? "LOGOUT" : request.Reason,
+                cancellationToken);
+
+            if (!revoked)
+            {
+                return Unauthorized(new { error = "Invalid or expired refresh token" });
+            }
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue("sub");
+
+            await _auditService.LogAsync("USER_LOGGED_OUT", nameof(User), userId ?? Guid.Empty.ToString(), new
+            {
+                TenantId = request.TenantId
+            });
+
+            return Ok(new { message = "Refresh token revoked" });
+        }
+
+        [HttpPost("revoke")]
+        public async Task<IActionResult> Revoke([FromBody] RevokeRefreshTokenRequest request, CancellationToken cancellationToken)
+        {
+            return await Logout(request, cancellationToken);
+        }
+
     }
 }
