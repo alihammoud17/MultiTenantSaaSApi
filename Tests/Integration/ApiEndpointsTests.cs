@@ -47,6 +47,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("token").GetString().Should().NotBeNullOrWhiteSpace();
+        body.GetProperty("refreshToken").GetString().Should().NotBeNullOrWhiteSpace();
         body.GetProperty("tenantId").GetGuid().Should().NotBe(Guid.Empty);
         body.GetProperty("userId").GetGuid().Should().NotBe(Guid.Empty);
     }
@@ -69,6 +70,106 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("token").GetString().Should().NotBeNullOrWhiteSpace();
+        body.GetProperty("refreshToken").GetString().Should().NotBeNullOrWhiteSpace();
+    }
+
+
+    [Fact]
+    public async Task Refresh_ShouldIssueNewAccessAndRefreshTokens_ForValidRefreshToken()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"refresh-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = auth.RefreshToken
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("token").GetString().Should().NotBeNullOrWhiteSpace();
+        body.GetProperty("refreshToken").GetString().Should().NotBeNullOrWhiteSpace();
+        body.GetProperty("refreshToken").GetString().Should().NotBe(auth.RefreshToken);
+    }
+
+    [Fact]
+    public async Task Refresh_ShouldReturnUnauthorized_WhenTenantDoesNotMatchToken()
+    {
+        using var client = CreateClient();
+
+        var authA = await RegisterTenant(client, $"refresh-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var authB = await RegisterTenant(client, $"refresh-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            tenantId = authB.TenantId,
+            refreshToken = authA.RefreshToken
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Invalid or expired refresh token");
+    }
+
+    [Fact]
+    public async Task Refresh_ShouldReturnUnauthorized_ForInvalidRefreshToken()
+    {
+        using var client = CreateClient();
+        var auth = await RegisterTenant(client, $"refresh-invalid-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = "not-a-valid-token"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Invalid or expired refresh token");
+    }
+
+    [Fact]
+    public async Task Logout_ShouldRevokeRefreshToken_AndBlockFutureRefresh()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"logout-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var logoutResponse = await client.PostAsJsonAsync("/api/auth/logout", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = auth.RefreshToken
+        });
+
+        logoutResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var refreshResponse = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = auth.RefreshToken
+        });
+
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Revoke_ShouldRevokeRefreshToken()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"revoke-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = auth.RefreshToken,
+            reason = "SECURITY_EVENT"
+        });
+
+        revokeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -269,7 +370,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         });
     }
 
-    private static async Task<(string Token, Guid TenantId)> RegisterTenant(HttpClient client, string email, string password)
+    private static async Task<(string Token, string RefreshToken, Guid TenantId)> RegisterTenant(HttpClient client, string email, string password)
     {
         var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new
         {
@@ -283,8 +384,9 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         var body = await registerResponse.Content.ReadFromJsonAsync<JsonElement>();
         var token = body.GetProperty("token").GetString()!;
+        var refreshToken = body.GetProperty("refreshToken").GetString()!;
         var tenantId = body.GetProperty("tenantId").GetGuid();
 
-        return (token, tenantId);
+        return (token, refreshToken, tenantId);
     }
 }

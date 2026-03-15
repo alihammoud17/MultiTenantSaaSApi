@@ -15,4 +15,15 @@ namespace Domain.DTOs
         string Email,
         string Password
     );
+
+    public record RefreshTokenRequest(
+        Guid TenantId,
+        string RefreshToken
+    );
+
+    public record RevokeRefreshTokenRequest(
+        Guid TenantId,
+        string RefreshToken,
+        string? Reason = null
+    );
 }

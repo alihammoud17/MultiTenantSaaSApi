@@ -1,14 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
 namespace Domain.Responses
 {
     public record AuthResponse(
         string Token,
+        string RefreshToken,
         Guid TenantId,
         Guid UserId,
         string Email,
-        DateTime ExpiresAt
+        DateTime ExpiresAt,
+        DateTime RefreshTokenExpiresAt
     );
 }
