@@ -19,5 +19,6 @@ namespace Domain.Entites
 
         // Navigation
         public Tenant Tenant { get; set; } = null!;
+        public List<RefreshToken> RefreshTokens { get; set; } = [];
     }
 }

@@ -17,6 +17,7 @@ namespace Domain.Entites
 
         // Navigation
         public List<User> Users { get; set; } = [];
+        public List<RefreshToken> RefreshTokens { get; set; } = [];
         public Subscription? Subscription { get; set; }
     }
 

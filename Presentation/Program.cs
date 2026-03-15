@@ -23,6 +23,9 @@ builder.Services.AddHttpContextAccessor();
 // JWT Service
 builder.Services.AddScoped<IJwtService, JwtService>();
 
+// Refresh Token Service
+builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 {
