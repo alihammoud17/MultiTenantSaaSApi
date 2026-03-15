@@ -17,19 +17,22 @@ namespace Presentation.Controllers
         private readonly ILogger<AuthController> _logger;
         private readonly IAuditService _auditService;
         private readonly IRefreshTokenService _refreshTokenService;
+        private readonly ITenantContext _tenantContext;
 
         public AuthController(
             ApplicationDbContext dbContext,
             IJwtService jwtService,
             ILogger<AuthController> logger,
             IAuditService auditService,
-            IRefreshTokenService refreshTokenService)
+            IRefreshTokenService refreshTokenService,
+            ITenantContext tenantContext)
         {
             _dbContext = dbContext;
             _jwtService = jwtService;
             _logger = logger;
             _auditService = auditService;
             _refreshTokenService = refreshTokenService;
+            _tenantContext = tenantContext;
         }
 
         [HttpPost("register")]
@@ -168,6 +171,8 @@ namespace Presentation.Controllers
             if (string.IsNullOrWhiteSpace(request.RefreshToken))
                 return BadRequest(new { error = "RefreshToken is required" });
 
+            _tenantContext.SetTenantId(request.TenantId);
+
             var activeToken = await _refreshTokenService.GetActiveTokenAsync(request.TenantId, request.RefreshToken, cancellationToken);
             if (activeToken == null)
                 return Unauthorized(new { error = "Invalid or expired refresh token" });
@@ -230,6 +235,8 @@ namespace Presentation.Controllers
 
             if (string.IsNullOrWhiteSpace(request.RefreshToken))
                 return BadRequest(new { error = "RefreshToken is required" });
+
+            _tenantContext.SetTenantId(request.TenantId);
 
             var activeToken = await _refreshTokenService.GetActiveTokenAsync(request.TenantId, request.RefreshToken, cancellationToken);
             if (activeToken == null)
