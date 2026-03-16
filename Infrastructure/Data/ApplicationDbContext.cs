@@ -241,7 +241,7 @@ namespace Infrastructure.Data
             builder.Entity<Permission>().HasData(
                 PermissionCodes.All.Select(code => new Permission
                 {
-                    Id = Guid.CreateVersion5(Guid.Parse("9cf5e5e5-b8b3-4f6f-84b9-97e52f70f7bb"), code),
+                    Id = PermissionCodes.SeedIds[code],
                     Code = code,
                     Description = code,
                     CreatedAt = DateTime.UnixEpoch

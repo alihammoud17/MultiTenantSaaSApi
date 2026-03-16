@@ -61,7 +61,6 @@ namespace Infrastructure.Migrations
                     b.ToTable("AuditLogs");
                 });
 
-
             modelBuilder.Entity("Domain.Entites.Permission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -237,7 +236,6 @@ namespace Infrastructure.Migrations
                     b.ToTable("RefreshTokens");
                 });
 
-
             modelBuilder.Entity("Domain.Entites.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -283,37 +281,6 @@ namespace Infrastructure.Migrations
                     b.HasIndex("PermissionId");
 
                     b.ToTable("RolePermissions");
-                });
-
-
-            modelBuilder.Entity("Domain.Entites.Role", b =>
-                {
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
-                        .WithMany("Roles")
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Domain.Entites.RolePermission", b =>
-                {
-                    b.HasOne("Domain.Entites.Permission", "Permission")
-                        .WithMany("RolePermissions")
-                        .HasForeignKey("PermissionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entites.Role", "Role")
-                        .WithMany("RolePermissions")
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Permission");
-
-                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("Domain.Entites.Subscription", b =>
@@ -424,7 +391,6 @@ namespace Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
-
             modelBuilder.Entity("Domain.Entites.UserRole", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -468,55 +434,6 @@ namespace Infrastructure.Migrations
 
                     b.Navigation("User");
                 });
-
-
-            modelBuilder.Entity("Domain.Entites.Role", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<bool>("IsSystem")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "Name")
-                        .IsUnique();
-
-                    b.ToTable("Roles");
-                });
-
-            modelBuilder.Entity("Domain.Entites.RolePermission", b =>
-                {
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PermissionId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("RoleId", "PermissionId");
-
-                    b.HasIndex("PermissionId");
-
-                    b.ToTable("RolePermissions");
-                });
-
 
             modelBuilder.Entity("Domain.Entites.Role", b =>
                 {
@@ -567,6 +484,16 @@ namespace Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Domain.Entites.User", b =>
+                {
+                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                        .WithMany("Users")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
 
             modelBuilder.Entity("Domain.Entites.UserRole", b =>
                 {
@@ -595,15 +522,9 @@ namespace Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Domain.Entites.User", b =>
+            modelBuilder.Entity("Domain.Entites.Permission", b =>
                 {
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
-                        .WithMany("Users")
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
+                    b.Navigation("RolePermissions");
                 });
 
             modelBuilder.Entity("Domain.Entites.Tenant", b =>
@@ -624,11 +545,6 @@ namespace Infrastructure.Migrations
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("UserRoles");
-                });
-
-            modelBuilder.Entity("Domain.Entites.Permission", b =>
-                {
-                    b.Navigation("RolePermissions");
                 });
 
             modelBuilder.Entity("Domain.Entites.Role", b =>
