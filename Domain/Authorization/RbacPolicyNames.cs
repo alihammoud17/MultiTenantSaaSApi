@@ -4,12 +4,12 @@ namespace Domain.Authorization
     {
         private const string Prefix = "Permission:";
 
-        public static string TenantsRead => ForPermission(RbacPermissions.TenantsRead);
-        public static string TenantsManage => ForPermission(RbacPermissions.TenantsManage);
-        public static string UsersRead => ForPermission(RbacPermissions.UsersRead);
-        public static string UsersManage => ForPermission(RbacPermissions.UsersManage);
-        public static string BillingManage => ForPermission(RbacPermissions.BillingManage);
-        public static string AuditLogsRead => ForPermission(RbacPermissions.AuditLogsRead);
+        public const string TenantsRead = Prefix + RbacPermissions.TenantsRead;
+        public const string TenantsManage = Prefix + RbacPermissions.TenantsManage;
+        public const string UsersRead = Prefix + RbacPermissions.UsersRead;
+        public const string UsersManage = Prefix + RbacPermissions.UsersManage;
+        public const string BillingManage = Prefix + RbacPermissions.BillingManage;
+        public const string AuditLogsRead = Prefix + RbacPermissions.AuditLogsRead;
 
         public static string ForPermission(string permission) => $"{Prefix}{permission}";
     }
