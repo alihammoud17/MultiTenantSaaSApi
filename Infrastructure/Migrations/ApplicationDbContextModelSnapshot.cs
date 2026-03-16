@@ -76,7 +76,6 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
-                        .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
@@ -90,31 +89,10 @@ namespace Infrastructure.Migrations
                     b.HasData(
                         new
                         {
-                            Id = new Guid("906f554a-a536-573a-b8e4-3800fc5a9c2d"),
-                            Code = "tenant.read",
+                            Id = new Guid("0e06702d-f693-5226-8367-4e1f29a4dce8"),
+                            Code = "user.manage",
                             CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "tenant.read"
-                        },
-                        new
-                        {
-                            Id = new Guid("c42303e5-d438-5838-a064-f7b5ff09731b"),
-                            Code = "tenant.manage",
-                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "tenant.manage"
-                        },
-                        new
-                        {
-                            Id = new Guid("80cfac1b-d3ca-543c-97c5-a30fcddaa4d9"),
-                            Code = "plan.read",
-                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "plan.read"
-                        },
-                        new
-                        {
-                            Id = new Guid("a94b8414-288f-544b-84d9-e23ed02f3bae"),
-                            Code = "plan.upgrade",
-                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "plan.upgrade"
+                            Description = "user.manage"
                         },
                         new
                         {
@@ -125,10 +103,31 @@ namespace Infrastructure.Migrations
                         },
                         new
                         {
-                            Id = new Guid("0e06702d-f693-5226-8367-4e1f29a4dce8"),
-                            Code = "user.manage",
+                            Id = new Guid("80cfac1b-d3ca-543c-97c5-a30fcddaa4d9"),
+                            Code = "plan.read",
                             CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "user.manage"
+                            Description = "plan.read"
+                        },
+                        new
+                        {
+                            Id = new Guid("906f554a-a536-573a-b8e4-3800fc5a9c2d"),
+                            Code = "tenant.read",
+                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "tenant.read"
+                        },
+                        new
+                        {
+                            Id = new Guid("a94b8414-288f-544b-84d9-e23ed02f3bae"),
+                            Code = "plan.upgrade",
+                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "plan.upgrade"
+                        },
+                        new
+                        {
+                            Id = new Guid("c42303e5-d438-5838-a064-f7b5ff09731b"),
+                            Code = "tenant.manage",
+                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "tenant.manage"
                         });
                 });
 
@@ -203,12 +202,12 @@ namespace Infrastructure.Migrations
                     b.Property<Guid?>("ReplacedByTokenId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("RevocationReason")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("RevokedByIp")
                         .HasMaxLength(64)
@@ -227,12 +226,12 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId", "UserId", "ExpiresAt");
+
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
                     b.HasIndex("UserId");
-
-                    b.HasIndex("TenantId", "UserId", "ExpiresAt");
 
                     b.ToTable("RefreshTokens");
                 });
@@ -410,9 +409,9 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.HasIndex("UserId");
-
                     b.HasIndex("TenantId", "RoleId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("UserRoles");
                 });
@@ -528,13 +527,6 @@ namespace Infrastructure.Migrations
                     b.Navigation("RolePermissions");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Role", b =>
-                {
-                    b.Navigation("RolePermissions");
-
-                    b.Navigation("UserRoles");
-                });
-
             modelBuilder.Entity("Domain.Entites.Tenant", b =>
                 {
                     b.Navigation("RefreshTokens");
@@ -551,6 +543,13 @@ namespace Infrastructure.Migrations
             modelBuilder.Entity("Domain.Entites.User", b =>
                 {
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("UserRoles");
+                });
+
+            modelBuilder.Entity("Domain.Entites.Role", b =>
+                {
+                    b.Navigation("RolePermissions");
 
                     b.Navigation("UserRoles");
                 });
