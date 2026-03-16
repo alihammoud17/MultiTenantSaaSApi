@@ -2,9 +2,11 @@ using Application.Services;
 using Domain.Interfaces;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Presentation.Authorization;
 using Presentation.Middleware;
 using StackExchange.Redis;
 using System.Text;
@@ -25,6 +27,10 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 
 // Refresh Token Service
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+
+// RBAC Authorization
+builder.Services.AddScoped<IRbacAuthorizationService, RbacAuthorizationService>();
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
@@ -63,6 +69,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!))
         };
     });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AuthorizationPolicies.TenantRead, policy => policy.Requirements.Add(new PermissionRequirement(PermissionCodes.TenantRead)));
+    options.AddPolicy(AuthorizationPolicies.TenantManage, policy => policy.Requirements.Add(new PermissionRequirement(PermissionCodes.TenantManage)));
+    options.AddPolicy(AuthorizationPolicies.PlanRead, policy => policy.Requirements.Add(new PermissionRequirement(PermissionCodes.PlanRead)));
+    options.AddPolicy(AuthorizationPolicies.PlanUpgrade, policy => policy.Requirements.Add(new PermissionRequirement(PermissionCodes.PlanUpgrade)));
+    options.AddPolicy(AuthorizationPolicies.AuditRead, policy => policy.Requirements.Add(new PermissionRequirement(PermissionCodes.AuditRead)));
+    options.AddPolicy(AuthorizationPolicies.UserManage, policy => policy.Requirements.Add(new PermissionRequirement(PermissionCodes.UserManage)));
+});
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

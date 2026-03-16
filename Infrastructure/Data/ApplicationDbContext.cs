@@ -57,9 +57,12 @@ namespace Infrastructure.Data
         public DbSet<User> Users => Set<User>();
         public DbSet<Plan> Plans => Set<Plan>();
         public DbSet<Subscription> Subscriptions => Set<Subscription>();
-        //public DbSet<Product> Products => Set<Product>();
         public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+        public DbSet<Role> Roles => Set<Role>();
+        public DbSet<Permission> Permissions => Set<Permission>();
+        public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+        public DbSet<UserRole> UserRoles => Set<UserRole>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -84,6 +87,72 @@ namespace Infrastructure.Data
                       .WithMany(t => t.Users)
                       .HasForeignKey(e => e.TenantId)
                       .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Role
+            builder.Entity<Role>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.Name }).IsUnique();
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Description).HasMaxLength(500);
+
+                entity.HasOne(e => e.Tenant)
+                      .WithMany(t => t.Roles)
+                      .HasForeignKey(e => e.TenantId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Permission
+            builder.Entity<Permission>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Code).IsUnique();
+                entity.Property(e => e.Code).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Description).HasMaxLength(500);
+            });
+
+            // RolePermission
+            builder.Entity<RolePermission>(entity =>
+            {
+                entity.HasKey(e => new { e.RoleId, e.PermissionId });
+
+                entity.HasOne(e => e.Role)
+                      .WithMany(r => r.RolePermissions)
+                      .HasForeignKey(e => e.RoleId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Permission)
+                      .WithMany(p => p.RolePermissions)
+                      .HasForeignKey(e => e.PermissionId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // UserRole
+            builder.Entity<UserRole>(entity =>
+            {
+                entity.HasKey(e => new { e.TenantId, e.UserId, e.RoleId });
+                entity.HasIndex(e => new { e.TenantId, e.RoleId });
+
+                entity.HasOne(e => e.Tenant)
+                      .WithMany(t => t.UserRoles)
+                      .HasForeignKey(e => e.TenantId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.User)
+                      .WithMany(u => u.UserRoles)
+                      .HasForeignKey(e => e.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Role)
+                      .WithMany(r => r.UserRoles)
+                      .HasForeignKey(e => e.RoleId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                if (_tenantContext != null)
+                {
+                    entity.HasQueryFilter(e => e.TenantId == _tenantContext.TenantId);
+                }
             });
 
             // Plan
@@ -134,18 +203,6 @@ namespace Infrastructure.Data
                 }
             });
 
-            // Product (CRITICAL: Global query filter for tenant isolation)
-            //builder.Entity<Product>(entity =>
-            //{
-            //    entity.HasKey(e => e.Id);
-            //    entity.HasIndex(e => new { e.TenantId, e.Id }); // Composite index for performance
-            //    entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-
-            //    // TENANT ISOLATION: Automatically filter by tenant
-            //    entity.HasQueryFilter(e =>
-            //        _tenantContext == null || e.TenantId == _tenantContext.TenantId);
-            //});
-
             // AuditLog
             if (_tenantContext != null)
                 builder.Entity<AuditLog>(entity =>
@@ -179,6 +236,16 @@ namespace Infrastructure.Data
                     MaxUsers = 10,
                     DisplayOrder = 2
                 }
+            );
+
+            builder.Entity<Permission>().HasData(
+                PermissionCodes.All.Select(code => new Permission
+                {
+                    Id = Guid.CreateVersion5(Guid.Parse("9cf5e5e5-b8b3-4f6f-84b9-97e52f70f7bb"), code),
+                    Code = code,
+                    Description = code,
+                    CreatedAt = DateTime.UnixEpoch
+                })
             );
         }
     }

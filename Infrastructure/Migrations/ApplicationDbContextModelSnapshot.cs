@@ -61,6 +61,77 @@ namespace Infrastructure.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+
+            modelBuilder.Entity("Domain.Entites.Permission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Permissions");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("0e06702d-f693-5226-8367-4e1f29a4dce8"),
+                            Code = "user.manage",
+                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "user.manage"
+                        },
+                        new
+                        {
+                            Id = new Guid("1700e29c-2326-5f19-893d-843a0e00ba30"),
+                            Code = "audit.read",
+                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "audit.read"
+                        },
+                        new
+                        {
+                            Id = new Guid("80cfac1b-d3ca-543c-97c5-a30fcddaa4d9"),
+                            Code = "plan.read",
+                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "plan.read"
+                        },
+                        new
+                        {
+                            Id = new Guid("906f554a-a536-573a-b8e4-3800fc5a9c2d"),
+                            Code = "tenant.read",
+                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "tenant.read"
+                        },
+                        new
+                        {
+                            Id = new Guid("a94b8414-288f-544b-84d9-e23ed02f3bae"),
+                            Code = "plan.upgrade",
+                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "plan.upgrade"
+                        },
+                        new
+                        {
+                            Id = new Guid("c42303e5-d438-5838-a064-f7b5ff09731b"),
+                            Code = "tenant.manage",
+                            CreatedAt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "tenant.manage"
+                        });
+                });
+
             modelBuilder.Entity("Domain.Entites.Plan", b =>
                 {
                     b.Property<string>("Id")
@@ -164,6 +235,85 @@ namespace Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens");
+                });
+
+
+            modelBuilder.Entity("Domain.Entites.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Roles");
+                });
+
+            modelBuilder.Entity("Domain.Entites.RolePermission", b =>
+                {
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RoleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("RolePermissions");
+                });
+
+
+            modelBuilder.Entity("Domain.Entites.Role", b =>
+                {
+                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                        .WithMany("Roles")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Domain.Entites.RolePermission", b =>
+                {
+                    b.HasOne("Domain.Entites.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entites.Role", "Role")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("Domain.Entites.Subscription", b =>
@@ -274,6 +424,32 @@ namespace Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
+
+            modelBuilder.Entity("Domain.Entites.UserRole", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TenantId", "UserId", "RoleId");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("TenantId", "RoleId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserRoles");
+                });
+
             modelBuilder.Entity("Domain.Entites.RefreshToken", b =>
                 {
                     b.HasOne("Domain.Entites.Tenant", "Tenant")
@@ -291,6 +467,85 @@ namespace Infrastructure.Migrations
                     b.Navigation("Tenant");
 
                     b.Navigation("User");
+                });
+
+
+            modelBuilder.Entity("Domain.Entites.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Roles");
+                });
+
+            modelBuilder.Entity("Domain.Entites.RolePermission", b =>
+                {
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RoleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("RolePermissions");
+                });
+
+
+            modelBuilder.Entity("Domain.Entites.Role", b =>
+                {
+                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                        .WithMany("Roles")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Domain.Entites.RolePermission", b =>
+                {
+                    b.HasOne("Domain.Entites.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entites.Role", "Role")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("Domain.Entites.Subscription", b =>
@@ -312,6 +567,34 @@ namespace Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+
+            modelBuilder.Entity("Domain.Entites.UserRole", b =>
+                {
+                    b.HasOne("Domain.Entites.Role", "Role")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entites.User", "User")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+
+                    b.Navigation("Tenant");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Domain.Entites.User", b =>
                 {
                     b.HasOne("Domain.Entites.Tenant", "Tenant")
@@ -327,7 +610,11 @@ namespace Infrastructure.Migrations
                 {
                     b.Navigation("RefreshTokens");
 
+                    b.Navigation("Roles");
+
                     b.Navigation("Subscription");
+
+                    b.Navigation("UserRoles");
 
                     b.Navigation("Users");
                 });
@@ -335,6 +622,20 @@ namespace Infrastructure.Migrations
             modelBuilder.Entity("Domain.Entites.User", b =>
                 {
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("UserRoles");
+                });
+
+            modelBuilder.Entity("Domain.Entites.Permission", b =>
+                {
+                    b.Navigation("RolePermissions");
+                });
+
+            modelBuilder.Entity("Domain.Entites.Role", b =>
+                {
+                    b.Navigation("RolePermissions");
+
+                    b.Navigation("UserRoles");
                 });
 #pragma warning restore 612, 618
         }
