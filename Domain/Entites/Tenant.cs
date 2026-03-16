@@ -18,6 +18,8 @@ namespace Domain.Entites
         // Navigation
         public List<User> Users { get; set; } = [];
         public List<RefreshToken> RefreshTokens { get; set; } = [];
+        public List<Role> Roles { get; set; } = [];
+        public List<UserRole> UserRoles { get; set; } = [];
         public Subscription? Subscription { get; set; }
     }
 

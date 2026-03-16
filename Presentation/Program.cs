@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Presentation.Authorization;
 using Presentation.Middleware;
 using StackExchange.Redis;
 using System.Text;
@@ -48,6 +49,9 @@ builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 // Audit
 builder.Services.AddScoped<IAuditService, AuditService>();
 
+// RBAC
+builder.Services.AddScoped<IRbacAuthorizationService, RbacAuthorizationService>();
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -63,6 +67,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!))
         };
     });
+
+builder.Services.AddRbacAuthorization();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
