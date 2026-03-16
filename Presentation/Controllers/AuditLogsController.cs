@@ -1,4 +1,5 @@
-﻿using Domain.Interfaces;
+﻿using Domain.Authorization;
+using Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -6,7 +7,7 @@ namespace Presentation.Controllers
 {
     [Route("api/tenant/audit-logs")]
     [ApiController]
-    [Authorize]
+    [Authorize(Policy = RbacPolicyNames.AuditLogsRead)]
     public class AuditLogsController : ControllerBase
     {
         private readonly IAuditService _auditService;

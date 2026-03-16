@@ -1,8 +1,10 @@
-﻿using Domain.DTOs;
+﻿using Domain.Authorization;
+using Domain.DTOs;
 using Domain.Entites;
 using Domain.Interfaces;
 using Domain.Responses;
 using Infrastructure.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -219,6 +221,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("revoke")]
+        [Authorize(Policy = RbacPolicyNames.UsersManage)]
         public async Task<IActionResult> Revoke([FromBody] RevokeRefreshTokenRequest request, CancellationToken cancellationToken)
         {
             return await RevokeRefreshTokenInternal(request, request.Reason, "USER_TOKEN_REVOKED", cancellationToken);
