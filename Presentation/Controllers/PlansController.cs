@@ -1,3 +1,4 @@
+using Domain.Authorization;
 using Domain.DTOs;
 using Domain.Entites;
 using Domain.Interfaces;
@@ -47,7 +48,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("upgrade")]
-        [Authorize]
+        [Authorize(Policy = RbacPolicyNames.BillingManage)]
         public async Task<IActionResult> UpgradePlan([FromBody] UpgradePlanRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.PlanId))

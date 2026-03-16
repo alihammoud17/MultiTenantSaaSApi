@@ -136,6 +136,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     {
         using var client = CreateClient();
         var auth = await RegisterTenant(client, $"refresh-revoked-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
         var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
         {
@@ -216,12 +217,31 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+
+    [Fact]
+    public async Task Revoke_ShouldReturnUnauthorized_WhenNoBearerToken()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"revoke-no-auth-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = auth.RefreshToken,
+            reason = "SECURITY_EVENT"
+        });
+
+        revokeResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
     [Fact]
     public async Task Revoke_ShouldRevokeRefreshToken()
     {
         using var client = CreateClient();
 
         var auth = await RegisterTenant(client, $"revoke-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
         var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
         {
@@ -240,6 +260,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         var authA = await RegisterTenant(client, $"revoke-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         var authB = await RegisterTenant(client, $"revoke-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authA.Token);
 
         var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
         {
