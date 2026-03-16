@@ -60,6 +60,10 @@ namespace Infrastructure.Data
         //public DbSet<Product> Products => Set<Product>();
         public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+        public DbSet<Role> Roles => Set<Role>();
+        public DbSet<Permission> Permissions => Set<Permission>();
+        public DbSet<UserRole> UserRoles => Set<UserRole>();
+        public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -106,6 +110,78 @@ namespace Infrastructure.Data
                       .HasForeignKey(e => e.PlanId);
             });
 
+
+
+            // Role
+            builder.Entity<Role>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.Name }).IsUnique();
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Description).HasMaxLength(256);
+
+                entity.HasOne(e => e.Tenant)
+                    .WithMany(t => t.Roles)
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                if (_tenantContext != null)
+                {
+                    entity.HasQueryFilter(e => e.TenantId == _tenantContext.TenantId);
+                }
+            });
+
+            // Permission
+            builder.Entity<Permission>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.Description).HasMaxLength(256);
+            });
+
+            // UserRole
+            builder.Entity<UserRole>(entity =>
+            {
+                entity.HasKey(e => new { e.TenantId, e.UserId, e.RoleId });
+                entity.HasIndex(e => e.RoleId);
+
+                entity.HasOne(e => e.Tenant)
+                    .WithMany(t => t.UserRoles)
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.UserRoles)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Role)
+                    .WithMany(r => r.UserRoles)
+                    .HasForeignKey(e => e.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                if (_tenantContext != null)
+                {
+                    entity.HasQueryFilter(e => e.TenantId == _tenantContext.TenantId);
+                }
+            });
+
+            // RolePermission
+            builder.Entity<RolePermission>(entity =>
+            {
+                entity.HasKey(e => new { e.RoleId, e.PermissionId });
+
+                entity.HasOne(e => e.Role)
+                    .WithMany(r => r.RolePermissions)
+                    .HasForeignKey(e => e.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Permission)
+                    .WithMany(p => p.RolePermissions)
+                    .HasForeignKey(e => e.PermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             // RefreshToken
             builder.Entity<RefreshToken>(entity =>
@@ -179,6 +255,16 @@ namespace Infrastructure.Data
                     MaxUsers = 10,
                     DisplayOrder = 2
                 }
+            );
+
+            // Seed Permissions
+            builder.Entity<Permission>().HasData(
+                new Permission { Id = Guid.Parse("11111111-1111-1111-1111-111111111111"), Name = "tenants.read", Description = "View tenant data" },
+                new Permission { Id = Guid.Parse("22222222-2222-2222-2222-222222222222"), Name = "tenants.manage", Description = "Manage tenant settings" },
+                new Permission { Id = Guid.Parse("33333333-3333-3333-3333-333333333333"), Name = "users.read", Description = "View tenant users" },
+                new Permission { Id = Guid.Parse("44444444-4444-4444-4444-444444444444"), Name = "users.manage", Description = "Manage tenant users" },
+                new Permission { Id = Guid.Parse("55555555-5555-5555-5555-555555555555"), Name = "billing.manage", Description = "Manage billing" },
+                new Permission { Id = Guid.Parse("66666666-6666-6666-6666-666666666666"), Name = "auditlogs.read", Description = "View tenant audit logs" }
             );
         }
     }
