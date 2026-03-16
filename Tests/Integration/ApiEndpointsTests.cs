@@ -132,6 +132,67 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Refresh_ShouldReturnUnauthorized_ForRevokedRefreshToken()
+    {
+        using var client = CreateClient();
+        var auth = await RegisterTenant(client, $"refresh-revoked-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = auth.RefreshToken,
+            reason = "TEST_REVOKE"
+        });
+
+        revokeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var refreshResponse = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = auth.RefreshToken
+        });
+
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var body = await refreshResponse.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Invalid or expired refresh token");
+    }
+
+    [Fact]
+    public async Task Refresh_ShouldRotateToken_AndInvalidatePreviousRefreshToken()
+    {
+        using var client = CreateClient();
+        var auth = await RegisterTenant(client, $"refresh-rotate-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var firstRefresh = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = auth.RefreshToken
+        });
+
+        firstRefresh.StatusCode.Should().Be(HttpStatusCode.OK);
+        var firstBody = await firstRefresh.Content.ReadFromJsonAsync<JsonElement>();
+        var rotatedRefreshToken = firstBody.GetProperty("refreshToken").GetString();
+        rotatedRefreshToken.Should().NotBeNullOrWhiteSpace();
+        rotatedRefreshToken.Should().NotBe(auth.RefreshToken);
+
+        var oldTokenRefresh = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = auth.RefreshToken
+        });
+
+        oldTokenRefresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var rotatedTokenRefresh = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            tenantId = auth.TenantId,
+            refreshToken = rotatedRefreshToken
+        });
+
+        rotatedTokenRefresh.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Logout_ShouldRevokeRefreshToken_AndBlockFutureRefresh()
     {
         using var client = CreateClient();
@@ -170,6 +231,26 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         });
 
         revokeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Revoke_ShouldReturnUnauthorized_WhenTenantDoesNotMatchToken()
+    {
+        using var client = CreateClient();
+
+        var authA = await RegisterTenant(client, $"revoke-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var authB = await RegisterTenant(client, $"revoke-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
+        {
+            tenantId = authB.TenantId,
+            refreshToken = authA.RefreshToken,
+            reason = "CROSS_TENANT_TEST"
+        });
+
+        revokeResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var body = await revokeResponse.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Invalid or expired refresh token");
     }
 
     [Fact]
