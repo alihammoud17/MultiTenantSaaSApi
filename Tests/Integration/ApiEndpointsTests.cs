@@ -464,6 +464,151 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
             .OnlyContain(x => x == "TENANT_PLAN_CHANGED");
     }
 
+    [Fact]
+    public async Task AdminTenantDetails_ShouldReturnCurrentTenantData()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"admin-details-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var response = await client.GetAsync("/api/admin/tenant");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("id").GetGuid().Should().Be(auth.TenantId);
+        body.GetProperty("name").GetString().Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task AdminListUsers_ShouldBeTenantScoped()
+    {
+        using var client = CreateClient();
+
+        var tenantAEmail = $"admin-users-a-{Guid.NewGuid():N}@example.com";
+        var tenantBEmail = $"admin-users-b-{Guid.NewGuid():N}@example.com";
+        var tenantA = await RegisterTenant(client, tenantAEmail, "Passw0rd!");
+        var tenantB = await RegisterTenant(client, tenantBEmail, "Passw0rd!");
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
+        var addUser = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        {
+            email = $"member-{Guid.NewGuid():N}@example.com",
+            password = "Passw0rd!",
+            role = "MEMBER"
+        });
+
+        addUser.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var response = await client.GetAsync("/api/admin/tenant/users");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.ValueKind.Should().Be(JsonValueKind.Array);
+        body.GetArrayLength().Should().Be(2);
+        body.EnumerateArray()
+            .Select(x => x.GetProperty("email").GetString())
+            .Should()
+            .Contain(email => email == tenantAEmail)
+            .And.NotContain(email => email == tenantBEmail);
+    }
+
+    [Fact]
+    public async Task AdminUserManagement_ShouldAddChangeRoleAndRemoveUser()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"admin-manage-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var memberEmail = $"managed-{Guid.NewGuid():N}@example.com";
+        var addResponse = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        {
+            email = memberEmail,
+            password = "Passw0rd!",
+            role = "MEMBER"
+        });
+
+        addResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var addBody = await addResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var userId = addBody.GetProperty("id").GetGuid();
+
+        var roleResponse = await client.PatchAsJsonAsync($"/api/admin/tenant/users/{userId}/role", new
+        {
+            role = "ADMIN"
+        });
+
+        roleResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var roleBody = await roleResponse.Content.ReadFromJsonAsync<JsonElement>();
+        roleBody.GetProperty("role").GetString().Should().Be("ADMIN");
+
+        var removeResponse = await client.DeleteAsync($"/api/admin/tenant/users/{userId}");
+        removeResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var usersResponse = await client.GetAsync("/api/admin/tenant/users");
+        var usersBody = await usersResponse.Content.ReadFromJsonAsync<JsonElement>();
+        usersBody.EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).Should().NotContain(userId);
+    }
+
+    [Fact]
+    public async Task AdminEndpoints_ShouldReturnForbidden_ForNonAdminUser()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"admin-rbac-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var memberEmail = $"rbac-member-{Guid.NewGuid():N}@example.com";
+        var addResponse = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        {
+            email = memberEmail,
+            password = "Passw0rd!",
+            role = "MEMBER"
+        });
+        addResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email = memberEmail,
+            password = "Passw0rd!"
+        });
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var loginBody = await loginResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var memberToken = loginBody.GetProperty("token").GetString();
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
+
+        var usersResponse = await client.GetAsync("/api/admin/tenant/users");
+        usersResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task AdminAuditLogs_ShouldReturnTenantScopedLogs()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"admin-audit-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var addUser = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        {
+            email = $"audit-member-{Guid.NewGuid():N}@example.com",
+            password = "Passw0rd!",
+            role = "MEMBER"
+        });
+        addUser.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var response = await client.GetAsync("/api/admin/tenant/audit-logs?action=TENANT_USER_ADDED");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var logs = await response.Content.ReadFromJsonAsync<JsonElement>();
+        logs.ValueKind.Should().Be(JsonValueKind.Array);
+        logs.EnumerateArray()
+            .Select(x => x.GetProperty("action").GetString())
+            .Should()
+            .Contain("TENANT_USER_ADDED");
+    }
+
     private HttpClient CreateClient()
     {
         return _factory.CreateClient(new WebApplicationFactoryClientOptions
