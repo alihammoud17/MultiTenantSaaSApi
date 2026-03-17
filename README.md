@@ -1,56 +1,80 @@
 # Multi-Tenant SaaS API
 
-A starter ASP.NET Core 8 Web API for multi-tenant SaaS authentication.
+ASP.NET Core 8 Web API for a multi-tenant SaaS platform.  
+The .NET API is the current system of record for tenant identity, authorization, subscription/plan state, and tenant-scoped operations.
 
-## Current Implementation
+## Project overview
 
-- Tenant-aware domain entities (`Tenant`, `User`, `Subscription`, `Plan`, `AuditLog`).
-- Registration endpoint that creates:
-  - a tenant,
-  - an admin user,
-  - and a default free subscription.
-- Login endpoint with BCrypt password verification.
-- JWT token generation with issuer/audience/secret validation.
-- Request-scoped tenant context middleware.
-- Health checks endpoint (`/health`).
-- Plan catalog + tenant plan upgrade endpoint (`/api/plans`, `/api/plans/upgrade`).
-- PostgreSQL persistence via Entity Framework Core (Npgsql provider).
-- Redis connection registration for shared caching/session scenarios.
+This repository currently contains the .NET API and automated tests.  
+A separate Node.js billing orchestration service is planned next, but billing provider integrations/webhooks are **not implemented yet** in this repo.
 
-## Detailed V1 Documentation
+## Architecture summary
 
-A full shareable V1 project and usage document is available at:
+- **Presentation** (`Presentation/`): API host, middleware, auth wiring, authorization policies, controllers.
+- **Application** (`Application/`): service-layer implementations (JWT, refresh tokens, RBAC authorization, audit logging, rate limiting).
+- **Domain** (`Domain/`): entities, DTOs, contracts, interfaces, authorization constants.
+- **Infrastructure** (`Infrastructure/`): EF Core `DbContext`, migrations, tenant context persistence.
+- **Tests** (`Tests/`): integration and unit test projects.
 
-- `docs/V1-Project-Documentation.md`
+## Implemented features
 
-## Project Structure
+### V1 foundation (implemented)
 
-- `Presentation/` – API host, middleware, and controllers.
-- `Application/` – application-level services (e.g., JWT service).
-- `Domain/` – entities, DTOs, responses, and interfaces.
-- `Infrastructure/` – data access and tenant context implementations.
+- Tenant registration and login (`/api/auth/register`, `/api/auth/login`).
+- Tenant context enforcement middleware.
+- Plan catalog and tenant plan upgrade flow (`/api/plans`, `/api/plans/upgrade`).
+- Plan-based API usage limiting.
+- Tenant-scoped audit logging.
+- Health checks (`/health`).
+- Unit and integration tests.
 
+### V2 progress through admin endpoints (implemented)
 
-## Auth and Tenant Headers
+- Refresh token issuance, rotation, logout revocation, and explicit revocation endpoints.
+- Role/permission-based authorization model (RBAC policies and permission checks).
+- Admin endpoints for tenant/user management and tenant audit-log retrieval.
 
-For protected tenant endpoints (for example `/api/plans/upgrade` and `/api/tenant/audit-logs`), send:
+### Not implemented yet
 
-- `Authorization: Bearer <jwt-token>` (token obtained from `/api/auth/register` or `/api/auth/login`).
+- Billing provider adapters and webhook ingestion/verification.
+- Subscription lifecycle orchestration in a separate Node.js billing service.
 
-The JWT includes a `tenant_id` claim used by tenant middleware to resolve tenant context.
-`GET /api/plans` is public and does not require tenant/auth headers.
+## Authentication and authorization
 
-## Prerequisites
+- API auth uses JWT Bearer tokens.
+- Access tokens include tenant context claims used by middleware.
+- Refresh token workflow endpoints:
+  - `POST /api/auth/refresh`
+  - `POST /api/auth/logout`
+  - `POST /api/auth/revoke` (RBAC-protected)
+- Authorization uses policy-based RBAC (for example: users manage/read, tenants read, billing manage, audit logs read).
+
+## Multi-tenancy model
+
+- Tenant is the primary boundary for users, subscriptions, roles, and audit logs.
+- Tenant context is resolved per request and used to scope protected operations.
+- Tenant-scoped APIs filter data by tenant context to prevent cross-tenant access.
+
+## Admin capabilities (current)
+
+Under `api/admin/tenant` (authenticated + RBAC-protected):
+
+- `GET /api/admin/tenant` – current tenant details.
+- `GET /api/admin/tenant/users` – list users for current tenant.
+- `POST /api/admin/tenant/users` – create/invite tenant user.
+- `PUT /api/admin/tenant/users/{userId}/role` – assign/change role.
+- `DELETE /api/admin/tenant/users/{userId}` – remove tenant user.
+- `GET /api/admin/tenant/audit-logs` – query tenant audit logs.
+
+## Local setup and run
+
+### Prerequisites
 
 - .NET 8 SDK
-- PostgreSQL 16
-- Redis 7
+- PostgreSQL 16+
+- Redis 7+
 
-## Local Development Setup
-
-This project uses User Secrets for local development. **Do not commit sensitive data to Git.**
-
-### Manual Setup
+### Configure secrets
 
 Run from `Presentation/`:
 
@@ -63,32 +87,60 @@ dotnet user-secrets set "Jwt:Audience" "MultiTenantSaasApi"
 dotnet user-secrets set "Jwt:ExpirationMinutes" "60"
 ```
 
-### Verify Configuration
+Optional verification:
 
 ```bash
 dotnet user-secrets list
 ```
 
-## Automated Testing
+### Apply database migrations
 
-To run the full automated test suite locally with restore/build/test in one command:
-
-```bash
-./scripts/run-tests.sh
-```
-
-If you prefer, you can still run tests directly:
+From repository root:
 
 ```bash
-dotnet test MultiTenantSaaSApi.sln
+dotnet ef database update --project Infrastructure --startup-project Presentation
 ```
 
-Note: CI workflow is intentionally not included right now. You can add one later when you start CI/CD.
+### Run the API
 
-## Run the API
+From repository root:
 
 ```bash
 dotnet run --project Presentation
 ```
 
-Swagger UI is available in development mode.
+Swagger UI is enabled in Development.
+
+## Testing
+
+Run the standard restore/build/test script:
+
+```bash
+./scripts/run-tests.sh
+```
+
+Or run directly:
+
+```bash
+dotnet test MultiTenantSaaSApi.sln
+```
+
+## Roadmap / next steps
+
+### Completed to date
+
+- V1 multi-tenant API foundation.
+- V2 security/auth upgrades (refresh tokens + revocation).
+- V2 RBAC and admin tenant/user management endpoints.
+
+### Next phase (planned)
+
+- Introduce Node.js billing orchestration service.
+- Add billing provider integration via adapters.
+- Add authenticated webhook ingestion, idempotent event processing, and subscription lifecycle handlers.
+- Keep .NET API as source of truth for tenant/subscription state exposed to the platform.
+
+## Additional docs
+
+- `docs/V1-Project-Documentation.md`
+- `docs/V2-Implementation-Backlog.md`
