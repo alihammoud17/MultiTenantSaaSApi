@@ -24,6 +24,7 @@ namespace Presentation.Middleware
             // Skip tenant resolution for public endpoints
             var path = context.Request.Path.Value?.ToLower() ?? "";
             if (path.StartsWith("/api/auth") ||
+                path.StartsWith("/api/internal/billing") ||
                 path.StartsWith("/health") ||
                 path.StartsWith("/swagger") ||
                 (path == "/api/plans" && HttpMethods.IsGet(context.Request.Method)))
