@@ -15,6 +15,7 @@ export interface BillingServiceConfig {
   port: number;
   nodeEnv: string;
   provider: BillingProvider;
+  serviceName: string;
   webhookSigningSecret?: string;
   callbackBaseUrl?: string;
 }

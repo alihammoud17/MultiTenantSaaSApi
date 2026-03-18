@@ -111,6 +111,33 @@ dotnet run --project Presentation
 
 Swagger UI is enabled in Development.
 
+## Observability baseline
+
+The repository now includes a lightweight observability baseline for both services without introducing dashboards or external collectors yet.
+
+### .NET API signals
+
+- **Structured request logs**: every request emits completion logs with `CorrelationId`, `TraceId`, request path, status code, and latency.
+- **Request correlation**: clients can send `X-Correlation-ID`; otherwise the API generates one and echoes it back in the response header.
+- **Basic metrics**: `GET /metrics` returns an in-memory JSON snapshot with active requests plus request counts by route and status code.
+- **Health review**: `GET /health` now returns structured JSON with overall status, correlation id, total duration, and individual health check results (`self`, `database`).
+- **Tracing hooks**: the API starts a server-side `Activity` for each request through `ActivitySource` (`multi-tenant-saas-api`) so an exporter can be added later without reworking middleware.
+
+### Node billing service signals
+
+- **Structured JSON logs**: request lifecycle and job events now emit JSON log lines with timestamps, event names, correlation ids, and trace ids.
+- **Request correlation**: `x-correlation-id` is accepted and returned on responses; a generated trace id is also returned via `x-trace-id`.
+- **Basic metrics**: `GET /metrics` returns an in-memory JSON snapshot with active requests, total requests, and counts by route/status.
+- **Health review**: `GET /health` returns service status plus the embedded metric snapshot and `self` check result.
+- **Tracing hooks**: the billing service now creates per-request trace ids and includes them consistently in logs/responses so future OpenTelemetry or vendor tracing can be attached later.
+
+### Where to inspect signals
+
+- Inspect API logs in the ASP.NET host console output.
+- Inspect billing logs in the Node service console output; each line is JSON for easy shipping later.
+- Call `GET /health` and `GET /metrics` on each service during local development or smoke tests.
+- Pass `X-Correlation-ID: <value>` on requests to trace activity across the .NET API and billing service.
+
 ## Testing
 
 Run the standard restore/build/test script:
