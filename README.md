@@ -5,8 +5,8 @@ The .NET API is the current system of record for tenant identity, authorization,
 
 ## Project overview
 
-This repository currently contains the .NET API and automated tests.  
-A separate Node.js billing orchestration service is planned next, but billing provider integrations/webhooks are **not implemented yet** in this repo.
+This repository currently contains the .NET API and a minimal Node.js billing companion scaffold.  
+The .NET API remains the system of record, while the new `BillingService/` folder provides a placeholder TypeScript service layout for future billing provider/webhook work without live provider integrations yet.
 
 ## Architecture summary
 
