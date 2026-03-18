@@ -76,6 +76,7 @@ Accepts placeholder webhook requests and returns a `202 Accepted` response expla
 
 ## Future extension points
 
+- See `docs/technical-documentation.md` for a detailed class, method, property, and architecture reference.
 - Replace the placeholder provider adapter with dedicated Stripe and Paddle adapters.
 - Add signature verification and idempotent event storage.
 - Add authenticated callback contracts toward the .NET API while keeping the .NET API as the system of record.
