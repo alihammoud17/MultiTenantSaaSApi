@@ -1,0 +1,16 @@
+{
+  "name": "multi-tenant-billing-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal Node.js companion service scaffold for billing and webhooks.",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "test": "npm run build && node --test dist/tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
