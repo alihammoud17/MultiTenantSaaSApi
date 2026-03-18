@@ -62,13 +62,18 @@ This keeps the callback payload explicit and versionable.
 - `occurredAtUtc`
 - `correlationId`
 
-`targetPlanId` is required only for `subscription.plan_changed`.
+`targetPlanId` is required for `subscription.plan_changed` and `subscription.downgrade_scheduled`.
+
+`effectiveAtUtc` is optional and is used when the billing service needs the .NET API to preserve timing semantics for scheduled downgrades, grace-period deadlines, renewals, or cancellations.
 
 ## Supported event types
 
 - `subscription.activated`
 - `subscription.renewed`
 - `subscription.plan_changed`
+- `subscription.downgrade_scheduled`
+- `subscription.grace_period_started`
+- `subscription.grace_period_expired`
 - `subscription.canceled`
 - `subscription.expired`
 - `invoice.payment_failed`
@@ -80,11 +85,13 @@ The .NET API applies the following internal mapping:
 - `subscription.activated` -> `Active`
 - `subscription.renewed` -> `Active`
 - `subscription.plan_changed` -> `Active` and updates `PlanId`
+- `subscription.downgrade_scheduled` -> keeps the current plan active and stores `ScheduledPlanId` until `effectiveAtUtc`
+- `subscription.grace_period_started` and `invoice.payment_failed` -> `GracePeriod` and stores `GracePeriodEndsAtUtc`
+- `subscription.grace_period_expired` -> `Expired`
 - `subscription.canceled` -> `Canceled`
 - `subscription.expired` -> `Expired`
-- `invoice.payment_failed` -> `Expired`
 
-For `subscription.activated` and `subscription.renewed`, the period window is reset from `occurredAtUtc` to `occurredAtUtc + 1 month`.
+For `subscription.activated` and `subscription.renewed`, the period window is reset from `occurredAtUtc` to `effectiveAtUtc` when supplied.
 
 ## Tenant mapping validation
 

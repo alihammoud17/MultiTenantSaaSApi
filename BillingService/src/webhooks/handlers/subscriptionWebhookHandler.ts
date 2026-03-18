@@ -28,14 +28,16 @@ export class SubscriptionWebhookHandler {
       };
     }
 
-    await this.syncJob.enqueue(result.normalizedEvent);
+    const jobResult = await this.syncJob.enqueue(result.normalizedEvent);
 
     return {
       status: 202,
       body: {
         accepted: true,
         provider: this.adapter.name,
-        eventId: result.normalizedEvent.eventId
+        eventId: result.normalizedEvent.eventId,
+        processingStatus: jobResult.status,
+        attempts: jobResult.attempts
       }
     };
   }

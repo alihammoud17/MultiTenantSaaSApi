@@ -10,4 +10,5 @@ public sealed record BillingCallbackRequest(
     Guid SubscriptionId,
     string? TargetPlanId,
     DateTime OccurredAtUtc,
+    DateTime? EffectiveAtUtc,
     string CorrelationId);

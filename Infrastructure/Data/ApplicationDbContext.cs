@@ -109,6 +109,7 @@ namespace Infrastructure.Data
                 entity.HasOne(e => e.Plan)
                       .WithMany()
                       .HasForeignKey(e => e.PlanId);
+                entity.Property(e => e.ScheduledPlanId).HasMaxLength(64);
             });
 
             builder.Entity<BillingEventInbox>(entity =>

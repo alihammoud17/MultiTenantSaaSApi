@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Domain.Entites;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -619,6 +620,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
             subscriptionId,
             targetPlanId = "plan-pro",
             occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = (DateTime?)null,
             correlationId = $"corr-{Guid.NewGuid():N}"
         };
 
@@ -664,6 +666,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
             subscriptionId = subscriptionIdForTenantA,
             targetPlanId = (string?)null,
             occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = (DateTime?)null,
             correlationId = $"corr-{Guid.NewGuid():N}"
         };
 
@@ -672,6 +675,158 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("error").GetString().Should().Be("Subscription mapping could not be validated for the supplied tenant.");
+    }
+
+    [Fact]
+    public async Task InternalBillingCallback_ShouldScheduleDowngrade_AndPreserveCurrentPlanUntilEffectiveDate()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"billing-downgrade-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        Guid subscriptionId;
+        DateTime currentPeriodEnd;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var subscription = db.Subscriptions.Single(x => x.TenantId == auth.TenantId);
+            subscriptionId = subscription.Id;
+            currentPeriodEnd = subscription.CurrentPeriodEnd;
+        }
+
+        var payload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "subscription.downgrade_scheduled",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = "plan-free",
+            occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = currentPeriodEnd,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var response = await PostSignedBillingEventAsync(client, payload);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var subscription = verifyDb.Subscriptions.Single(x => x.Id == subscriptionId);
+        subscription.PlanId.Should().NotBe("plan-free");
+        subscription.ScheduledPlanId.Should().Be("plan-free");
+        subscription.ScheduledPlanEffectiveAtUtc.Should().BeCloseTo(currentPeriodEnd, TimeSpan.FromSeconds(1));
+        subscription.Status.Should().Be(SubscriptionStatus.Active);
+    }
+
+    [Fact]
+    public async Task InternalBillingCallback_ShouldEnterGracePeriod_ForFailedPaymentAndExpireWhenGraceEnds()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"billing-grace-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        Guid subscriptionId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            subscriptionId = db.Subscriptions.Single(x => x.TenantId == auth.TenantId).Id;
+        }
+
+        var graceEndsAt = DateTime.UtcNow.AddDays(5);
+        var failedPaymentPayload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "invoice.payment_failed",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = (string?)null,
+            occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = graceEndsAt,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var failedPaymentResponse = await PostSignedBillingEventAsync(client, failedPaymentPayload);
+        failedPaymentResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var expiredPayload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "subscription.grace_period_expired",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = (string?)null,
+            occurredAtUtc = graceEndsAt,
+            effectiveAtUtc = graceEndsAt,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var expiredResponse = await PostSignedBillingEventAsync(client, expiredPayload);
+        expiredResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var subscription = verifyDb.Subscriptions.Single(x => x.Id == subscriptionId);
+        subscription.Status.Should().Be(SubscriptionStatus.Expired);
+        subscription.GracePeriodEndsAtUtc.Should().BeCloseTo(graceEndsAt, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task InternalBillingCallback_ShouldCancelSubscription_AndClearPendingLifecycleState()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"billing-cancel-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        Guid subscriptionId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var subscription = db.Subscriptions.Single(x => x.TenantId == auth.TenantId);
+            subscription.ScheduledPlanId = "plan-free";
+            subscription.ScheduledPlanEffectiveAtUtc = subscription.CurrentPeriodEnd;
+            subscription.GracePeriodEndsAtUtc = DateTime.UtcNow.AddDays(3);
+            db.SaveChanges();
+            subscriptionId = subscription.Id;
+        }
+
+        var canceledAt = DateTime.UtcNow;
+        var payload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "subscription.canceled",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = (string?)null,
+            occurredAtUtc = canceledAt,
+            effectiveAtUtc = canceledAt,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var response = await PostSignedBillingEventAsync(client, payload);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var subscription = verifyDb.Subscriptions.Single(x => x.Id == subscriptionId);
+        subscription.Status.Should().Be(SubscriptionStatus.Canceled);
+        subscription.CanceledAtUtc.Should().BeCloseTo(canceledAt, TimeSpan.FromSeconds(1));
+        subscription.ScheduledPlanId.Should().BeNull();
+        subscription.ScheduledPlanEffectiveAtUtc.Should().BeNull();
+        subscription.GracePeriodEndsAtUtc.Should().BeNull();
     }
 
     [Fact]
@@ -699,6 +854,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
             subscriptionId,
             targetPlanId = (string?)null,
             occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = (DateTime?)null,
             correlationId = $"corr-{Guid.NewGuid():N}"
         };
 
