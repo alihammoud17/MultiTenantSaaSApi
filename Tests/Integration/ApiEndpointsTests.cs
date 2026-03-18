@@ -690,6 +690,8 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var existingSubscription = db.Subscriptions.Single(x => x.TenantId == auth.TenantId);
+            existingSubscription.PlanId = "plan-pro";
+            db.SaveChanges();
             subscriptionId = existingSubscription.Id;
             currentPeriodEnd = existingSubscription.CurrentPeriodEnd;
         }
