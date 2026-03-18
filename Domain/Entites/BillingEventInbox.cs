@@ -13,6 +13,7 @@ public class BillingEventInbox
     public Guid SubscriptionId { get; set; }
     public string? TargetPlanId { get; set; }
     public DateTime OccurredAtUtc { get; set; }
+    public DateTime? EffectiveAtUtc { get; set; }
     public DateTime ReceivedAtUtc { get; set; }
     public DateTime? ProcessedAtUtc { get; set; }
 }

@@ -8,6 +8,7 @@ This service currently provides:
 - a health endpoint
 - a placeholder webhook endpoint
 - a placeholder provider adapter abstraction
+- a retry-safe subscription sync job that transforms normalized lifecycle events into the internal .NET callback contract
 - a minimal folder layout for future Stripe/Paddle work
 - shared internal contract types for future .NET callback integration
 
@@ -15,7 +16,8 @@ This service does **not** yet:
 - call the .NET API
 - contain provider SDK integrations
 - store provider secrets
-- persist webhook events or run background workers outside placeholder job wiring
+- verify/provider-map live webhook payloads yet
+- persist webhook events outside the current in-memory retry/deduplication job
 
 ## Folder structure
 

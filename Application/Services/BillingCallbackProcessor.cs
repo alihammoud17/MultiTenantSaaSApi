@@ -79,6 +79,7 @@ public sealed class BillingCallbackProcessor : IBillingCallbackProcessor
 
         ApplyEvent(subscription, request);
 
+        var now = DateTime.UtcNow;
         var inboxEntry = new BillingEventInbox
         {
             Id = Guid.NewGuid(),
@@ -92,8 +93,9 @@ public sealed class BillingCallbackProcessor : IBillingCallbackProcessor
             SubscriptionId = request.SubscriptionId,
             TargetPlanId = request.TargetPlanId,
             OccurredAtUtc = request.OccurredAtUtc,
-            ReceivedAtUtc = DateTime.UtcNow,
-            ProcessedAtUtc = DateTime.UtcNow
+            EffectiveAtUtc = request.EffectiveAtUtc,
+            ReceivedAtUtc = now,
+            ProcessedAtUtc = now
         };
 
         _dbContext.BillingEventInboxes.Add(inboxEntry);
@@ -141,6 +143,8 @@ public sealed class BillingCallbackProcessor : IBillingCallbackProcessor
 
     private static void ApplyEvent(Subscription subscription, BillingCallbackRequest request)
     {
+        var effectiveAtUtc = request.EffectiveAtUtc ?? request.OccurredAtUtc;
+
         switch (request.EventType)
         {
             case "subscription.activated":
@@ -152,7 +156,11 @@ public sealed class BillingCallbackProcessor : IBillingCallbackProcessor
 
                 subscription.Status = SubscriptionStatus.Active;
                 subscription.CurrentPeriodStart = request.OccurredAtUtc;
-                subscription.CurrentPeriodEnd = request.OccurredAtUtc.AddMonths(1);
+                subscription.CurrentPeriodEnd = effectiveAtUtc;
+                subscription.ScheduledPlanId = null;
+                subscription.ScheduledPlanEffectiveAtUtc = null;
+                subscription.GracePeriodEndsAtUtc = null;
+                subscription.CanceledAtUtc = null;
                 break;
 
             case "subscription.plan_changed":
@@ -163,15 +171,47 @@ public sealed class BillingCallbackProcessor : IBillingCallbackProcessor
 
                 subscription.PlanId = request.TargetPlanId;
                 subscription.Status = SubscriptionStatus.Active;
+                subscription.ScheduledPlanId = null;
+                subscription.ScheduledPlanEffectiveAtUtc = null;
+                break;
+
+            case "subscription.downgrade_scheduled":
+                if (string.IsNullOrWhiteSpace(request.TargetPlanId))
+                {
+                    throw new InvalidOperationException("Downgrade scheduling events require a target plan.");
+                }
+
+                subscription.ScheduledPlanId = request.TargetPlanId;
+                subscription.ScheduledPlanEffectiveAtUtc = request.EffectiveAtUtc ?? subscription.CurrentPeriodEnd;
                 break;
 
             case "subscription.canceled":
                 subscription.Status = SubscriptionStatus.Canceled;
+                subscription.CanceledAtUtc = effectiveAtUtc;
+                subscription.ScheduledPlanId = null;
+                subscription.ScheduledPlanEffectiveAtUtc = null;
+                subscription.GracePeriodEndsAtUtc = null;
                 break;
 
-            case "subscription.expired":
+            case "subscription.grace_period_started":
             case "invoice.payment_failed":
+                subscription.Status = SubscriptionStatus.GracePeriod;
+                subscription.GracePeriodEndsAtUtc = request.EffectiveAtUtc ?? request.OccurredAtUtc.AddDays(7);
+                break;
+
+            case "subscription.grace_period_expired":
+            case "subscription.expired":
+                if (!string.IsNullOrWhiteSpace(subscription.ScheduledPlanId) &&
+                    subscription.ScheduledPlanEffectiveAtUtc.HasValue &&
+                    subscription.ScheduledPlanEffectiveAtUtc.Value <= effectiveAtUtc)
+                {
+                    subscription.PlanId = subscription.ScheduledPlanId;
+                }
+
                 subscription.Status = SubscriptionStatus.Expired;
+                subscription.GracePeriodEndsAtUtc = effectiveAtUtc;
+                subscription.ScheduledPlanId = null;
+                subscription.ScheduledPlanEffectiveAtUtc = null;
                 break;
 
             default:
