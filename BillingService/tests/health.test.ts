@@ -38,6 +38,17 @@ test('GET /health returns billing service status payload', async () => {
   assert.equal(response.body.status, 'ok');
   assert.equal(response.body.service, 'billing-service');
   assert.equal(response.body.provider, 'placeholder');
+  assert.equal(response.body.checks.self, 'ok');
+  assert.equal(response.body.metrics.service, 'billing-service');
+});
+
+test('GET /metrics returns request counters', async () => {
+  const response = await makeRequest('/metrics');
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.service, 'billing-service');
+  assert.equal(typeof response.body.metrics.activeRequests, 'number');
+  assert.equal(typeof response.body.correlationId, 'string');
 });
 
 test('POST /webhooks/provider returns placeholder response', async () => {

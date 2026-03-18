@@ -32,6 +32,36 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Health_ShouldReturnCorrelationId_AndDetailedPayload()
+    {
+        using var client = CreateClient();
+        const string correlationId = "corr-health-test";
+        client.DefaultRequestHeaders.Add("X-Correlation-ID", correlationId);
+
+        var response = await client.GetAsync("/health");
+
+        response.Headers.GetValues("X-Correlation-ID").Single().Should().Be(correlationId);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("service").GetString().Should().Be("multi-tenant-saas-api");
+        body.GetProperty("correlationId").GetString().Should().Be(correlationId);
+        body.GetProperty("checks").TryGetProperty("self", out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Metrics_ShouldReturnSnapshot()
+    {
+        using var client = CreateClient();
+
+        var response = await client.GetAsync("/metrics");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("metrics").GetProperty("service").GetString().Should().Be("multi-tenant-saas-api");
+        body.GetProperty("metrics").GetProperty("requestsByRoute").ValueKind.Should().Be(JsonValueKind.Object);
+    }
+
+    [Fact]
     public async Task Register_ShouldCreateTenantAndReturnToken()
     {
         using var client = CreateClient();

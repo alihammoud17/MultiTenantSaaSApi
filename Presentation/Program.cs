@@ -7,14 +7,21 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Presentation.Authorization;
 using Presentation.Middleware;
+using Presentation.Observability;
 using StackExchange.Redis;
 using System.Text;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
+builder.Logging.Configure(options => options.ActivityTrackingOptions =
+    Microsoft.Extensions.Logging.ActivityTrackingOptions.SpanId |
+    Microsoft.Extensions.Logging.ActivityTrackingOptions.TraceId |
+    Microsoft.Extensions.Logging.ActivityTrackingOptions.ParentId);
 
+builder.Services.AddSingleton<ApiObservability>();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -91,7 +98,9 @@ builder.Services.AddSwaggerGen(options =>
         [new OpenApiSecuritySchemeReference("Bearer", document)] = []
     });
 });
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy())
+    .AddCheck<DatabaseHealthCheck>("database");
 
 
 var app = builder.Build();
@@ -103,6 +112,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseMiddleware<RequestObservabilityMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -110,7 +120,35 @@ app.UseMiddleware<TenantMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+
+        await context.Response.WriteAsync(JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            service = ApiObservability.ServiceName,
+            correlationId = context.TraceIdentifier,
+            totalDuration = report.TotalDuration.TotalMilliseconds,
+            checks = report.Entries.ToDictionary(
+                entry => entry.Key,
+                entry => new
+                {
+                    status = entry.Value.Status.ToString(),
+                    duration = entry.Value.Duration.TotalMilliseconds,
+                    description = entry.Value.Description
+                })
+        }));
+    }
+});
+app.MapGet("/metrics", (ApiObservability observability, HttpContext context) => Results.Json(new
+{
+    correlationId = context.TraceIdentifier,
+    generatedAtUtc = DateTime.UtcNow,
+    metrics = observability.GetSnapshot()
+}));
 
 app.Run();
 

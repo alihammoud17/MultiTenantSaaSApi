@@ -13,6 +13,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     port: Number(env.PORT ?? 3001),
     nodeEnv: env.NODE_ENV ?? 'development',
     provider,
+    serviceName: env.SERVICE_NAME ?? 'billing-service',
     webhookSigningSecret: env.WEBHOOK_SIGNING_SECRET,
     callbackBaseUrl: env.DOTNET_CALLBACK_BASE_URL
   };

@@ -1,4 +1,5 @@
 import { BillingCallbackPayload, InternalSubscriptionEvent } from '../shared/types.ts';
+import { logger } from '../observability/logger.ts';
 
 export interface BillingCallbackPublisher {
   publish(payload: BillingCallbackPayload): Promise<void>;
@@ -28,7 +29,7 @@ function toCallbackPayload(event: InternalSubscriptionEvent): BillingCallbackPay
 
 export class NoopBillingCallbackPublisher implements BillingCallbackPublisher {
   public async publish(payload: BillingCallbackPayload): Promise<void> {
-    console.info('billing-callback-publisher.noop', {
+    logger.info('billing-callback-publisher.noop', {
       eventId: payload.eventId,
       eventType: payload.eventType,
       tenantId: payload.tenantId,
@@ -51,7 +52,7 @@ export class SubscriptionSyncJob {
   public async enqueue(event: InternalSubscriptionEvent): Promise<SubscriptionSyncJobResult> {
     if (this.processedEventIds.has(event.eventId)) {
       const payload = toCallbackPayload(event);
-      console.info('subscription-sync-job.duplicate', {
+      logger.info('subscription-sync-job.duplicate', {
         eventId: event.eventId,
         tenantId: event.tenantId,
         subscriptionId: event.subscriptionId
@@ -69,7 +70,7 @@ export class SubscriptionSyncJob {
 
     for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
       try {
-        console.info('subscription-sync-job.attempt', {
+        logger.info('subscription-sync-job.attempt', {
           eventId: event.eventId,
           eventType: event.eventType,
           attempt,
@@ -80,7 +81,7 @@ export class SubscriptionSyncJob {
         await this.publisher.publish(payload);
         this.processedEventIds.add(event.eventId);
 
-        console.info('subscription-sync-job.processed', {
+        logger.info('subscription-sync-job.processed', {
           eventId: event.eventId,
           eventType: event.eventType,
           attempt,
@@ -94,7 +95,7 @@ export class SubscriptionSyncJob {
         };
       } catch (error) {
         lastError = error;
-        console.warn('subscription-sync-job.retry', {
+        logger.warn('subscription-sync-job.retry', {
           eventId: event.eventId,
           eventType: event.eventType,
           attempt,
