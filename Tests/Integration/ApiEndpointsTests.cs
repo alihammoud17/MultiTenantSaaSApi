@@ -689,9 +689,9 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var subscription = db.Subscriptions.Single(x => x.TenantId == auth.TenantId);
-            subscriptionId = subscription.Id;
-            currentPeriodEnd = subscription.CurrentPeriodEnd;
+            var existingSubscription = db.Subscriptions.Single(x => x.TenantId == auth.TenantId);
+            subscriptionId = existingSubscription.Id;
+            currentPeriodEnd = existingSubscription.CurrentPeriodEnd;
         }
 
         var payload = new
@@ -715,11 +715,11 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         using var verifyScope = _factory.Services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var subscription = verifyDb.Subscriptions.Single(x => x.Id == subscriptionId);
-        subscription.PlanId.Should().NotBe("plan-free");
-        subscription.ScheduledPlanId.Should().Be("plan-free");
-        subscription.ScheduledPlanEffectiveAtUtc.Should().BeCloseTo(currentPeriodEnd, TimeSpan.FromSeconds(1));
-        subscription.Status.Should().Be(SubscriptionStatus.Active);
+        var updatedSubscription = verifyDb.Subscriptions.Single(x => x.Id == subscriptionId);
+        updatedSubscription.PlanId.Should().NotBe("plan-free");
+        updatedSubscription.ScheduledPlanId.Should().Be("plan-free");
+        updatedSubscription.ScheduledPlanEffectiveAtUtc.Should().BeCloseTo(currentPeriodEnd, TimeSpan.FromSeconds(1));
+        updatedSubscription.Status.Should().Be(SubscriptionStatus.Active);
     }
 
     [Fact]
@@ -791,12 +791,12 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var subscription = db.Subscriptions.Single(x => x.TenantId == auth.TenantId);
-            subscription.ScheduledPlanId = "plan-free";
-            subscription.ScheduledPlanEffectiveAtUtc = subscription.CurrentPeriodEnd;
-            subscription.GracePeriodEndsAtUtc = DateTime.UtcNow.AddDays(3);
+            var existingSubscription = db.Subscriptions.Single(x => x.TenantId == auth.TenantId);
+            existingSubscription.ScheduledPlanId = "plan-free";
+            existingSubscription.ScheduledPlanEffectiveAtUtc = existingSubscription.CurrentPeriodEnd;
+            existingSubscription.GracePeriodEndsAtUtc = DateTime.UtcNow.AddDays(3);
             db.SaveChanges();
-            subscriptionId = subscription.Id;
+            subscriptionId = existingSubscription.Id;
         }
 
         var canceledAt = DateTime.UtcNow;
@@ -821,12 +821,12 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         using var verifyScope = _factory.Services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var subscription = verifyDb.Subscriptions.Single(x => x.Id == subscriptionId);
-        subscription.Status.Should().Be(SubscriptionStatus.Canceled);
-        subscription.CanceledAtUtc.Should().BeCloseTo(canceledAt, TimeSpan.FromSeconds(1));
-        subscription.ScheduledPlanId.Should().BeNull();
-        subscription.ScheduledPlanEffectiveAtUtc.Should().BeNull();
-        subscription.GracePeriodEndsAtUtc.Should().BeNull();
+        var updatedSubscription = verifyDb.Subscriptions.Single(x => x.Id == subscriptionId);
+        updatedSubscription.Status.Should().Be(SubscriptionStatus.Canceled);
+        updatedSubscription.CanceledAtUtc.Should().BeCloseTo(canceledAt, TimeSpan.FromSeconds(1));
+        updatedSubscription.ScheduledPlanId.Should().BeNull();
+        updatedSubscription.ScheduledPlanEffectiveAtUtc.Should().BeNull();
+        updatedSubscription.GracePeriodEndsAtUtc.Should().BeNull();
     }
 
     [Fact]
