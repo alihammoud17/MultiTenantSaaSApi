@@ -57,6 +57,7 @@ namespace Infrastructure.Data
         public DbSet<User> Users => Set<User>();
         public DbSet<Plan> Plans => Set<Plan>();
         public DbSet<Subscription> Subscriptions => Set<Subscription>();
+        public DbSet<BillingEventInbox> BillingEventInboxes => Set<BillingEventInbox>();
         //public DbSet<Product> Products => Set<Product>();
         public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -108,6 +109,20 @@ namespace Infrastructure.Data
                 entity.HasOne(e => e.Plan)
                       .WithMany()
                       .HasForeignKey(e => e.PlanId);
+            });
+
+            builder.Entity<BillingEventInbox>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.EventId).IsUnique();
+                entity.HasIndex(e => new { e.TenantId, e.SubscriptionId });
+                entity.Property(e => e.EventId).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.ContractVersion).IsRequired().HasMaxLength(32);
+                entity.Property(e => e.EventType).IsRequired().HasMaxLength(80);
+                entity.Property(e => e.Provider).IsRequired().HasMaxLength(40);
+                entity.Property(e => e.ProviderEventId).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.CorrelationId).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.TargetPlanId).HasMaxLength(64);
             });
 
 

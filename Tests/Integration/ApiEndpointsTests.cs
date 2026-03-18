@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Infrastructure.Data;
@@ -592,12 +594,150 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         logs.EnumerateArray().Select(x => x.GetProperty("action").GetString()).Should().Contain("TENANT_USER_ADDED");
     }
 
+    [Fact]
+    public async Task InternalBillingCallback_ShouldApplyPlanChange_WhenSignatureAndTenantMappingAreValid()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"billing-valid-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        Guid subscriptionId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            subscriptionId = db.Subscriptions.Single(x => x.TenantId == auth.TenantId).Id;
+        }
+
+        var payload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "subscription.plan_changed",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = "plan-pro",
+            occurredAtUtc = DateTime.UtcNow,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var response = await PostSignedBillingEventAsync(client, payload);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("isDuplicate").GetBoolean().Should().BeFalse();
+        body.GetProperty("appliedPlanId").GetString().Should().Be("plan-pro");
+        body.GetProperty("appliedStatus").GetString().Should().Be("Active");
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var subscription = verifyDb.Subscriptions.Single(x => x.Id == subscriptionId);
+        subscription.TenantId.Should().Be(auth.TenantId);
+        subscription.PlanId.Should().Be("plan-pro");
+        verifyDb.BillingEventInboxes.Single(x => x.EventId == body.GetProperty("eventId").GetString());
+    }
+
+    [Fact]
+    public async Task InternalBillingCallback_ShouldRejectCrossTenantSubscriptionMapping()
+    {
+        using var client = CreateClient();
+
+        var tenantA = await RegisterTenant(client, $"billing-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await RegisterTenant(client, $"billing-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        Guid subscriptionIdForTenantA;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            subscriptionIdForTenantA = db.Subscriptions.Single(x => x.TenantId == tenantA.TenantId).Id;
+        }
+
+        var payload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "subscription.canceled",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = tenantB.TenantId,
+            subscriptionId = subscriptionIdForTenantA,
+            targetPlanId = (string?)null,
+            occurredAtUtc = DateTime.UtcNow,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var response = await PostSignedBillingEventAsync(client, payload);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Subscription mapping could not be validated for the supplied tenant.");
+    }
+
+    [Fact]
+    public async Task InternalBillingCallback_ShouldBeIdempotent_ForDuplicateEvents()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"billing-duplicate-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        Guid subscriptionId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            subscriptionId = db.Subscriptions.Single(x => x.TenantId == auth.TenantId).Id;
+        }
+
+        var payload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "subscription.canceled",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = (string?)null,
+            occurredAtUtc = DateTime.UtcNow,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var firstResponse = await PostSignedBillingEventAsync(client, payload);
+        var secondResponse = await PostSignedBillingEventAsync(client, payload);
+
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        secondResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var secondBody = await secondResponse.Content.ReadFromJsonAsync<JsonElement>();
+        secondBody.GetProperty("isDuplicate").GetBoolean().Should().BeTrue();
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        verifyDb.BillingEventInboxes.Count(x => x.EventId == payload.eventId).Should().Be(1);
+    }
+
     private HttpClient CreateClient()
     {
         return _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             BaseAddress = new Uri("https://localhost")
         });
+    }
+
+    private static async Task<HttpResponseMessage> PostSignedBillingEventAsync(HttpClient client, object payload)
+    {
+        var json = JsonSerializer.Serialize(payload);
+        var timestamp = DateTimeOffset.UtcNow.ToString("O");
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes("billing-integration-test-secret"));
+        var signatureBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes($"{timestamp}\n{json}"));
+        var signature = "sha256=" + Convert.ToHexString(signatureBytes).ToLowerInvariant();
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/internal/billing/subscription-events");
+        request.Headers.Add("X-Billing-Timestamp", timestamp);
+        request.Headers.Add("X-Billing-Signature", signature);
+        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        return await client.SendAsync(request);
     }
 
     private static async Task<(string Token, string RefreshToken, Guid TenantId)> RegisterTenant(HttpClient client, string email, string password)

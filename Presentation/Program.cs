@@ -48,6 +48,8 @@ builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
 // Audit
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IBillingCallbackProcessor, BillingCallbackProcessor>();
+builder.Services.AddSingleton<IInternalRequestSignatureValidator, InternalRequestSignatureValidator>();
 
 // RBAC
 builder.Services.AddScoped<IRbacAuthorizationService, RbacAuthorizationService>();

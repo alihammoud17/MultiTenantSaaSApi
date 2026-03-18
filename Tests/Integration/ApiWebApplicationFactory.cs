@@ -37,6 +37,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 ["Jwt:Issuer"] = "MultiTenantSaasApi",
                 ["Jwt:Audience"] = "MultiTenantSaasApi",
                 ["Jwt:ExpirationMinutes"] = "60",
+                ["BillingIntegration:SharedSecret"] = "billing-integration-test-secret",
+                ["BillingIntegration:AllowedClockSkewMinutes"] = "5",
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=unused;Username=unused;Password=unused",
                 ["Redis:ConnectionString"] = "localhost:6379"
             };
