@@ -1,70 +1,176 @@
 # Multi-Tenant SaaS API
 
-ASP.NET Core 8 Web API for a multi-tenant SaaS platform.  
-The .NET API is the current system of record for tenant identity, authorization, subscription/plan state, and tenant-scoped operations.
+ASP.NET Core 8 Web API for a multi-tenant SaaS platform.
+The .NET API is the current system of record for tenant identity, authorization, subscription state, tenant-scoped operations, and internal billing lifecycle state updates.
 
 ## Project overview
 
-This repository currently contains the .NET API and a minimal Node.js billing companion scaffold.  
-The .NET API remains the system of record, while the new `BillingService/` folder provides a placeholder TypeScript service layout for future billing provider/webhook work without live provider integrations yet.
+This repository currently contains:
+
+- a production-focused .NET API that already handles tenant registration, authentication, authorization, plan enforcement, audit logging, admin operations, and internal billing callbacks
+- a minimal `BillingService/` TypeScript companion scaffold reserved for future provider-facing billing/webhook workflow work
+
+The .NET API remains the system of record. The Node.js billing service is still a scaffold, but the .NET side already contains the internal callback contract, signature validation, idempotency storage, and subscription lifecycle application logic needed for the next billing phase.
 
 ## Architecture summary
 
-- **Presentation** (`Presentation/`): API host, middleware, auth wiring, authorization policies, controllers.
-- **Application** (`Application/`): service-layer implementations (JWT, refresh tokens, RBAC authorization, audit logging, rate limiting).
-- **Domain** (`Domain/`): entities, DTOs, contracts, interfaces, authorization constants.
-- **Infrastructure** (`Infrastructure/`): EF Core `DbContext`, migrations, tenant context persistence.
-- **Tests** (`Tests/`): integration and unit test projects.
+- **Presentation** (`Presentation/`): API host, middleware, auth wiring, observability, authorization policies, and controllers.
+- **Application** (`Application/`): service-layer implementations for JWT issuance, refresh tokens, RBAC authorization, audit logging, rate limiting, internal signature validation, and billing callback processing.
+- **Domain** (`Domain/`): entities, DTOs, contracts, interfaces, outputs, and authorization constants.
+- **Infrastructure** (`Infrastructure/`): EF Core `DbContext`, schema mappings, tenant context persistence, and migrations.
+- **Tests** (`Tests/`): integration and unit test coverage for auth, admin, audit, RBAC, observability, and billing callback flows.
+- **BillingService** (`BillingService/`): placeholder Node.js/TypeScript billing companion service scaffold.
 
-## Implemented features
+## Current application features
 
-### V1 foundation (implemented)
+### Multi-tenant foundation
 
-- Tenant registration and login (`/api/auth/register`, `/api/auth/login`).
-- Tenant context enforcement middleware.
-- Plan catalog and tenant plan upgrade flow (`/api/plans`, `/api/plans/upgrade`).
-- Plan-based API usage limiting.
-- Tenant-scoped audit logging.
-- Health checks (`/health`).
-- Unit and integration tests.
+- Tenant registration with automatic tenant, admin user, and starter subscription creation.
+- Tenant-aware request resolution using:
+  - subdomain lookup
+  - `X-Tenant-ID` header fallback
+  - JWT `tenant_id` claim fallback
+- Active-tenant enforcement that blocks requests for missing, unknown, or suspended tenants.
+- Tenant-scoped persistence for users, subscriptions, RBAC assignments, refresh tokens, and audit logs.
 
-### V2 progress through admin endpoints (implemented)
+### Authentication and token lifecycle
 
-- Refresh token issuance, rotation, logout revocation, and explicit revocation endpoints.
-- Role/permission-based authorization model (RBAC policies and permission checks).
-- Admin endpoints for tenant/user management and tenant audit-log retrieval.
-
-### Not implemented yet
-
-- Billing provider adapters and webhook ingestion/verification.
-- Subscription lifecycle orchestration in a separate Node.js billing service.
-
-## Authentication and authorization
-
-- API auth uses JWT Bearer tokens.
-- Access tokens include tenant context claims used by middleware.
-- Refresh token workflow endpoints:
-  - `POST /api/auth/refresh`
+- JWT Bearer authentication for API access.
+- Login and tenant registration endpoints.
+- Refresh token issuance on register/login.
+- Refresh token rotation on `POST /api/auth/refresh`.
+- Refresh token revocation via:
   - `POST /api/auth/logout`
-  - `POST /api/auth/revoke` (RBAC-protected)
-- Authorization uses policy-based RBAC (for example: users manage/read, tenants read, billing manage, audit logs read).
+  - `POST /api/auth/revoke`
+- Tenant-aware refresh token validation that prevents cross-tenant token reuse.
+- Password hashing with BCrypt.
 
-## Multi-tenancy model
+### Authorization and tenant administration
 
-- Tenant is the primary boundary for users, subscriptions, roles, and audit logs.
-- Tenant context is resolved per request and used to scope protected operations.
-- Tenant-scoped APIs filter data by tenant context to prevent cross-tenant access.
+- Policy-based RBAC authorization built on permissions.
+- Legacy `ADMIN` compatibility that still grants full access.
+- Tenant admin endpoints for:
+  - reading current tenant details
+  - listing tenant users
+  - adding tenant users
+  - changing a tenant user's role / RBAC assignment
+  - deleting tenant users
+  - reading tenant audit logs
+- Dedicated tenant audit log endpoint at `GET /api/tenant/audit-logs`.
 
-## Admin capabilities (current)
+### Plans and subscription management
 
-Under `api/admin/tenant` (authenticated + RBAC-protected):
+- Public plan catalog endpoint at `GET /api/plans`.
+- RBAC-protected plan upgrade endpoint at `POST /api/plans/upgrade`.
+- Subscription records that track:
+  - current plan
+  - active / grace-period / canceled / expired lifecycle state
+  - current billing period boundaries
+  - scheduled downgrade target and effective date
+  - cancellation timestamp
+  - grace-period expiration timestamp
 
-- `GET /api/admin/tenant` – current tenant details.
-- `GET /api/admin/tenant/users` – list users for current tenant.
-- `POST /api/admin/tenant/users` – create/invite tenant user.
-- `PUT /api/admin/tenant/users/{userId}/role` – assign/change role.
-- `DELETE /api/admin/tenant/users/{userId}` – remove tenant user.
-- `GET /api/admin/tenant/audit-logs` – query tenant audit logs.
+### Plan-based usage enforcement
+
+- Per-tenant API usage limiting based on the current subscription plan.
+- Rate-limit response headers:
+  - `X-RateLimit-Limit`
+  - `X-RateLimit-Remaining`
+  - `X-RateLimit-Reset`
+- Redis-backed monthly request counters.
+- Safe fallback behavior that logs Redis connectivity problems and allows requests instead of failing the API outright.
+
+### Audit logging
+
+- Structured tenant-scoped audit log persistence.
+- Audit records include tenant id, actor id, action, entity type/id, change payload, timestamp, and source IP.
+- Audit events are emitted for key flows such as:
+  - tenant registration
+  - login
+  - refresh token usage
+  - logout / token revocation
+  - plan changes
+  - tenant user administration
+
+### Internal billing callback support already implemented in the .NET API
+
+The external billing provider integration is **not** implemented yet, but the .NET API already supports authenticated internal subscription-event callbacks from a future billing service.
+
+Implemented callback capabilities:
+
+- Authenticated internal endpoint at `POST /api/internal/billing/subscription-events`.
+- HMAC SHA-256 signature validation using:
+  - `X-Billing-Timestamp`
+  - `X-Billing-Signature`
+- Clock-skew protection for callback timestamps.
+- Explicit internal billing contract version validation.
+- Safe tenant/subscription mapping validation before applying an event.
+- Event idempotency using a persisted billing inbox table keyed by event id.
+- Lifecycle handling for internal events including:
+  - `subscription.activated`
+  - `subscription.renewed`
+  - `subscription.plan_changed`
+  - `subscription.downgrade_scheduled`
+  - `subscription.canceled`
+  - `subscription.grace_period_started`
+  - `invoice.payment_failed`
+  - `subscription.grace_period_expired`
+  - `subscription.expired`
+- Subscription lifecycle updates that keep scheduled downgrades, grace periods, cancellations, and plan changes explicit and traceable.
+
+### Observability and diagnostics
+
+- Swagger UI in Development.
+- JSON health endpoint at `GET /health` with per-check details.
+- JSON metrics snapshot at `GET /metrics`.
+- Structured request completion logging with correlation and trace identifiers.
+- `X-Correlation-ID` request/response propagation.
+- Per-request `ActivitySource` instrumentation (`multi-tenant-saas-api`) for future tracing exporters.
+- Database connectivity health check.
+
+### Automated testing coverage
+
+The repository includes automated tests covering:
+
+- health and metrics endpoints
+- tenant registration and login
+- refresh token rotation, logout, and revocation flows
+- tenant-scoped audit log retrieval
+- tenant admin user-management behavior
+- RBAC permission evaluation and authorization handler behavior
+- internal billing callback validation, lifecycle handling, cross-tenant rejection, and idempotency
+
+## API surface summary
+
+### Public/auth endpoints
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `POST /api/auth/revoke` (authenticated + RBAC-protected)
+- `GET /api/plans`
+- `GET /health`
+- `GET /metrics`
+
+### Tenant/admin endpoints
+
+Under `api/admin/tenant`:
+
+- `GET /api/admin/tenant`
+- `GET /api/admin/tenant/users`
+- `POST /api/admin/tenant/users`
+- `PUT /api/admin/tenant/users/{userId}/role`
+- `DELETE /api/admin/tenant/users/{userId}`
+- `GET /api/admin/tenant/audit-logs`
+
+Additional tenant-scoped endpoint:
+
+- `GET /api/tenant/audit-logs`
+
+### Internal service endpoint
+
+- `POST /api/internal/billing/subscription-events`
 
 ## Local setup and run
 
@@ -85,6 +191,8 @@ dotnet user-secrets set "Jwt:Secret" "YOUR_256_BIT_SECRET"
 dotnet user-secrets set "Jwt:Issuer" "MultiTenantSaasApi"
 dotnet user-secrets set "Jwt:Audience" "MultiTenantSaasApi"
 dotnet user-secrets set "Jwt:ExpirationMinutes" "60"
+dotnet user-secrets set "BillingIntegration:SharedSecret" "YOUR_INTERNAL_BILLING_SHARED_SECRET"
+dotnet user-secrets set "BillingIntegration:AllowedClockSkewMinutes" "5"
 ```
 
 Optional verification:
@@ -111,63 +219,34 @@ dotnet run --project Presentation
 
 Swagger UI is enabled in Development.
 
-## Observability baseline
-
-The repository now includes a lightweight observability baseline for both services without introducing dashboards or external collectors yet.
-
-### .NET API signals
-
-- **Structured request logs**: every request emits completion logs with `CorrelationId`, `TraceId`, request path, status code, and latency.
-- **Request correlation**: clients can send `X-Correlation-ID`; otherwise the API generates one and echoes it back in the response header.
-- **Basic metrics**: `GET /metrics` returns an in-memory JSON snapshot with active requests plus request counts by route and status code.
-- **Health review**: `GET /health` now returns structured JSON with overall status, correlation id, total duration, and individual health check results (`self`, `database`).
-- **Tracing hooks**: the API starts a server-side `Activity` for each request through `ActivitySource` (`multi-tenant-saas-api`) so an exporter can be added later without reworking middleware.
-
-### Node billing service signals
-
-- **Structured JSON logs**: request lifecycle and job events now emit JSON log lines with timestamps, event names, correlation ids, and trace ids.
-- **Request correlation**: `x-correlation-id` is accepted and returned on responses; a generated trace id is also returned via `x-trace-id`.
-- **Basic metrics**: `GET /metrics` returns an in-memory JSON snapshot with active requests, total requests, and counts by route/status.
-- **Health review**: `GET /health` returns service status plus the embedded metric snapshot and `self` check result.
-- **Tracing hooks**: the billing service now creates per-request trace ids and includes them consistently in logs/responses so future OpenTelemetry or vendor tracing can be attached later.
-
-### Where to inspect signals
-
-- Inspect API logs in the ASP.NET host console output.
-- Inspect billing logs in the Node service console output; each line is JSON for easy shipping later.
-- Call `GET /health` and `GET /metrics` on each service during local development or smoke tests.
-- Pass `X-Correlation-ID: <value>` on requests to trace activity across the .NET API and billing service.
-
 ## Testing
 
-Run the standard restore/build/test script:
+Run directly from the repository root:
 
 ```bash
-./scripts/run-tests.sh
-```
-
-Or run directly:
-
-```bash
+dotnet build MultiTenantSaaSApi.sln
 dotnet test MultiTenantSaaSApi.sln
 ```
 
-## Roadmap / next steps
+## Current status and next phase
 
-### Completed to date
+### Already implemented in the .NET API
 
-- V1 multi-tenant API foundation.
-- V2 security/auth upgrades (refresh tokens + revocation).
-- V2 RBAC and admin tenant/user management endpoints.
+- Multi-tenant auth and tenant enforcement
+- Refresh token lifecycle support
+- RBAC permissions and admin tenant management
+- Plan upgrade flow and rate limiting
+- Audit logging
+- Observability baseline
+- Internal billing callback validation and subscription lifecycle application
 
-### Next phase (planned)
+### Still planned / not implemented yet
 
-- Introduce Node.js billing orchestration service.
-- Add billing provider integration via adapters.
-- Add authenticated webhook ingestion, idempotent event processing, and subscription lifecycle handlers.
-- Keep .NET API as source of truth for tenant/subscription state exposed to the platform.
+- Live billing provider adapters
+- External webhook ingestion in the Node.js billing service
+- Background billing workflow orchestration in the Node.js billing service
+- End-to-end provider synchronization across both services
 
 ## Additional docs
 
-- `docs/V1-Project-Documentation.md`
-- `docs/V2-Implementation-Backlog.md`
+- `BillingService/README.md`
