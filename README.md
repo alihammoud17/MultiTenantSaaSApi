@@ -3,14 +3,19 @@
 ASP.NET Core 8 Web API for a multi-tenant SaaS platform.
 The .NET API is the current system of record for tenant identity, authorization, subscription state, tenant-scoped operations, and internal billing lifecycle state updates.
 
-## Project overview
+## Project status
+
+- **V2 is complete** in the current repository state.
+- **V3 is the next phase** and is focused on productionizing billing, improving operational durability, strengthening security, and expanding platform maturity.
+- The .NET API already contains the internal billing callback contract and subscription lifecycle application logic needed for that next phase.
+- `BillingService/` exists as the provider-facing billing companion service, but it is still in a pre-live scaffold state and does **not** yet implement live provider integrations.
+
+## Repository overview
 
 This repository currently contains:
 
-- a production-focused .NET API that already handles tenant registration, authentication, authorization, plan enforcement, audit logging, admin operations, and internal billing callbacks
-- a minimal `BillingService/` TypeScript companion scaffold reserved for future provider-facing billing/webhook workflow work
-
-The .NET API remains the system of record. The Node.js billing service is still a scaffold, but the .NET side already contains the internal callback contract, signature validation, idempotency storage, and subscription lifecycle application logic needed for the next billing phase.
+- a production-focused .NET API that handles tenant registration, authentication, authorization, plan enforcement, audit logging, admin operations, observability basics, and internal billing callbacks
+- a Node.js `BillingService/` companion scaffold reserved for future provider-facing billing integration, webhook verification, and billing workflow orchestration
 
 ## Architecture summary
 
@@ -19,9 +24,9 @@ The .NET API remains the system of record. The Node.js billing service is still 
 - **Domain** (`Domain/`): entities, DTOs, contracts, interfaces, outputs, and authorization constants.
 - **Infrastructure** (`Infrastructure/`): EF Core `DbContext`, schema mappings, tenant context persistence, and migrations.
 - **Tests** (`Tests/`): integration and unit test coverage for auth, admin, audit, RBAC, observability, and billing callback flows.
-- **BillingService** (`BillingService/`): placeholder Node.js/TypeScript billing companion service scaffold.
+- **BillingService** (`BillingService/`): provider-facing billing service scaffold with placeholder webhook handling, normalized event types, and a retrying sync-job shell.
 
-## Current application features
+## Implemented platform scope (V2 complete)
 
 ### Multi-tenant foundation
 
@@ -140,6 +145,34 @@ The repository includes automated tests covering:
 - RBAC permission evaluation and authorization handler behavior
 - internal billing callback validation, lifecycle handling, cross-tenant rejection, and idempotency
 
+## V3 work planned next
+
+The next phase is intentionally separate from the already-implemented V2 platform scope.
+
+### Billing and workflow priorities
+
+- connect `BillingService` to the .NET internal billing callback endpoint
+- replace placeholder webhook handling with real provider webhook verification and normalization
+- add durable retry, replay protection, and reconciliation for billing workflows
+- keep provider-specific logic inside `BillingService` while the .NET API remains the system of record
+
+### Platform maturity priorities
+
+- tenant-facing billing self-service capabilities built on internal subscription state
+- entitlements / add-ons / feature gating
+- stronger security hardening and operational diagnostics
+- usage analytics and outbound webhooks
+
+### Work that is **not** complete yet
+
+The repository should still be treated as **pre-live for provider billing integration**:
+
+- no live billing provider SDK integration is implemented
+- no verified external webhook ingestion flow is implemented
+- `BillingService` does not yet call the .NET internal callback endpoint
+- `BillingService` retry and duplicate suppression are not yet durable across restarts
+- end-to-end provider synchronization across both services is not yet implemented
+
 ## API surface summary
 
 ### Public/auth endpoints
@@ -228,25 +261,8 @@ dotnet build MultiTenantSaaSApi.sln
 dotnet test MultiTenantSaaSApi.sln
 ```
 
-## Current status and next phase
-
-### Already implemented in the .NET API
-
-- Multi-tenant auth and tenant enforcement
-- Refresh token lifecycle support
-- RBAC permissions and admin tenant management
-- Plan upgrade flow and rate limiting
-- Audit logging
-- Observability baseline
-- Internal billing callback validation and subscription lifecycle application
-
-### Still planned / not implemented yet
-
-- Live billing provider adapters
-- External webhook ingestion in the Node.js billing service
-- Background billing workflow orchestration in the Node.js billing service
-- End-to-end provider synchronization across both services
-
 ## Additional docs
 
 - `BillingService/README.md`
+- `docs/V3-Implementation-Backlog.md`
+- `docs/Internal-Billing-Contract.md`
