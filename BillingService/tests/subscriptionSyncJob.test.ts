@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { BillingCallbackPayload, InternalSubscriptionEvent } from '../src/shared/types.ts';
+import { ReconciliationJob } from '../src/jobs/reconciliationJob.ts';
 import { BillingCallbackPublisher, SubscriptionSyncJob } from '../src/jobs/subscriptionSyncJob.ts';
+import { FileWorkflowQueue, WorkflowItemStatus } from '../src/workflows/workflowQueue.ts';
 
 function makeEvent(overrides: Partial<InternalSubscriptionEvent> = {}): InternalSubscriptionEvent {
   return {
@@ -19,52 +24,144 @@ function makeEvent(overrides: Partial<InternalSubscriptionEvent> = {}): Internal
   };
 }
 
-test('SubscriptionSyncJob retries transient publisher failures and preserves idempotent event payload', async () => {
-  const attempts: BillingCallbackPayload[] = [];
-  let failuresRemaining = 1;
+async function withTempDir(run: (path: string) => Promise<void>) {
+  const dir = await mkdtemp(join(tmpdir(), 'billing-workflow-test-'));
+  try {
+    await run(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
 
-  const publisher: BillingCallbackPublisher = {
-    async publish(payload) {
-      attempts.push(payload);
-      if (failuresRemaining > 0) {
-        failuresRemaining -= 1;
-        throw new Error('temporary failure');
-      }
+async function waitForStatus(job: SubscriptionSyncJob, eventId: string, status: WorkflowItemStatus): Promise<void> {
+  for (let i = 0; i < 50; i += 1) {
+    await job.runWorkerCycle();
+    const snapshot = await job.snapshotQueue();
+    if (snapshot.some((item) => item.eventId === eventId && item.status === status)) {
+      return;
     }
-  };
 
-  const job = new SubscriptionSyncJob(publisher, 3);
-  const result = await job.enqueue(makeEvent());
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 
-  assert.equal(result.status, 'processed');
-  assert.equal(result.attempts, 2);
-  assert.equal(attempts.length, 2);
-  assert.equal(JSON.stringify(attempts[0]), JSON.stringify(attempts[1]));
-  assert.equal(result.payload.providerEventId, 'stripe_evt_123');
-  assert.equal(result.payload.targetPlanId, 'plan-basic');
-  assert.equal(result.payload.effectiveAtUtc, '2026-04-18T12:00:00.000Z');
+  throw new Error(`Timed out waiting for ${eventId} to reach status ${status}`);
+}
+
+test('SubscriptionSyncJob queues work and worker retries transient publisher failures with backoff', async () => {
+  await withTempDir(async (dir) => {
+    const attempts: BillingCallbackPayload[] = [];
+    let failuresRemaining = 1;
+
+    const publisher: BillingCallbackPublisher = {
+      async publish(payload) {
+        attempts.push(payload);
+        if (failuresRemaining > 0) {
+          failuresRemaining -= 1;
+          throw new Error('temporary failure');
+        }
+      }
+    };
+
+    const job = new SubscriptionSyncJob(publisher, {
+      storagePath: join(dir, 'state.json'),
+      maxAttempts: 3,
+      initialBackoffMs: 1,
+      maxBackoffMs: 2_000
+    });
+
+    const result = await job.enqueue(makeEvent());
+    assert.equal(result.status, 'queued');
+
+    await waitForStatus(job, 'evt_123', 'completed');
+
+    assert.equal(attempts.length, 2);
+    assert.equal(JSON.stringify(attempts[0]), JSON.stringify(attempts[1]));
+
+    const snapshot = await job.snapshotQueue();
+    assert.equal(snapshot[0].status, 'completed');
+    assert.equal(snapshot[0].attempts, 2);
+  });
 });
 
-test('SubscriptionSyncJob suppresses duplicate event ids after successful processing', async () => {
-  const published: BillingCallbackPayload[] = [];
+test('SubscriptionSyncJob dead-letters an event once retry budget is exhausted', async () => {
+  await withTempDir(async (dir) => {
+    const publisher: BillingCallbackPublisher = {
+      async publish() {
+        throw new Error('persistent callback outage');
+      }
+    };
 
-  const publisher: BillingCallbackPublisher = {
-    async publish(payload) {
-      published.push(payload);
-    }
-  };
+    const job = new SubscriptionSyncJob(publisher, {
+      storagePath: join(dir, 'state.json'),
+      maxAttempts: 2,
+      initialBackoffMs: 1,
+      maxBackoffMs: 2_000
+    });
 
-  const job = new SubscriptionSyncJob(publisher, 2);
-  const event = makeEvent({ eventId: 'evt_duplicate', eventType: 'invoice.payment_failed', effectiveAt: '2026-03-25T12:00:00.000Z' });
+    await job.enqueue(makeEvent({ eventId: 'evt_dead_letter' }));
+    await waitForStatus(job, 'evt_dead_letter', 'dead_letter');
 
-  const first = await job.enqueue(event);
-  const second = await job.enqueue(event);
+    const snapshot = await job.snapshotQueue();
+    assert.equal(snapshot[0].status, 'dead_letter');
+    assert.equal(snapshot[0].attempts, 2);
+    assert.match(snapshot[0].deadLetterReason ?? '', /persistent callback outage/);
+  });
+});
 
-  assert.equal(first.status, 'processed');
-  assert.equal(first.attempts, 1);
-  assert.equal(second.status, 'duplicate');
-  assert.equal(second.attempts, 0);
-  assert.equal(published.length, 1);
-  assert.equal(published[0].eventType, 'invoice.payment_failed');
-  assert.equal(published[0].effectiveAtUtc, '2026-03-25T12:00:00.000Z');
+test('SubscriptionSyncJob keeps dedup/replay protection across process restarts', async () => {
+  await withTempDir(async (dir) => {
+    const statePath = join(dir, 'state.json');
+    const published: string[] = [];
+
+    const firstPublisher: BillingCallbackPublisher = {
+      async publish(payload) {
+        published.push(payload.eventId);
+      }
+    };
+
+    const firstJob = new SubscriptionSyncJob(firstPublisher, {
+      storagePath: statePath,
+      maxAttempts: 2,
+      initialBackoffMs: 1,
+      maxBackoffMs: 2_000
+    });
+
+    await firstJob.enqueue(makeEvent({ eventId: 'evt_persisted' }));
+    await waitForStatus(firstJob, 'evt_persisted', 'completed');
+    assert.deepEqual(published, ['evt_persisted']);
+
+    const secondPublisher: BillingCallbackPublisher = {
+      async publish(payload) {
+        published.push(payload.eventId);
+      }
+    };
+
+    const secondJob = new SubscriptionSyncJob(secondPublisher, {
+      storagePath: statePath,
+      maxAttempts: 2,
+      initialBackoffMs: 1,
+      maxBackoffMs: 2_000
+    });
+
+    const duplicate = await secondJob.enqueue(makeEvent({ eventId: 'evt_persisted' }));
+    assert.equal(duplicate.status, 'duplicate');
+    assert.deepEqual(published, ['evt_persisted']);
+  });
+});
+
+test('ReconciliationJob returns a minimal backlog/dead-letter summary', async () => {
+  await withTempDir(async (dir) => {
+    const queue = new FileWorkflowQueue(join(dir, 'state.json'));
+
+    await queue.enqueue(makeEvent({ eventId: 'evt_pending' }));
+    await queue.enqueue(makeEvent({ eventId: 'evt_dlq' }));
+    await queue.markDeadLetter('evt_dlq', 'mapping rejected', new Date('2026-03-29T00:00:00.000Z'));
+
+    const job = new ReconciliationJob(queue);
+    const result = await job.runOnce(new Date('2026-03-29T01:00:00.000Z'));
+
+    assert.equal(result.pendingCount, 1);
+    assert.equal(result.deadLetterCount, 1);
+    assert.equal(typeof result.oldestPendingAgeSeconds, 'number');
+  });
 });

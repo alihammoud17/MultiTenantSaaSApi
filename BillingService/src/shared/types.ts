@@ -18,6 +18,12 @@ export interface BillingServiceConfig {
   serviceName: string;
   webhookSigningSecret?: string;
   callbackBaseUrl?: string;
+  workflowStatePath: string;
+  workflowMaxAttempts: number;
+  workflowInitialBackoffMs: number;
+  workflowMaxBackoffMs: number;
+  workflowPollIntervalMs: number;
+  reconciliationIntervalMs: number;
 }
 
 export interface InternalSubscriptionEvent {

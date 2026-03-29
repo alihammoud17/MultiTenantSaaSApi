@@ -8,7 +8,8 @@ At the current stage, it is deliberately small and placeholder-oriented:
 - it exposes a health endpoint
 - it exposes a placeholder webhook endpoint
 - it defines internal billing contracts and extension points
-- it does **not** yet integrate with Stripe, Paddle, persistence, or the .NET API
+- it now includes a durable file-backed workflow queue, retry/backoff worker, dead-letter handling, and a reconciliation summary skeleton
+- it still does **not** yet integrate with Stripe/Paddle live webhooks or authenticated .NET callback delivery
 
 The .NET API remains the system of record. `BillingService` is only a future-facing orchestration boundary.
 
@@ -43,7 +44,7 @@ For the current placeholder webhook flow, the request path is:
 8. The current `PlaceholderProviderAdapter` rejects live processing and returns a placeholder result.
 9. The handler returns a `202 Accepted` response with an explanatory payload.
 
-If, in the future, a provider adapter returns a normalized internal event, the handler will enqueue it through `SubscriptionSyncJob`.
+When a provider adapter returns a normalized internal event, `SubscriptionSyncJob` now writes that event to a durable queue, triggers a background worker with exponential retry/backoff, and dead-letters exhausted items. A reconciliation summary job periodically logs queued/dead-letter counts for diagnostics.
 
 ---
 
