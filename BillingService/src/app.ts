@@ -1,5 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { loadConfig } from './config/env.ts';
+import { ReconciliationJob } from './jobs/reconciliationJob.ts';
 import { SubscriptionSyncJob } from './jobs/subscriptionSyncJob.ts';
 import { beginObservedRequest, correlationHeaderName } from './observability/requestContext.ts';
 import { BillingMetrics } from './observability/metrics.ts';
@@ -37,7 +38,21 @@ export function createApp() {
   const config = loadConfig();
   const metrics = new BillingMetrics();
   const providerAdapter = createProviderAdapter();
-  const webhookHandler = new SubscriptionWebhookHandler(providerAdapter, new SubscriptionSyncJob());
+  const syncJob = new SubscriptionSyncJob(undefined, {
+    storagePath: config.workflowStatePath,
+    maxAttempts: config.workflowMaxAttempts,
+    initialBackoffMs: config.workflowInitialBackoffMs,
+    maxBackoffMs: config.workflowMaxBackoffMs,
+    workerPollIntervalMs: config.workflowPollIntervalMs
+  });
+  syncJob.startWorker();
+
+  const reconciliationJob = new ReconciliationJob(syncJob.getQueue());
+  const reconciliationTimer = setInterval(() => {
+    void reconciliationJob.runOnce();
+  }, config.reconciliationIntervalMs);
+
+  const webhookHandler = new SubscriptionWebhookHandler(providerAdapter, syncJob);
 
   const server = createServer(async (req, res) => {
     const method = req.method ?? 'GET';
@@ -94,6 +109,11 @@ export function createApp() {
       writeJson(res, 500, { error: 'Internal server error', correlationId: observer.correlationId }, observer.correlationId, observer.traceId);
       observer.finish(500);
     }
+  });
+
+  server.on('close', () => {
+    syncJob.stopWorker();
+    clearInterval(reconciliationTimer);
   });
 
   return { server, config, metrics };

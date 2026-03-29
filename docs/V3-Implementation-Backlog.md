@@ -29,7 +29,7 @@ The codebase has V3 groundwork, but the production billing path is not complete 
 
 - `BillingService` does not yet verify real provider webhooks.
 - `BillingService` does not yet publish authenticated callbacks into the .NET API.
-- `BillingService` deduplication and retries are still in-memory rather than durable.
+- `BillingService` now has a durable workflow foundation (file-backed queue + retry/dead-letter + replay-safe dedup), but it still needs provider-connected callback delivery and full reconciliation against provider APIs.
 - The .NET API does not yet expose tenant-facing billing self-service endpoints beyond plan upgrade and subscription state enforcement.
 - Entitlements, add-ons, usage analytics exports, outbound webhooks, and deeper billing reconciliation workflows are not yet implemented.
 

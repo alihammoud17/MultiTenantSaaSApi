@@ -33,9 +33,11 @@ The current codebase provides a pre-live scaffold with the following implemented
 - a placeholder provider adapter boundary
 - a webhook handler shell that routes provider webhook requests through the adapter interface
 - normalized internal subscription event and callback payload types shared within the service
-- a retrying `SubscriptionSyncJob` shell that transforms normalized events into the internal .NET callback payload shape
-- in-memory duplicate suppression inside `SubscriptionSyncJob`
-- tests covering the health/metrics endpoints and sync-job retry/duplicate behavior
+- a durable file-backed workflow queue abstraction for billing event processing
+- initial workflow worker wiring with retry/backoff policy and dead-letter handling
+- persistent dedup/replay protection keyed by normalized `eventId` across service restarts
+- a minimal reconciliation job skeleton that summarizes pending/dead-letter backlog state
+- tests covering health/metrics endpoints plus workflow retry, dead-letter, persistence, and reconciliation behavior
 
 ## Not implemented yet
 
@@ -45,8 +47,7 @@ The following work is still upcoming V3 work and should not be documented elsewh
 - real webhook signature verification
 - tenant/subscription mapping from provider payloads
 - authenticated HTTP callback delivery into the .NET API
-- durable event storage, retry state, or replay protection across restarts
-- reconciliation against provider state
+- provider-side state reconciliation logic beyond summary/skeleton reporting
 - tenant-facing billing self-service functionality
 
 ## Current folder structure
@@ -78,6 +79,12 @@ The current scaffold can run with defaults, but these variables define the inten
 - `WEBHOOK_SIGNING_SECRET` - reserved for future provider signature verification
 - `DOTNET_CALLBACK_BASE_URL` - reserved for future authenticated callbacks into the .NET API
 - `SERVICE_NAME` - optional service label for health/metrics payloads, defaults to `billing-service`
+- `WORKFLOW_STATE_PATH` - durable queue state file location, defaults to `<repo>/BillingService/.billing-workflow-state.json`
+- `WORKFLOW_MAX_ATTEMPTS` - max delivery attempts before dead-letter, defaults to `3`
+- `WORKFLOW_INITIAL_BACKOFF_MS` - first retry delay in milliseconds, defaults to `1000`
+- `WORKFLOW_MAX_BACKOFF_MS` - retry delay cap in milliseconds, defaults to `30000`
+- `WORKFLOW_POLL_INTERVAL_MS` - background worker polling interval, defaults to `2000`
+- `RECONCILIATION_INTERVAL_MS` - reconciliation summary interval, defaults to `300000`
 
 > Do not place real provider secrets in the repository.
 
@@ -120,8 +127,8 @@ The next useful implementation slices for this service are:
 
 1. connect the service to the .NET internal billing callback endpoint using the documented HMAC contract
 2. replace the placeholder provider adapter with a real provider implementation
-3. add durable event persistence, replay protection, and retry-safe worker processing
-4. add reconciliation workflows and stronger operational diagnostics
+3. connect the durable queue worker to authenticated .NET callback delivery and provider adapters
+4. evolve reconciliation from summary skeleton to provider/internal state comparison workflows
 
 These changes should keep provider-specific logic inside `BillingService` and preserve the .NET API as the system of record.
 

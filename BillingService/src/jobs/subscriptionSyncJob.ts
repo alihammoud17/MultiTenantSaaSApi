@@ -1,14 +1,27 @@
+import { resolve } from 'node:path';
 import { BillingCallbackPayload, InternalSubscriptionEvent } from '../shared/types.ts';
 import { logger } from '../observability/logger.ts';
+import { ExponentialBackoffRetryPolicy } from '../workflows/retryPolicy.ts';
+import { FileWorkflowQueue, WorkflowQueue } from '../workflows/workflowQueue.ts';
+import { WorkflowProcessor, WorkflowWorker } from '../workflows/workflowWorker.ts';
 
 export interface BillingCallbackPublisher {
   publish(payload: BillingCallbackPayload): Promise<void>;
 }
 
 export interface SubscriptionSyncJobResult {
-  status: 'processed' | 'duplicate';
+  status: 'queued' | 'duplicate';
   attempts: number;
   payload: BillingCallbackPayload;
+}
+
+export interface SubscriptionSyncJobOptions {
+  queue?: WorkflowQueue;
+  storagePath?: string;
+  maxAttempts?: number;
+  initialBackoffMs?: number;
+  maxBackoffMs?: number;
+  workerPollIntervalMs?: number;
 }
 
 function toCallbackPayload(event: InternalSubscriptionEvent): BillingCallbackPayload {
@@ -39,72 +52,91 @@ export class NoopBillingCallbackPublisher implements BillingCallbackPublisher {
   }
 }
 
-export class SubscriptionSyncJob {
+class SubscriptionSyncProcessor implements WorkflowProcessor {
   private readonly publisher: BillingCallbackPublisher;
-  private readonly maxAttempts: number;
-  private readonly processedEventIds = new Set<string>();
 
-  public constructor(publisher: BillingCallbackPublisher = new NoopBillingCallbackPublisher(), maxAttempts = 3) {
+  public constructor(publisher: BillingCallbackPublisher) {
     this.publisher = publisher;
-    this.maxAttempts = maxAttempts;
+  }
+
+  public async process(event: InternalSubscriptionEvent): Promise<void> {
+    const payload = toCallbackPayload(event);
+    await this.publisher.publish(payload);
+  }
+}
+
+export class SubscriptionSyncJob {
+  private readonly worker: WorkflowWorker;
+  private readonly queue: WorkflowQueue;
+
+  public constructor(publisher: BillingCallbackPublisher = new NoopBillingCallbackPublisher(), options: SubscriptionSyncJobOptions = {}) {
+    this.queue = options.queue ?? new FileWorkflowQueue(options.storagePath ?? resolve(process.cwd(), '.billing-workflow-state.json'));
+
+    this.worker = new WorkflowWorker(
+      this.queue,
+      new SubscriptionSyncProcessor(publisher),
+      new ExponentialBackoffRetryPolicy({
+        maxAttempts: options.maxAttempts ?? 3,
+        initialDelayMs: options.initialBackoffMs ?? 1_000,
+        maxDelayMs: options.maxBackoffMs ?? 30_000
+      }),
+      options.workerPollIntervalMs ?? 2_000
+    );
+  }
+
+  public startWorker(): void {
+    this.worker.start();
+  }
+
+  public stopWorker(): void {
+    this.worker.stop();
   }
 
   public async enqueue(event: InternalSubscriptionEvent): Promise<SubscriptionSyncJobResult> {
-    if (this.processedEventIds.has(event.eventId)) {
-      const payload = toCallbackPayload(event);
-      logger.info('subscription-sync-job.duplicate', {
+    const result = await this.queue.enqueue(event);
+    const payload = toCallbackPayload(event);
+
+    if (result.status === 'queued') {
+      logger.info('subscription-sync-job.queued', {
         eventId: event.eventId,
+        eventType: event.eventType,
         tenantId: event.tenantId,
-        subscriptionId: event.subscriptionId
+        subscriptionId: event.subscriptionId,
+        attempts: result.item.attempts
       });
 
+      void this.worker.processUntilEmpty();
       return {
-        status: 'duplicate',
-        attempts: 0,
+        status: 'queued',
+        attempts: result.item.attempts,
         payload
       };
     }
 
-    const payload = toCallbackPayload(event);
-    let lastError: unknown;
+    logger.info('subscription-sync-job.duplicate', {
+      eventId: event.eventId,
+      tenantId: event.tenantId,
+      subscriptionId: event.subscriptionId,
+      status: result.item.status
+    });
 
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
-      try {
-        logger.info('subscription-sync-job.attempt', {
-          eventId: event.eventId,
-          eventType: event.eventType,
-          attempt,
-          tenantId: event.tenantId,
-          correlationId: event.correlationId
-        });
+    return {
+      status: 'duplicate',
+      attempts: result.item.attempts,
+      payload
+    };
+  }
 
-        await this.publisher.publish(payload);
-        this.processedEventIds.add(event.eventId);
+  public async runWorkerCycle(): Promise<void> {
+    await this.worker.processUntilEmpty();
+  }
 
-        logger.info('subscription-sync-job.processed', {
-          eventId: event.eventId,
-          eventType: event.eventType,
-          attempt,
-          tenantId: event.tenantId
-        });
+  public async snapshotQueue() {
+    return this.queue.snapshot();
+  }
 
-        return {
-          status: 'processed',
-          attempts: attempt,
-          payload
-        };
-      } catch (error) {
-        lastError = error;
-        logger.warn('subscription-sync-job.retry', {
-          eventId: event.eventId,
-          eventType: event.eventType,
-          attempt,
-          tenantId: event.tenantId,
-          message: error instanceof Error ? error.message : 'Unknown error'
-        });
-      }
-    }
-
-    throw lastError instanceof Error ? lastError : new Error('Subscription sync job failed.');
+  public getQueue(): WorkflowQueue {
+    return this.queue;
   }
 }
+

@@ -24,7 +24,7 @@ This repository currently contains:
 - **Domain** (`Domain/`): entities, DTOs, contracts, interfaces, outputs, and authorization constants.
 - **Infrastructure** (`Infrastructure/`): EF Core `DbContext`, schema mappings, tenant context persistence, and migrations.
 - **Tests** (`Tests/`): integration and unit test coverage for auth, admin, audit, RBAC, observability, and billing callback flows.
-- **BillingService** (`BillingService/`): provider-facing billing service scaffold with placeholder webhook handling, normalized event types, and a retrying sync-job shell.
+- **BillingService** (`BillingService/`): provider-facing billing scaffold with placeholder webhook handling, normalized event types, durable file-backed workflow queueing, retry/backoff, dead-letter handling, and reconciliation summary skeletons.
 
 ## Implemented platform scope (V2 complete)
 
@@ -170,7 +170,7 @@ The repository should still be treated as **pre-live for provider billing integr
 - no live billing provider SDK integration is implemented
 - no verified external webhook ingestion flow is implemented
 - `BillingService` does not yet call the .NET internal callback endpoint
-- `BillingService` retry and duplicate suppression are not yet durable across restarts
+- `BillingService` does not yet reconcile against live provider APIs (current reconciliation is summary/skeleton only)
 - end-to-end provider synchronization across both services is not yet implemented
 
 ## API surface summary
