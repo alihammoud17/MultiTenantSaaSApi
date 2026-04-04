@@ -1,4 +1,4 @@
-import { BillingServiceConfig } from '../shared/types.ts';
+import type { BillingServiceConfig } from '../shared/types.ts';
 import { BillingMetrics } from '../observability/metrics.ts';
 
 export function getHealthPayload(config: BillingServiceConfig, metrics: BillingMetrics, correlationId: string) {

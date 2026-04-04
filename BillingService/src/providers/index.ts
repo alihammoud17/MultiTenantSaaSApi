@@ -1,5 +1,5 @@
 import { loadConfig } from '../config/env.ts';
-import { BillingProviderAdapter } from '../shared/types.ts';
+import type { BillingProviderAdapter } from '../shared/types.ts';
 import { PlaceholderProviderAdapter } from './placeholderProviderAdapter.ts';
 
 export function createProviderAdapter(): BillingProviderAdapter {

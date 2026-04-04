@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { InternalSubscriptionEvent } from '../shared/types.ts';
+import type { InternalSubscriptionEvent } from '../shared/types.ts';
 
 export type WorkflowItemStatus = 'queued' | 'processing' | 'completed' | 'dead_letter';
 
