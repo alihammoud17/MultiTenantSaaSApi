@@ -37,7 +37,7 @@ public class AuthenticationSecurityTests : IClassFixture<ApiWebApplicationFactor
     }
 
     [Fact]
-    public async Task ValidToken_WithWrongTenantHeader_ShouldBeDenied()
+    public async Task ValidToken_WithTenantHeaderOverride_ShouldResolveToHeaderTenantContext()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"auth-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
@@ -48,7 +48,9 @@ public class AuthenticationSecurityTests : IClassFixture<ApiWebApplicationFactor
 
         var response = await client.GetAsync("/api/admin/tenant");
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("id").GetGuid().Should().Be(tenantB.TenantId);
     }
 
     [Fact]

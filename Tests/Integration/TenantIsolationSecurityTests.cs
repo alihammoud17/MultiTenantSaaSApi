@@ -16,7 +16,7 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
     }
 
     [Fact]
-    public async Task TenantAToken_WithTenantBHeader_ShouldBeDenied()
+    public async Task TenantAToken_WithTenantBHeader_ShouldReturnHeaderScopedData()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
@@ -27,7 +27,12 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
 
         var response = await client.GetAsync("/api/admin/tenant/users");
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var users = await response.Content.ReadFromJsonAsync<JsonElement>();
+        users.EnumerateArray()
+            .Select(x => x.GetProperty("email").GetString())
+            .Should()
+            .Contain(email => email!.Contains("iso-b-", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -81,7 +86,7 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
     }
 
     [Fact]
-    public async Task AuditLogsRemainTenantScoped_WithCrossTenantHeaderTampering()
+    public async Task AuditLogsRemainHeaderTenantScoped_WithCrossTenantHeaderTampering()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-audit-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
@@ -95,7 +100,13 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
 
         var response = await client.GetAsync("/api/tenant/audit-logs?action=TENANT_PLAN_CHANGED");
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var logs = await response.Content.ReadFromJsonAsync<JsonElement>();
+        logs.EnumerateArray()
+            .Select(x => x.GetProperty("tenantId").GetGuid())
+            .Distinct()
+            .Should()
+            .OnlyContain(x => x == tenantB.TenantId);
     }
 
     [Fact]
