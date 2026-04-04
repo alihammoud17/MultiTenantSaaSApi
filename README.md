@@ -104,6 +104,7 @@ The external billing provider integration is **not** implemented yet, but the .N
 Implemented callback capabilities:
 
 - Authenticated internal endpoint at `POST /api/internal/billing/subscription-events`.
+- Internal billing callback requests bypass tenant-resolution and tenant plan rate-limiting middleware; the callback pipeline validates tenant/subscription mapping from the signed payload instead.
 - HMAC SHA-256 signature validation using:
   - `X-Billing-Timestamp`
   - `X-Billing-Signature`
