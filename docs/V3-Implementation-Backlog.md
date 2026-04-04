@@ -22,6 +22,7 @@ The current repository has already completed the major V2 platform slices:
   - the .NET API stores billing inbox records for idempotency,
   - `BillingService` already contains the provider adapter boundary, webhook handler shell, normalized billing event types, and a retrying subscription sync job scaffold.
 - **Automated test coverage** already exists across auth, RBAC, tenant admin, audit logging, observability, and internal billing callback flows.
+  - Security-focused suites now also cover authentication negatives, authorization denials, tenant/header tampering, validation abuse paths, refresh/revoke replay behavior, and internal billing signature/timestamp rejection scenarios.
 
 ### What is still intentionally incomplete
 

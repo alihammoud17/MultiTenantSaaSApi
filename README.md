@@ -144,6 +144,7 @@ The repository includes automated tests covering:
 - tenant admin user-management behavior
 - RBAC permission evaluation and authorization handler behavior
 - internal billing callback validation, lifecycle handling, cross-tenant rejection, and idempotency
+- deeper security-focused scenarios for authentication negatives, authorization denials, tenant-isolation tampering, input validation abuse cases, and internal billing signature hardening
 
 ## V3 work planned next
 

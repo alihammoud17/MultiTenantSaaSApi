@@ -131,6 +131,34 @@ public class AuditServiceTests
         logs.Should().HaveCount(1);
     }
 
+    [Fact]
+    public async Task GetTenantAuditLogsAsync_ShouldCapOversizedPageSize_ToPreventResourceAbuse()
+    {
+        var tenantId = Guid.NewGuid();
+        var dbContext = CreateDbContext();
+        var now = DateTime.UtcNow;
+
+        await dbContext.AuditLogs.AddRangeAsync(
+            Enumerable.Range(1, 250).Select(i => new AuditLog
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = Guid.NewGuid(),
+                Action = "EVENT",
+                EntityType = nameof(User),
+                EntityId = i.ToString(),
+                Timestamp = now.AddSeconds(-i),
+                IpAddress = "127.0.0.1"
+            }));
+        await dbContext.SaveChangesAsync();
+
+        var sut = new AuditService(dbContext, new TestTenantContext(tenantId), new HttpContextAccessor());
+
+        var logs = await sut.GetTenantAuditLogsAsync(page: 1, pageSize: 1000);
+
+        logs.Should().HaveCount(200);
+    }
+
     private static ApplicationDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()

@@ -128,6 +128,22 @@ public class RbacAuthorizationServiceTests
         result.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task HasPermissionAsync_ShouldReturnFalse_WhenUserDoesNotExistInTenant()
+    {
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var dbContext = CreateDbContext();
+
+        await SeedTenantAndUser(dbContext, tenantId, Guid.NewGuid(), role: "MEMBER");
+
+        var sut = new RbacAuthorizationService(dbContext);
+
+        var result = await sut.HasPermissionAsync(tenantId, userId, RbacPermissions.UsersManage);
+
+        result.Should().BeFalse();
+    }
+
     private static async Task SeedTenantAndUser(ApplicationDbContext dbContext, Guid tenantId, Guid userId, string role, string? email = null, string? subdomain = null)
     {
         var suffix = subdomain ?? tenantId.ToString("N")[..8];
