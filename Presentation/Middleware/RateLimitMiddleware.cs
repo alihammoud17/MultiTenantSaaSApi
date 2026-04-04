@@ -19,6 +19,10 @@ namespace Presentation.Middleware
             // Skip for public endpoints
             var path = context.Request.Path.Value?.ToLower() ?? "";
             if (path.StartsWith("/api/auth") ||
+                // Internal billing callbacks are service-to-service signed requests.
+                // They are not tenant-authenticated API traffic, so tenant plan limits do not apply here.
+                // Tenant/subscription validation is performed by the internal billing callback processor.
+                path.StartsWith("/api/internal/billing") ||
                 path.StartsWith("/health") ||
                 path.StartsWith("/metrics") ||
                 path.StartsWith("/swagger") ||

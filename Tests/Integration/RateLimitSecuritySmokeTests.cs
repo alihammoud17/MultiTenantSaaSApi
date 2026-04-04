@@ -27,4 +27,34 @@ public class RateLimitSecuritySmokeTests : IClassFixture<ApiWebApplicationFactor
         response.Headers.Contains("X-RateLimit-Remaining").Should().BeTrue();
         response.Headers.Contains("X-RateLimit-Reset").Should().BeTrue();
     }
+
+    [Fact]
+    public async Task InternalBillingCallback_ShouldBypassTenantRateLimitContext()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"rl-billing-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var subscriptionId = SecurityTestHelpers.GetSubscriptionId(_factory, auth.TenantId);
+
+        var payload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "subscription.renewed",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = (string?)null,
+            occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = (DateTime?)null,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var response = await SecurityTestHelpers.PostSignedBillingEventAsync(client, payload);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.Contains("X-RateLimit-Limit").Should().BeFalse();
+        response.Headers.Contains("X-RateLimit-Remaining").Should().BeFalse();
+        response.Headers.Contains("X-RateLimit-Reset").Should().BeFalse();
+    }
 }
