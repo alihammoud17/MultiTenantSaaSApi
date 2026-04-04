@@ -81,6 +81,47 @@ public class RefreshTokenServiceTests
         storedTokens[1].RevokedAt.Should().BeNull();
     }
 
+    [Fact]
+    public async Task RevokeTokenAsync_ShouldSucceedOnce_ThenFailWhenReplayed()
+    {
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Tenant A", Subdomain = "a", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        var user = new User { Id = Guid.NewGuid(), TenantId = tenant.Id, Email = "admin@a.com", PasswordHash = "hash", CreatedAt = DateTime.UtcNow };
+
+        var dbContext = CreateDbContext();
+        await dbContext.Tenants.AddAsync(tenant);
+        await dbContext.Users.AddAsync(user);
+        await dbContext.SaveChangesAsync();
+
+        var sut = new RefreshTokenService(dbContext);
+        var issued = await sut.IssueTokenAsync(tenant.Id, user.Id, DateTime.UtcNow.AddDays(7));
+
+        var first = await sut.RevokeTokenAsync(tenant.Id, issued.Token, "10.0.0.1", "TEST");
+        var second = await sut.RevokeTokenAsync(tenant.Id, issued.Token, "10.0.0.1", "TEST");
+
+        first.Should().BeTrue();
+        second.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetActiveTokenAsync_ShouldReturnNull_ForRevokedToken()
+    {
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Tenant A", Subdomain = "a", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        var user = new User { Id = Guid.NewGuid(), TenantId = tenant.Id, Email = "admin@a.com", PasswordHash = "hash", CreatedAt = DateTime.UtcNow };
+
+        var dbContext = CreateDbContext();
+        await dbContext.Tenants.AddAsync(tenant);
+        await dbContext.Users.AddAsync(user);
+        await dbContext.SaveChangesAsync();
+
+        var sut = new RefreshTokenService(dbContext);
+        var issued = await sut.IssueTokenAsync(tenant.Id, user.Id, DateTime.UtcNow.AddDays(7));
+        await sut.RevokeTokenAsync(tenant.Id, issued.Token, "10.0.0.1", "TEST");
+
+        var active = await sut.GetActiveTokenAsync(tenant.Id, issued.Token);
+
+        active.Should().BeNull();
+    }
+
     private static ApplicationDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()

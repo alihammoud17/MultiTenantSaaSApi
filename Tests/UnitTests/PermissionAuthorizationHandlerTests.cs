@@ -42,6 +42,36 @@ public class PermissionAuthorizationHandlerTests
         context.HasSucceeded.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task HandleRequirementAsync_ShouldFail_WhenTenantClaimMissing()
+    {
+        var requirement = new PermissionRequirement(RbacPermissions.UsersManage);
+        var principal = BuildPrincipal(new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()));
+        var context = new AuthorizationHandlerContext(new[] { requirement }, principal, resource: null);
+
+        var sut = new PermissionAuthorizationHandler(new StubRbacAuthorizationService(true));
+
+        await sut.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HandleRequirementAsync_ShouldFail_WhenRbacServiceDeniesPermission()
+    {
+        var requirement = new PermissionRequirement(RbacPermissions.UsersManage);
+        var principal = BuildPrincipal(
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim("tenant_id", Guid.NewGuid().ToString()));
+        var context = new AuthorizationHandlerContext(new[] { requirement }, principal, resource: null);
+
+        var sut = new PermissionAuthorizationHandler(new StubRbacAuthorizationService(false));
+
+        await sut.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeFalse();
+    }
+
     private static ClaimsPrincipal BuildPrincipal(params Claim[] claims)
     {
         var identity = new ClaimsIdentity(claims, authenticationType: "Bearer");
