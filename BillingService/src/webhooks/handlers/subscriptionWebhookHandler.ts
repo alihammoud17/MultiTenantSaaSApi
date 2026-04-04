@@ -1,4 +1,4 @@
-import { BillingProviderAdapter } from '../../shared/types.ts';
+import type { BillingProviderAdapter } from '../../shared/types.ts';
 import { SubscriptionSyncJob } from '../../jobs/subscriptionSyncJob.ts';
 
 export class SubscriptionWebhookHandler {

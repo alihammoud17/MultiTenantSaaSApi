@@ -1,4 +1,4 @@
-import { BillingProviderAdapter, ProviderWebhookResult } from '../shared/types.ts';
+import type { BillingProviderAdapter, ProviderWebhookResult } from '../shared/types.ts';
 
 export class PlaceholderProviderAdapter implements BillingProviderAdapter {
   public readonly name = 'placeholder' as const;

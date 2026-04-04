@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { BillingServiceConfig, BillingProvider } from '../shared/types.ts';
+import type { BillingProvider, BillingServiceConfig } from '../shared/types.ts';
 
 const supportedProviders: BillingProvider[] = ['placeholder', 'stripe', 'paddle'];
 

@@ -1,7 +1,7 @@
 import { logger } from '../observability/logger.ts';
-import { InternalSubscriptionEvent } from '../shared/types.ts';
-import { RetryPolicy } from './retryPolicy.ts';
-import { WorkflowItem, WorkflowQueue } from './workflowQueue.ts';
+import type { InternalSubscriptionEvent } from '../shared/types.ts';
+import type { RetryPolicy } from './retryPolicy.ts';
+import type { WorkflowItem, WorkflowQueue } from './workflowQueue.ts';
 
 export interface WorkflowProcessor {
   process(event: InternalSubscriptionEvent): Promise<void>;

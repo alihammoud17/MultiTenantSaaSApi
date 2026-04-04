@@ -1,5 +1,5 @@
 import { logger } from '../observability/logger.ts';
-import { WorkflowQueue } from '../workflows/workflowQueue.ts';
+import type { WorkflowQueue } from '../workflows/workflowQueue.ts';
 
 export interface ReconciliationJobResult {
   generatedAtUtc: string;
