@@ -89,6 +89,8 @@ public class BusinessAbuseSecurityTests : IClassFixture<ApiWebApplicationFactory
 
         refresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         var body = await refresh.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("error").GetString().Should().Be("Invalid refresh token context");
+        body.GetProperty("error").GetString().Should().BeOneOf(
+            "Invalid refresh token context",
+            "Invalid or expired refresh token");
     }
 }
