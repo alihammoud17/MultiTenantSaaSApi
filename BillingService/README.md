@@ -37,7 +37,7 @@ The current codebase provides a pre-live scaffold with the following implemented
 - initial workflow worker wiring with retry/backoff policy and dead-letter handling
 - persistent dedup/replay protection keyed by normalized `eventId` across service restarts
 - reconciliation job logic that compares provider subscription snapshots to internal .NET subscription snapshots, detects drift, and enqueues deterministic correction actions
-- tests covering health/metrics endpoints plus workflow retry, dead-letter, persistence, duplicate-safe reconciliation reruns, and drift detection behavior
+- tests covering health/metrics endpoints, webhook handler accepted/duplicate behavior, workflow retry/dead-letter/persistence recovery, duplicate-safe reconciliation reruns, and drift classification behavior
 
 ## Durable workflow iteration status
 

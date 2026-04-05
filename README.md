@@ -141,10 +141,12 @@ The repository includes automated tests covering:
 - health and metrics endpoints
 - tenant registration and login
 - refresh token rotation, logout, and revocation flows
+- tenant suspension enforcement and tenant-resolution precedence safeguards
 - tenant-scoped audit log retrieval
 - tenant admin user-management behavior
+- rate-limit header behavior plus explicit rate-limit rejection responses
 - RBAC permission evaluation and authorization handler behavior
-- internal billing callback validation, lifecycle handling, cross-tenant rejection, and idempotency
+- internal billing callback validation (including contract-version rejection), lifecycle handling, cross-tenant rejection, and idempotency/replay protection
 - deeper security-focused scenarios for authentication negatives, authorization denials, tenant-isolation tampering, input validation abuse cases, and internal billing signature hardening
 
 ## V3 work planned next
