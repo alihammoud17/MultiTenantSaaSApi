@@ -93,6 +93,7 @@ namespace Presentation.Controllers
                 var token = _jwtService.GenerateToken(user, tenant);
 
                 _logger.LogInformation("New tenant registered: {TenantId}", tenant.Id);
+                _tenantContext.SetTenantId(tenant.Id);
                 await _auditService.LogAsync("TENANT_REGISTERED", nameof(Tenant), tenant.Id.ToString(), new
                 {
                     tenant.Name,
@@ -140,6 +141,7 @@ namespace Presentation.Controllers
             user.LastLoginAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync();
 
+            _tenantContext.SetTenantId(user.TenantId);
             await _auditService.LogAsync("USER_LOGGED_IN", nameof(User), user.Id.ToString(), new
             {
                 user.Email,

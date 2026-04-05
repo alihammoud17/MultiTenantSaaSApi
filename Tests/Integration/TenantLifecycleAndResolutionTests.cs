@@ -117,6 +117,7 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var actions = db.AuditLogs
+            .IgnoreQueryFilters()
             .Where(x => x.TenantId == tenantId)
             .Select(x => x.Action)
             .ToList();
