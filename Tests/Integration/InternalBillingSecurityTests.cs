@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Tests.Integration;
@@ -108,6 +109,80 @@ public class InternalBillingSecurityTests : IClassFixture<ApiWebApplicationFacto
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.BillingEventInboxes.Count(x => x.EventId == eventId).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task UnsupportedContractVersion_ShouldReturn400_AndNotPersistInboxEntry()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"billing-sec-version-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var subscriptionId = SecurityTestHelpers.GetSubscriptionId(_factory, auth.TenantId);
+        var eventId = $"evt-{Guid.NewGuid():N}";
+
+        var payload = new
+        {
+            contractVersion = "2025-01-01",
+            eventId,
+            eventType = "subscription.plan_changed",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = "plan-pro",
+            occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = (DateTime?)null,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var response = await SecurityTestHelpers.PostSignedBillingEventAsync(client, payload);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.BillingEventInboxes.Any(x => x.EventId == eventId).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DuplicateEventId_WithConflictingPayload_ShouldNotMutateSubscriptionOnReplay()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"billing-sec-conflict-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var subscriptionId = SecurityTestHelpers.GetSubscriptionId(_factory, auth.TenantId);
+        var eventId = $"evt-{Guid.NewGuid():N}";
+
+        var firstPayload = BuildPayload(auth.TenantId, subscriptionId, eventId);
+
+        var first = await SecurityTestHelpers.PostSignedBillingEventAsync(client, firstPayload);
+        first.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var conflictingPayload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId,
+            eventType = "subscription.plan_changed",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = "plan-free",
+            occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = (DateTime?)null,
+            correlationId = $"corr-{Guid.NewGuid():N}"
+        };
+
+        var second = await SecurityTestHelpers.PostSignedBillingEventAsync(client, conflictingPayload);
+        second.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var secondBody = await second.Content.ReadFromJsonAsync<JsonElement>();
+        secondBody!.GetProperty("isDuplicate").GetBoolean().Should().BeTrue();
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var subscription = await db.Subscriptions.SingleAsync(x => x.Id == subscriptionId);
+
+        subscription.PlanId.Should().Be("plan-pro");
         db.BillingEventInboxes.Count(x => x.EventId == eventId).Should().Be(1);
     }
 
