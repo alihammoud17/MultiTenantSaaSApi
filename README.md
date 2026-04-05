@@ -15,7 +15,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 This repository currently contains:
 
 - a production-focused .NET API that handles tenant registration, authentication, authorization, plan enforcement, audit logging, admin operations, observability basics, and internal billing callbacks
-- a Node.js `BillingService/` companion scaffold reserved for future provider-facing billing integration, webhook verification, and billing workflow orchestration
+- a Node.js `BillingService/` companion service scaffold with durable workflow orchestration and drift-aware reconciliation scaffolding for provider-facing billing integration
 
 ## Architecture summary
 
@@ -172,7 +172,7 @@ The repository should still be treated as **pre-live for provider billing integr
 - no live billing provider SDK integration is implemented
 - no verified external webhook ingestion flow is implemented
 - `BillingService` does not yet call the .NET internal callback endpoint
-- `BillingService` does not yet reconcile against live provider APIs (current reconciliation is summary/skeleton only)
+- `BillingService` now includes drift-aware reconciliation logic, but it is not yet connected to live provider/.NET state readers
 - end-to-end provider synchronization across both services is not yet implemented
 
 ## API surface summary

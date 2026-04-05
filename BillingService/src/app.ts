@@ -47,7 +47,19 @@ export function createApp() {
   });
   syncJob.startWorker();
 
-  const reconciliationJob = new ReconciliationJob(syncJob.getQueue());
+  const providerStateSource = {
+    async listSubscriptions() {
+      return [];
+    }
+  };
+
+  const internalStateSource = {
+    async listSubscriptions() {
+      return [];
+    }
+  };
+
+  const reconciliationJob = new ReconciliationJob(providerStateSource, internalStateSource, syncJob);
   const reconciliationTimer = setInterval(() => {
     void reconciliationJob.runOnce();
   }, config.reconciliationIntervalMs);
