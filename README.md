@@ -155,7 +155,7 @@ The next phase is intentionally separate from the already-implemented V2 platfor
 
 - connect `BillingService` to the .NET internal billing callback endpoint
 - replace placeholder webhook handling with real provider webhook verification and normalization
-- add durable retry, replay protection, and reconciliation for billing workflows
+- operationalize the durable retry, replay protection, dead-letter, and reconciliation workflows now scaffolded in `BillingService`
 - keep provider-specific logic inside `BillingService` while the .NET API remains the system of record
 
 ### Platform maturity priorities
@@ -174,6 +174,22 @@ The repository should still be treated as **pre-live for provider billing integr
 - `BillingService` does not yet call the .NET internal callback endpoint
 - `BillingService` now includes drift-aware reconciliation logic, but it is not yet connected to live provider/.NET state readers
 - end-to-end provider synchronization across both services is not yet implemented
+
+
+## Operational notes (durable workflow iteration)
+
+The current durable workflow iteration adds operational primitives in `BillingService` that are designed to survive restarts and reduce duplicate processing risk while live provider integration is still pending:
+
+- file-backed workflow state persistence for queued work, retry metadata, and dead-lettered events
+- replay-safe deduplication keyed by normalized `eventId`
+- retry with bounded exponential backoff and max-attempt dead-lettering
+- reconciliation comparison job scaffolding that can detect provider/internal drift once live readers are configured
+
+These capabilities improve service resilience, but they are still **pre-live** because webhook verification, provider SDK calls, and authenticated callback delivery to the .NET API are not yet wired end-to-end.
+
+For operational procedures (startup checks, state-file hygiene, replay handling, dead-letter triage, and reconciliation troubleshooting), use:
+
+- `docs/Billing-Workflow-Runbook.md`
 
 ## API surface summary
 
@@ -268,3 +284,4 @@ dotnet test MultiTenantSaaSApi.sln
 - `BillingService/README.md`
 - `docs/V3-Implementation-Backlog.md`
 - `docs/Internal-Billing-Contract.md`
+- `docs/Billing-Workflow-Runbook.md`

@@ -6,8 +6,8 @@ Node.js / TypeScript billing companion service for the multi-tenant SaaS platfor
 
 - **Current repository status:** V2 is complete at the platform level, and **V3 is the next phase**.
 - `BillingService` is part of that V3 direction, but it is still a scaffold rather than a live provider integration.
-- The service currently helps define the provider-facing boundary and the internal event shape expected by the .NET API.
-- Do **not** treat this service as production-ready billing infrastructure yet.
+- The service now includes a durable workflow and reconciliation iteration that is intended for operational hardening before live provider cutover.
+- Do **not** treat this service as production-ready billing infrastructure yet; provider integration and callback delivery are still pending.
 
 ## Responsibility boundary
 
@@ -38,6 +38,20 @@ The current codebase provides a pre-live scaffold with the following implemented
 - persistent dedup/replay protection keyed by normalized `eventId` across service restarts
 - reconciliation job logic that compares provider subscription snapshots to internal .NET subscription snapshots, detects drift, and enqueues deterministic correction actions
 - tests covering health/metrics endpoints plus workflow retry, dead-letter, persistence, duplicate-safe reconciliation reruns, and drift detection behavior
+
+## Durable workflow iteration status
+
+The durable workflow iteration is now implemented as a **scaffolded operational slice**:
+
+- workflow events are persisted to a local JSON state file so queue/retry/dead-letter state survives restarts
+- deduplication is persisted so repeated normalized `eventId` values can be ignored safely across process restarts
+- retries use bounded exponential backoff with configurable caps
+- dead-letter entries are retained for operator triage
+- reconciliation comparison logic can identify drift between provider snapshots and internal subscription snapshots, then enqueue deterministic correction intents
+
+This is intentionally still pre-live because the default app wiring does not yet connect to real provider webhooks, provider APIs, or authenticated .NET callback delivery.
+
+Operational procedures for this iteration are documented in `../docs/Billing-Workflow-Runbook.md`.
 
 ## Not implemented yet
 
@@ -79,12 +93,12 @@ The current scaffold can run with defaults, but these variables define the inten
 - `WEBHOOK_SIGNING_SECRET` - reserved for future provider signature verification
 - `DOTNET_CALLBACK_BASE_URL` - reserved for future authenticated callbacks into the .NET API
 - `SERVICE_NAME` - optional service label for health/metrics payloads, defaults to `billing-service`
-- `WORKFLOW_STATE_PATH` - durable queue state file location, defaults to `<repo>/BillingService/.billing-workflow-state.json`
+- `WORKFLOW_STATE_PATH` - durable queue/retry/dead-letter state file path, defaults to `<repo>/BillingService/.billing-workflow-state.json`
 - `WORKFLOW_MAX_ATTEMPTS` - max delivery attempts before dead-letter, defaults to `3`
 - `WORKFLOW_INITIAL_BACKOFF_MS` - first retry delay in milliseconds, defaults to `1000`
 - `WORKFLOW_MAX_BACKOFF_MS` - retry delay cap in milliseconds, defaults to `30000`
 - `WORKFLOW_POLL_INTERVAL_MS` - background worker polling interval, defaults to `2000`
-- `RECONCILIATION_INTERVAL_MS` - reconciliation summary interval, defaults to `300000`
+- `RECONCILIATION_INTERVAL_MS` - reconciliation polling/snapshot interval, defaults to `300000`
 
 > Do not place real provider secrets in the repository.
 
@@ -137,6 +151,7 @@ These changes should keep provider-specific logic inside `BillingService` and pr
 - `../README.md`
 - `../docs/V3-Implementation-Backlog.md`
 - `../docs/Internal-Billing-Contract.md`
+- `../docs/Billing-Workflow-Runbook.md`
 - `../docs/technical-documentation.md`
 
 ## Manual confirmation still recommended
