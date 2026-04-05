@@ -270,6 +270,32 @@ dotnet run --project Presentation
 
 Swagger UI is enabled in Development.
 
+### Run BillingService (durable workflow iteration scaffold)
+
+From repository root:
+
+```bash
+cd BillingService
+npm install
+npm run dev
+```
+
+Optional environment overrides for durability/reconciliation behavior:
+
+```bash
+export WORKFLOW_STATE_PATH="/tmp/billing-workflow-state.json"
+export WORKFLOW_MAX_ATTEMPTS=3
+export WORKFLOW_INITIAL_BACKOFF_MS=1000
+export WORKFLOW_MAX_BACKOFF_MS=30000
+export WORKFLOW_POLL_INTERVAL_MS=2000
+export RECONCILIATION_INTERVAL_MS=300000
+```
+
+Notes:
+
+- `BillingService` is still pre-live for provider integration and .NET callback delivery.
+- Use `docs/Billing-Workflow-Runbook.md` for dead-letter, replay, and reconciliation operating procedures.
+
 ## Testing
 
 Run directly from the repository root:
@@ -277,6 +303,14 @@ Run directly from the repository root:
 ```bash
 dotnet build MultiTenantSaaSApi.sln
 dotnet test MultiTenantSaaSApi.sln
+```
+
+BillingService validation commands:
+
+```bash
+cd BillingService
+npm run build
+npm test
 ```
 
 ## Additional docs
