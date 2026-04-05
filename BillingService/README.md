@@ -102,6 +102,21 @@ The current scaffold can run with defaults, but these variables define the inten
 
 > Do not place real provider secrets in the repository.
 
+### Durable workflow quick-start env template
+
+For local durability/reconciliation checks, you can run with explicit values:
+
+```bash
+export WORKFLOW_STATE_PATH="$(pwd)/.billing-workflow-state.json"
+export WORKFLOW_MAX_ATTEMPTS=3
+export WORKFLOW_INITIAL_BACKOFF_MS=1000
+export WORKFLOW_MAX_BACKOFF_MS=30000
+export WORKFLOW_POLL_INTERVAL_MS=2000
+export RECONCILIATION_INTERVAL_MS=300000
+```
+
+These defaults match the current runbook guidance in `../docs/Billing-Workflow-Runbook.md`.
+
 ## Local development
 
 From the repository root:
@@ -123,6 +138,8 @@ cd BillingService
 npm run build
 npm test
 ```
+
+`npm test` compiles TypeScript and runs the Node test runner against `dist/tests/*.test.js`.
 
 ## Current endpoints
 

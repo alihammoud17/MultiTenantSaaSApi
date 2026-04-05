@@ -40,6 +40,10 @@ A documentation-focused operational checkpoint for durable billing workflows is 
 
 - durable workflow behavior and operator procedures are documented in `docs/Billing-Workflow-Runbook.md`
 - `BillingService/README.md` and root `README.md` now reflect the current durability/reconciliation status and pre-live limitations
+- setup/config/test instructions for this iteration are now explicit in:
+  - root `README.md` (`BillingService` run/test commands + durability env overrides)
+  - `BillingService/README.md` (durable workflow env template + test behavior note)
+  - `docs/Billing-Workflow-Runbook.md` (operator baseline runtime values and triage procedures)
 - backlog language has been aligned to treat this durability slice as implemented scaffolding, not live provider billing
 
 Remaining gap to close before production billing cutover: live provider integration, webhook verification, and authenticated callback delivery to the .NET internal billing endpoint.
