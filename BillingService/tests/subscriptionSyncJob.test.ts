@@ -33,6 +33,7 @@ async function withTempDir(run: (path: string) => Promise<void>) {
   try {
     await run(dir);
   } finally {
+    await new Promise((resolve) => setTimeout(resolve, 25));
     await rm(dir, { recursive: true, force: true });
   }
 }
