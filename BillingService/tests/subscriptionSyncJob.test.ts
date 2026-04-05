@@ -4,9 +4,13 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { BillingCallbackPayload, InternalSubscriptionEvent } from '../src/shared/types.ts';
-import { ReconciliationJob } from '../src/jobs/reconciliationJob.ts';
+import {
+  InternalStateSource,
+  ProviderStateSource,
+  ReconciliationJob
+} from '../src/jobs/reconciliationJob.ts';
 import { BillingCallbackPublisher, SubscriptionSyncJob } from '../src/jobs/subscriptionSyncJob.ts';
-import { FileWorkflowQueue, WorkflowItemStatus } from '../src/workflows/workflowQueue.ts';
+import { WorkflowItemStatus } from '../src/workflows/workflowQueue.ts';
 
 function makeEvent(overrides: Partial<InternalSubscriptionEvent> = {}): InternalSubscriptionEvent {
   return {
@@ -149,19 +153,134 @@ test('SubscriptionSyncJob keeps dedup/replay protection across process restarts'
   });
 });
 
-test('ReconciliationJob returns a minimal backlog/dead-letter summary', async () => {
+function buildStateSources(): { providerSource: ProviderStateSource; internalSource: InternalStateSource } {
+  const providerSource: ProviderStateSource = {
+    async listSubscriptions() {
+      return [
+        {
+          tenantId: '00000000-0000-0000-0000-000000000001',
+          subscriptionId: '00000000-0000-0000-0000-000000000002',
+          status: 'active',
+          planId: 'plan-pro'
+        }
+      ];
+    }
+  };
+
+  const internalSource: InternalStateSource = {
+    async listSubscriptions() {
+      return [
+        {
+          tenantId: '00000000-0000-0000-0000-000000000001',
+          subscriptionId: '00000000-0000-0000-0000-000000000002',
+          status: 'canceled',
+          planId: 'plan-basic'
+        }
+      ];
+    }
+  };
+
+  return { providerSource, internalSource };
+}
+
+test('ReconciliationJob detects provider/internal drift and queues correction work', async () => {
   await withTempDir(async (dir) => {
-    const queue = new FileWorkflowQueue(join(dir, 'state.json'));
+    const published: string[] = [];
 
-    await queue.enqueue(makeEvent({ eventId: 'evt_pending' }));
-    await queue.enqueue(makeEvent({ eventId: 'evt_dlq' }));
-    await queue.markDeadLetter('evt_dlq', 'mapping rejected', new Date('2026-03-29T00:00:00.000Z'));
+    const publisher: BillingCallbackPublisher = {
+      async publish(payload) {
+        published.push(payload.eventId);
+      }
+    };
 
-    const job = new ReconciliationJob(queue);
-    const result = await job.runOnce(new Date('2026-03-29T01:00:00.000Z'));
+    const syncJob = new SubscriptionSyncJob(publisher, {
+      storagePath: join(dir, 'state.json'),
+      maxAttempts: 3,
+      initialBackoffMs: 1,
+      maxBackoffMs: 5
+    });
 
-    assert.equal(result.pendingCount, 1);
-    assert.equal(result.deadLetterCount, 1);
-    assert.equal(typeof result.oldestPendingAgeSeconds, 'number');
+    const { providerSource, internalSource } = buildStateSources();
+    const job = new ReconciliationJob(providerSource, internalSource, syncJob);
+
+    const result = await job.runOnce(new Date('2026-04-05T10:00:00.000Z'));
+
+    assert.equal(result.comparedCount, 1);
+    assert.equal(result.driftCount, 1);
+    assert.equal(result.queuedActions, 1);
+    assert.equal(result.duplicateActions, 0);
+    assert.equal(result.drifts[0].reason, 'status_mismatch');
+
+    await waitForStatus(syncJob, result.drifts[0].reconciliationEventId, 'completed');
+    assert.equal(published.length, 1);
+  });
+});
+
+test('ReconciliationJob is safe to rerun and marks duplicate drift actions explicitly', async () => {
+  await withTempDir(async (dir) => {
+    const published: string[] = [];
+
+    const publisher: BillingCallbackPublisher = {
+      async publish(payload) {
+        published.push(payload.eventId);
+      }
+    };
+
+    const syncJob = new SubscriptionSyncJob(publisher, {
+      storagePath: join(dir, 'state.json'),
+      maxAttempts: 3,
+      initialBackoffMs: 1,
+      maxBackoffMs: 5
+    });
+
+    const { providerSource, internalSource } = buildStateSources();
+    const job = new ReconciliationJob(providerSource, internalSource, syncJob);
+
+    const first = await job.runOnce(new Date('2026-04-05T10:00:00.000Z'));
+    await waitForStatus(syncJob, first.drifts[0].reconciliationEventId, 'completed');
+
+    const second = await job.runOnce(new Date('2026-04-05T10:01:00.000Z'));
+
+    assert.equal(second.driftCount, 1);
+    assert.equal(second.queuedActions, 0);
+    assert.equal(second.duplicateActions, 1);
+    assert.equal(second.drifts[0].queuedAction, 'duplicate');
+    assert.equal(published.length, 1);
+  });
+});
+
+test('ReconciliationJob drift action uses workflow retry semantics when callback delivery transiently fails', async () => {
+  await withTempDir(async (dir) => {
+    let failuresRemaining = 1;
+    const published: string[] = [];
+
+    const publisher: BillingCallbackPublisher = {
+      async publish(payload) {
+        if (failuresRemaining > 0) {
+          failuresRemaining -= 1;
+          throw new Error('temporary provider callback failure');
+        }
+
+        published.push(payload.eventId);
+      }
+    };
+
+    const syncJob = new SubscriptionSyncJob(publisher, {
+      storagePath: join(dir, 'state.json'),
+      maxAttempts: 3,
+      initialBackoffMs: 1,
+      maxBackoffMs: 5
+    });
+
+    const { providerSource, internalSource } = buildStateSources();
+    const job = new ReconciliationJob(providerSource, internalSource, syncJob);
+
+    const result = await job.runOnce(new Date('2026-04-05T10:00:00.000Z'));
+    await waitForStatus(syncJob, result.drifts[0].reconciliationEventId, 'completed');
+
+    const snapshot = await syncJob.snapshotQueue();
+    assert.equal(snapshot[0].status, 'completed');
+    assert.equal(snapshot[0].attempts, 2);
+    assert.equal(published.length, 1);
   });
 });

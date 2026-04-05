@@ -36,8 +36,8 @@ The current codebase provides a pre-live scaffold with the following implemented
 - a durable file-backed workflow queue abstraction for billing event processing
 - initial workflow worker wiring with retry/backoff policy and dead-letter handling
 - persistent dedup/replay protection keyed by normalized `eventId` across service restarts
-- a minimal reconciliation job skeleton that summarizes pending/dead-letter backlog state
-- tests covering health/metrics endpoints plus workflow retry, dead-letter, persistence, and reconciliation behavior
+- reconciliation job logic that compares provider subscription snapshots to internal .NET subscription snapshots, detects drift, and enqueues deterministic correction actions
+- tests covering health/metrics endpoints plus workflow retry, dead-letter, persistence, duplicate-safe reconciliation reruns, and drift detection behavior
 
 ## Not implemented yet
 
@@ -47,7 +47,7 @@ The following work is still upcoming V3 work and should not be documented elsewh
 - real webhook signature verification
 - tenant/subscription mapping from provider payloads
 - authenticated HTTP callback delivery into the .NET API
-- provider-side state reconciliation logic beyond summary/skeleton reporting
+- live provider/internal state source integrations (the comparison job is implemented, but default app wiring still uses placeholder sources until provider/.NET fetch clients are connected)
 - tenant-facing billing self-service functionality
 
 ## Current folder structure
@@ -128,7 +128,7 @@ The next useful implementation slices for this service are:
 1. connect the service to the .NET internal billing callback endpoint using the documented HMAC contract
 2. replace the placeholder provider adapter with a real provider implementation
 3. connect the durable queue worker to authenticated .NET callback delivery and provider adapters
-4. evolve reconciliation from summary skeleton to provider/internal state comparison workflows
+4. wire real provider and .NET subscription state readers into the reconciliation comparator workflow
 
 These changes should keep provider-specific logic inside `BillingService` and preserve the .NET API as the system of record.
 
