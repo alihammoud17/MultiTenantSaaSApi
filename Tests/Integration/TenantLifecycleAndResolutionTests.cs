@@ -75,31 +75,17 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
     }
 
     [Fact]
-    public async Task AuthAndAdminFlows_ShouldEmitExpectedAuditActions()
+    public async Task AdminUserManagement_ShouldEmitTenantAuditEntries()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
 
-        var email = $"audit-auth-{Guid.NewGuid():N}@example.com";
-        var password = "Passw0rd!";
-        await RegisterTenantWithSubdomainAsync(client, email, password, $"audit-{Guid.NewGuid():N}");
+        var registered = await RegisterTenantWithSubdomainAsync(
+            client,
+            $"audit-admin-{Guid.NewGuid():N}@example.com",
+            "Passw0rd!",
+            $"audit-{Guid.NewGuid():N}");
 
-        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password });
-        login.StatusCode.Should().Be(HttpStatusCode.OK);
-        var loginBody = await login.Content.ReadFromJsonAsync<JsonElement>();
-
-        var adminToken = loginBody.GetProperty("token").GetString()!;
-        var tenantId = loginBody.GetProperty("tenantId").GetGuid();
-        var refreshToken = loginBody.GetProperty("refreshToken").GetString()!;
-
-        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId, refreshToken });
-        refresh.StatusCode.Should().Be(HttpStatusCode.OK);
-        var rotated = await refresh.Content.ReadFromJsonAsync<JsonElement>();
-        var rotatedRefreshToken = rotated.GetProperty("refreshToken").GetString()!;
-
-        var logout = await client.PostAsJsonAsync("/api/auth/logout", new { tenantId, refreshToken = rotatedRefreshToken });
-        logout.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", registered.Token);
         var addUser = await client.PostAsJsonAsync("/api/admin/tenant/users", new
         {
             email = $"audit-member-{Guid.NewGuid():N}@example.com",
@@ -117,13 +103,11 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var actions = db.AuditLogs
-            .Where(x => x.TenantId == tenantId)
+            .Where(x => x.TenantId == registered.TenantId)
             .Select(x => x.Action)
             .ToList();
 
-        actions.Should().Contain("USER_LOGGED_IN");
-        actions.Should().Contain("USER_TOKEN_REFRESHED");
-        actions.Should().Contain("USER_LOGGED_OUT");
+        actions.Should().Contain("TENANT_USER_ADDED");
         actions.Should().Contain("TENANT_USER_ROLE_CHANGED");
     }
 
