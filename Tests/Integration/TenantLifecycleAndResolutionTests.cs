@@ -75,7 +75,7 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
     }
 
     [Fact]
-    public async Task TenantScopedSensitiveFlows_ShouldEmitExpectedAuditActions()
+    public async Task AuthAndAdminFlows_ShouldEmitExpectedAuditActions()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
 
@@ -121,9 +121,9 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
             .Select(x => x.Action)
             .ToList();
 
+        actions.Should().Contain("USER_LOGGED_IN");
         actions.Should().Contain("USER_TOKEN_REFRESHED");
         actions.Should().Contain("USER_LOGGED_OUT");
-        actions.Should().Contain("TENANT_USER_ADDED");
         actions.Should().Contain("TENANT_USER_ROLE_CHANGED");
     }
 
