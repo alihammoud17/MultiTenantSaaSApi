@@ -1,6 +1,6 @@
 # V3 Implementation Backlog
 
-This backlog is based on the current repository state as of March 22, 2026. It treats the existing .NET API as the system of record, keeps provider-specific billing logic inside `BillingService`, and builds from functionality that already exists in code rather than proposing a rewrite.
+This backlog is based on the current repository state as of April 5, 2026. It treats the existing .NET API as the system of record, keeps provider-specific billing logic inside `BillingService`, and builds from functionality that already exists in code rather than proposing a rewrite.
 
 ## Current repository baseline
 
@@ -20,7 +20,7 @@ The current repository has already completed the major V2 platform slices:
   - the .NET API exposes a signed internal billing callback endpoint,
   - the .NET API validates tenant/subscription mapping before applying events,
   - the .NET API stores billing inbox records for idempotency,
-  - `BillingService` already contains the provider adapter boundary, webhook handler shell, normalized billing event types, and a retrying subscription sync job scaffold.
+  - `BillingService` already contains the provider adapter boundary, webhook handler shell, normalized billing event types, durable file-backed queueing, retry/backoff and dead-letter handling, replay-safe deduplication, and drift-aware reconciliation scaffolding.
 - **Automated test coverage** already exists across auth, RBAC, tenant admin, audit logging, observability, and internal billing callback flows.
   - Security-focused suites now also cover authentication negatives, authorization denials, tenant/header tampering, validation abuse paths, refresh/revoke replay behavior, and internal billing signature/timestamp rejection scenarios.
 
@@ -30,9 +30,19 @@ The codebase has V3 groundwork, but the production billing path is not complete 
 
 - `BillingService` does not yet verify real provider webhooks.
 - `BillingService` does not yet publish authenticated callbacks into the .NET API.
-- `BillingService` now has a durable workflow foundation (file-backed queue + retry/dead-letter + replay-safe dedup) plus drift-aware reconciliation comparison logic, but it still needs live provider/.NET state readers and provider-connected callback delivery.
+- `BillingService` now has a durable workflow foundation (file-backed queue + retry/dead-letter + replay-safe dedup) plus drift-aware reconciliation comparison logic. This iteration is documented and operationalized, but it still needs live provider/.NET state readers and provider-connected callback delivery for production readiness.
 - The .NET API does not yet expose tenant-facing billing self-service endpoints beyond plan upgrade and subscription state enforcement.
 - Entitlements, add-ons, usage analytics exports, outbound webhooks, and deeper billing reconciliation workflows are not yet implemented.
+
+## Durable workflow iteration checkpoint (April 5, 2026)
+
+A documentation-focused operational checkpoint for durable billing workflows is now complete:
+
+- durable workflow behavior and operator procedures are documented in `docs/Billing-Workflow-Runbook.md`
+- `BillingService/README.md` and root `README.md` now reflect the current durability/reconciliation status and pre-live limitations
+- backlog language has been aligned to treat this durability slice as implemented scaffolding, not live provider billing
+
+Remaining gap to close before production billing cutover: live provider integration, webhook verification, and authenticated callback delivery to the .NET internal billing endpoint.
 
 ## V3 priorities in implementation order
 
@@ -126,13 +136,13 @@ Webhook normalization should not ship before the internal callback path exists. 
 
 ---
 
-## Iteration 3 - Durable billing inbox/outbox processing and reconciliation
+## Iteration 3 - Durable billing workflow processing and reconciliation
 
 ### Goal
-Move billing event handling in `BillingService` from in-memory retry logic to durable processing with replay protection, visibility into failures, and reconciliation support against provider state.
+Operationalize durable billing processing in `BillingService` with restart-safe workflow state, replay protection, dead-letter visibility, and reconciliation support against provider/internal snapshots.
 
 ### Why it follows Iteration 2
-Durability matters most once real provider traffic exists. The current scaffolded retry job proves the flow shape, but it is not sufficient for production because process restarts would lose retry and deduplication state.
+Durability matters most once real provider traffic exists. The repository now includes durable scaffolding and runbook-level operational guidance, but still needs live provider and callback wiring before production use.
 
 ### Dependencies
 - Iteration 2 real webhook ingestion.
@@ -140,7 +150,7 @@ Durability matters most once real provider traffic exists. The current scaffolde
 - Stable internal callback contract in the .NET API.
 
 ### Concrete implementation scope
-- Add persistent webhook/event storage in `BillingService` for:
+- Preserve and evolve persistent webhook/event workflow state in `BillingService` for:
   - received external event id,
   - provider,
   - normalized event type,
@@ -154,7 +164,7 @@ Durability matters most once real provider traffic exists. The current scaffolde
 - Keep the .NET API idempotency layer in place; do not rely on only one side for deduplication.
 
 ### Acceptance criteria
-- BillingService can restart without losing knowledge of processed, pending, or failed events.
+- BillingService can restart without losing knowledge of processed, pending, or failed workflow events.
 - Duplicate provider events are persisted and handled idempotently.
 - Failed callback deliveries can be retried without double-applying subscription transitions in the .NET API.
 - Reconciliation output is observable enough to diagnose mismatches between provider state and internal subscription state.
