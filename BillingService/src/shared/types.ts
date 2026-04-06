@@ -18,6 +18,8 @@ export interface BillingServiceConfig {
   serviceName: string;
   webhookSigningSecret?: string;
   callbackBaseUrl?: string;
+  stripeApiKey?: string;
+  stripeApiBaseUrl: string;
   workflowStatePath: string;
   workflowMaxAttempts: number;
   workflowInitialBackoffMs: number;
