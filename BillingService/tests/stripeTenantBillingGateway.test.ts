@@ -2,6 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { StripeTenantBillingGateway } from '../src/providers/stripeTenantBillingGateway.ts';
 
+async function expectMessage(promiseFactory: () => Promise<unknown>, messagePattern: RegExp): Promise<void> {
+  let error: unknown;
+
+  try {
+    await promiseFactory();
+  } catch (caught) {
+    error = caught;
+  }
+
+  assert.match(String(error), messagePattern);
+}
+
 test('StripeTenantBillingGateway creates checkout and portal sessions with tenant-safe metadata', async () => {
   const calls: Array<{ input: string; init?: { method?: string; headers?: Record<string, string>; body?: string } }> = [];
   const responses = [
@@ -62,6 +74,62 @@ test('StripeTenantBillingGateway creates checkout and portal sessions with tenan
   assert.match(calls[1].input, /\/v1\/billing_portal\/sessions$/);
   assert.equal(checkout.providerSessionId, 'cs_test_123');
   assert.equal(portal.providerSessionId, 'bps_test_123');
+});
+
+test('StripeTenantBillingGateway surfaces clean errors for checkout/portal session failures', async () => {
+  const gateway = new StripeTenantBillingGateway(
+    {
+      apiKey: 'sk_test_123',
+      apiBaseUrl: 'https://api.stripe.com'
+    },
+    async (input) => {
+      if (String(input).endsWith('/v1/checkout/sessions')) {
+        return {
+          status: 200,
+          async json() {
+            return {
+              id: 'cs_missing_url'
+            };
+          }
+        };
+      }
+
+      return {
+        status: 400,
+        async json() {
+          return {
+            error: {
+              message: 'Portal session creation failed'
+            }
+          };
+        }
+      };
+    }
+  );
+
+  await expectMessage(
+    () => gateway.createCheckoutSession({
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      subscriptionId: '00000000-0000-0000-0000-000000000002',
+      providerCustomerId: 'cus_123',
+      providerPriceId: 'price_123',
+      successUrl: 'https://app.example/billing/success',
+      cancelUrl: 'https://app.example/billing/cancel',
+      correlationId: 'corr_checkout_error'
+    }),
+    /Stripe checkout session response missing required fields\./
+  );
+
+  await expectMessage(
+    () => gateway.createPortalSession({
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      subscriptionId: '00000000-0000-0000-0000-000000000002',
+      providerCustomerId: 'cus_123',
+      returnUrl: 'https://app.example/billing',
+      correlationId: 'corr_portal_error'
+    }),
+    /Portal session creation failed/
+  );
 });
 
 test('StripeTenantBillingGateway listInvoicesForSync filters invoices with invalid tenant mapping', async () => {

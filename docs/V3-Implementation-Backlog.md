@@ -23,6 +23,7 @@ The current repository has already completed the major V2 platform slices:
   - `BillingService` already contains the provider adapter boundary, webhook handler shell, normalized billing event types, durable file-backed queueing, retry/backoff and dead-letter handling, replay-safe deduplication, and drift-aware reconciliation scaffolding.
 - **Automated test coverage** already exists across auth, RBAC, tenant admin, audit logging, observability, and internal billing callback flows.
   - Security-focused suites now also cover authentication negatives, authorization denials, tenant/header tampering, validation abuse paths, refresh/revoke replay behavior, and internal billing signature/timestamp rejection scenarios.
+  - Tenant billing suites now also cover tenant-scoped invoice/subscription visibility, cancel/reactivate lifecycle transitions, and clean error handling for invalid self-service session/action paths.
 
 ### What is still intentionally incomplete
 
