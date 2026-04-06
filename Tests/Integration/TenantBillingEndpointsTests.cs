@@ -39,7 +39,7 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("planId").GetString().Should().Be("plan-free");
-        body.GetProperty("status").GetString().Should().Be(SubscriptionStatus.Active.ToString());
+        body.GetProperty("subscriptionStatus").GetString().Should().Be(SubscriptionStatus.Active.ToString());
         body.GetProperty("availableActions").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo(["cancel", "change_plan"]);
     }
 
