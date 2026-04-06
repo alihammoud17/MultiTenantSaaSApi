@@ -26,6 +26,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     serviceName: env.SERVICE_NAME ?? 'billing-service',
     webhookSigningSecret: env.WEBHOOK_SIGNING_SECRET,
     callbackBaseUrl: env.DOTNET_CALLBACK_BASE_URL,
+    stripeApiKey: env.STRIPE_API_KEY,
+    stripeApiBaseUrl: env.STRIPE_API_BASE_URL ?? 'https://api.stripe.com',
     workflowStatePath: env.WORKFLOW_STATE_PATH ?? resolve(process.cwd(), '.billing-workflow-state.json'),
     workflowMaxAttempts: toNumber(env.WORKFLOW_MAX_ATTEMPTS, 3),
     workflowInitialBackoffMs: toNumber(env.WORKFLOW_INITIAL_BACKOFF_MS, 1_000),

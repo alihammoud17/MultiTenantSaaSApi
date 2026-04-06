@@ -30,7 +30,8 @@ The current codebase provides a pre-live scaffold with the following implemented
 - `GET /metrics` endpoint with lightweight in-memory request metrics
 - structured JSON logging with correlation and trace identifiers
 - request context propagation for correlation headers
-- a placeholder provider adapter boundary
+- a placeholder provider webhook adapter boundary
+- a Stripe provider API gateway slice for tenant checkout session creation, billing-portal session creation, and invoice listing for sync workflows
 - a webhook handler shell that routes provider webhook requests through the adapter interface
 - normalized internal subscription event and callback payload types shared within the service
 - a durable file-backed workflow queue abstraction for billing event processing
@@ -59,7 +60,7 @@ The following work is still upcoming V3 work and should not be documented elsewh
 
 - live billing provider SDK integration
 - real webhook signature verification
-- tenant/subscription mapping from provider payloads
+- tenant/subscription mapping from provider webhook payloads
 - authenticated HTTP callback delivery into the .NET API
 - live provider/internal state source integrations (the comparison job is implemented, but default app wiring still uses placeholder sources until provider/.NET fetch clients are connected)
 - tenant-facing billing self-service functionality
@@ -92,6 +93,8 @@ The current scaffold can run with defaults, but these variables define the inten
 - `BILLING_PROVIDER` - `placeholder`, `stripe`, or `paddle`; current code still uses the placeholder provider path
 - `WEBHOOK_SIGNING_SECRET` - reserved for future provider signature verification
 - `DOTNET_CALLBACK_BASE_URL` - reserved for future authenticated callbacks into the .NET API
+- `STRIPE_API_KEY` - required when Stripe tenant billing provider calls are enabled
+- `STRIPE_API_BASE_URL` - optional Stripe API base URL override, defaults to `https://api.stripe.com`
 - `SERVICE_NAME` - optional service label for health/metrics payloads, defaults to `billing-service`
 - `WORKFLOW_STATE_PATH` - durable queue/retry/dead-letter state file path, defaults to `<repo>/BillingService/.billing-workflow-state.json`
 - `WORKFLOW_MAX_ATTEMPTS` - max delivery attempts before dead-letter, defaults to `3`
@@ -157,7 +160,7 @@ Accepts placeholder webhook requests and returns a `202 Accepted` response indic
 The next useful implementation slices for this service are:
 
 1. connect the service to the .NET internal billing callback endpoint using the documented HMAC contract
-2. replace the placeholder provider adapter with a real provider implementation
+2. replace the placeholder webhook adapter with a real webhook verification implementation
 3. connect the durable queue worker to authenticated .NET callback delivery and provider adapters
 4. wire real provider and .NET subscription state readers into the reconciliation comparator workflow
 

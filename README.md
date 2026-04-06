@@ -15,7 +15,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 This repository currently contains:
 
 - a production-focused .NET API that handles tenant registration, authentication, authorization, plan enforcement, audit logging, admin operations, observability basics, and internal billing callbacks
-- a Node.js `BillingService/` companion service scaffold with durable workflow orchestration and drift-aware reconciliation scaffolding for provider-facing billing integration
+- a Node.js `BillingService/` companion service scaffold with durable workflow orchestration, drift-aware reconciliation scaffolding, and an initial Stripe provider API gateway slice for tenant checkout/portal/invoice-sync calls
 
 ## Architecture summary
 
@@ -156,7 +156,7 @@ The next phase is intentionally separate from the already-implemented V2 platfor
 ### Billing and workflow priorities
 
 - connect `BillingService` to the .NET internal billing callback endpoint
-- replace placeholder webhook handling with real provider webhook verification and normalization
+- complete Stripe webhook verification/normalization (tenant checkout/portal/invoice-sync provider calls are now scaffolded in BillingService)
 - operationalize the durable retry, replay protection, dead-letter, and reconciliation workflows now scaffolded in `BillingService`
 - keep provider-specific logic inside `BillingService` while the .NET API remains the system of record
 
@@ -171,7 +171,7 @@ The next phase is intentionally separate from the already-implemented V2 platfor
 
 The repository should still be treated as **pre-live for provider billing integration**:
 
-- no live billing provider SDK integration is implemented
+- live provider webhook verification is not implemented yet (webhook path still uses placeholder adapter)
 - no verified external webhook ingestion flow is implemented
 - `BillingService` does not yet call the .NET internal callback endpoint
 - `BillingService` now includes drift-aware reconciliation logic, but it is not yet connected to live provider/.NET state readers
