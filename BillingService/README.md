@@ -39,6 +39,7 @@ The current codebase provides a pre-live scaffold with the following implemented
 - persistent dedup/replay protection keyed by normalized `eventId` across service restarts
 - reconciliation job logic that compares provider subscription snapshots to internal .NET subscription snapshots, detects drift, and enqueues deterministic correction actions
 - tests covering health/metrics endpoints, webhook handler accepted/duplicate behavior, workflow retry/dead-letter/persistence recovery, duplicate-safe reconciliation reruns, and drift classification behavior
+- provider gateway tests covering tenant-safe checkout/portal session metadata, invoice tenant-mapping filtering, and clean checkout/portal session error surfacing
 
 ## Durable workflow iteration status
 

@@ -39,6 +39,8 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("planId").GetString().Should().Be("plan-free");
+        body.GetProperty("status").GetString().Should().Be(SubscriptionStatus.Active.ToString());
+        body.GetProperty("availableActions").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo(["cancel", "change_plan"]);
     }
 
     [Fact]
@@ -130,5 +132,22 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         var subscription = db.Subscriptions.Single(x => x.TenantId == auth.TenantId);
         subscription.Status.Should().Be(SubscriptionStatus.Active);
         subscription.CanceledAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BillingSubscriptionActions_ShouldReturnCleanErrors_WhenActionIsInvalidForCurrentState()
+    {
+        using var client = _factory.CreateClient();
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"billing-state-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var firstCancel = await client.PostAsJsonAsync("/api/billing/subscription/cancel", new { reason = "Initial cancellation" });
+        firstCancel.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var secondCancel = await client.PostAsJsonAsync("/api/billing/subscription/cancel", new { reason = "Duplicate cancellation" });
+        secondCancel.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var secondCancelBody = await secondCancel.Content.ReadFromJsonAsync<JsonElement>();
+        secondCancelBody.GetProperty("error").GetString().Should().Be("Subscription is already canceled");
     }
 }
