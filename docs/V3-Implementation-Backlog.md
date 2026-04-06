@@ -31,7 +31,7 @@ The codebase has V3 groundwork, but the production billing path is not complete 
 - `BillingService` does not yet verify real provider webhooks.
 - `BillingService` does not yet publish authenticated callbacks into the .NET API.
 - `BillingService` now has a durable workflow foundation (file-backed queue + retry/dead-letter + replay-safe dedup) plus drift-aware reconciliation comparison logic. This iteration is documented and operationalized, but it still needs live provider/.NET state readers and provider-connected callback delivery for production readiness.
-- The .NET API does not yet expose tenant-facing billing self-service endpoints beyond plan upgrade and subscription state enforcement.
+- The .NET API now includes a first tenant-facing billing foundation (`/api/billing/status`, `/api/billing/invoices`, cancel/reactivate actions), but richer invoice data models and provider-backed mutation orchestration are still pending.
 - Entitlements, add-ons, usage analytics exports, outbound webhooks, and deeper billing reconciliation workflows are not yet implemented.
 
 ## Durable workflow iteration checkpoint (April 5, 2026)

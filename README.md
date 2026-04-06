@@ -220,6 +220,10 @@ Under `api/admin/tenant`:
 Additional tenant-scoped endpoint:
 
 - `GET /api/tenant/audit-logs`
+- `GET /api/billing/status`
+- `GET /api/billing/invoices` (foundation feed sourced from tenant-scoped internal invoice billing events)
+- `POST /api/billing/subscription/cancel`
+- `POST /api/billing/subscription/reactivate`
 
 ### Internal service endpoint
 
