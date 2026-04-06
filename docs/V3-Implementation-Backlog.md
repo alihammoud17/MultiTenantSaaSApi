@@ -1,6 +1,6 @@
 # V3 Implementation Backlog
 
-This backlog is based on the current repository state as of April 5, 2026. It treats the existing .NET API as the system of record, keeps provider-specific billing logic inside `BillingService`, and builds from functionality that already exists in code rather than proposing a rewrite.
+This backlog is based on the current repository state as of April 6, 2026. It treats the existing .NET API as the system of record, keeps provider-specific billing logic inside `BillingService`, and builds from functionality that already exists in code rather than proposing a rewrite.
 
 ## Current repository baseline
 
@@ -34,7 +34,7 @@ The codebase has V3 groundwork, but the production billing path is not complete 
 - `BillingService` does not yet publish authenticated callbacks into the .NET API.
 - `BillingService` now has a durable workflow foundation (file-backed queue + retry/dead-letter + replay-safe dedup) plus drift-aware reconciliation comparison logic. This iteration is documented and operationalized, but it still needs live provider/.NET state readers and provider-connected callback delivery for production readiness.
 - The .NET API now includes a first tenant-facing billing foundation (`/api/billing/status`, `/api/billing/invoices`, cancel/reactivate actions), but richer invoice data models and provider-backed mutation orchestration are still pending.
-- Entitlements, add-ons, usage analytics exports, outbound webhooks, and deeper billing reconciliation workflows are not yet implemented.
+- Entitlements enforcement/add-on execution, usage analytics exports, outbound webhooks, and deeper billing reconciliation workflows are not yet implemented (the entitlements model/design iteration is now documented).
 
 ## Durable workflow iteration checkpoint (April 5, 2026)
 
@@ -49,6 +49,16 @@ A documentation-focused operational checkpoint for durable billing workflows is 
 - backlog language has been aligned to treat this durability slice as implemented scaffolding, not live provider billing
 
 Remaining gap to close before production billing cutover: live provider integration, webhook verification, and authenticated callback delivery to the .NET internal billing endpoint.
+
+## Entitlements model documentation checkpoint (April 6, 2026)
+
+A documentation-focused checkpoint for the entitlements iteration is now complete:
+
+- root `README.md` now includes a current capability matrix that distinguishes implemented surfaces from pending entitlements enforcement
+- `docs/Entitlements-Model.md` defines entitlement ownership, evaluation rules, lifecycle behavior, tenant-safety constraints, and rollout phases
+- setup/migration notes in `README.md` now explicitly state that this iteration adds model documentation only and does not introduce a new entitlement migration
+
+Remaining gap to close for Iteration 5 execution: implement persistence + evaluation services + runtime feature gates + tests described in the model document.
 
 ## V3 priorities in implementation order
 
@@ -210,7 +220,7 @@ Once internal billing events are trustworthy and durable, the platform can safel
 
 ---
 
-## Iteration 5 - Entitlements and feature gating tied to plans and subscription lifecycle
+## Iteration 5 - Entitlements and feature gating tied to plans and subscription lifecycle (next implementation slice)
 
 ### Goal
 Extend the current plan model into explicit entitlements and feature gating so the platform can enforce more than API call quotas.
@@ -224,6 +234,7 @@ The repo already has plan records, plan-based rate limiting, and subscription li
 - A clear ownership model for entitlement definitions versus tenant assignment state.
 
 ### Concrete implementation scope
+- Use `docs/Entitlements-Model.md` as the contract for implementation boundaries and rollout sequencing.
 - Introduce explicit entitlement definitions associated with plans and, if needed later, add-on assignments.
 - Add application-layer services for entitlement evaluation.
 - Reuse the current tenant-scoped enforcement pattern used by rate limiting.

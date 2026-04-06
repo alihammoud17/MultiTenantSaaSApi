@@ -10,6 +10,19 @@ The .NET API is the current system of record for tenant identity, authorization,
 - The .NET API already contains the internal billing callback contract and subscription lifecycle application logic needed for that next phase.
 - `BillingService/` exists as the provider-facing billing companion service, but it is still in a pre-live scaffold state and does **not** yet implement live provider integrations.
 
+## Feature matrix (current capabilities)
+
+| Capability area | Current status (April 6, 2026) | Notes |
+| --- | --- | --- |
+| Multi-tenant auth + RBAC + audit | Implemented | Core tenant isolation, auth lifecycle, RBAC, and tenant audit surfaces are in production-ready shape. |
+| Plan catalog + lifecycle state | Implemented | Plan upgrades and subscription lifecycle state are persisted in the .NET API. |
+| Tenant billing self-service foundation | Implemented (foundation) | Tenant billing status/invoice reads and cancel/reactivate actions exist on internal state. |
+| Internal billing callback contract (.NET) | Implemented | Signed callback ingestion, idempotency inbox, and lifecycle application are live in the API. |
+| BillingService durable workflow scaffold | Implemented (pre-live) | Durable retry/dead-letter/reconciliation scaffolding exists, but live provider callback flow is still pending. |
+| Provider webhook verification + live provider sync | Not implemented yet | BillingService remains pre-live for verified external webhook ingestion. |
+| Entitlements model + feature gating | In design/documentation iteration | See `docs/Entitlements-Model.md` for the current model and rollout constraints. |
+| Usage analytics + outbound webhooks | Not implemented yet | Planned for later V3 slices after billing core stabilizes. |
+
 ## Repository overview
 
 This repository currently contains:
@@ -164,7 +177,7 @@ The next phase is intentionally separate from the already-implemented V2 platfor
 ### Platform maturity priorities
 
 - tenant-facing billing self-service capabilities built on internal subscription state
-- entitlements / add-ons / feature gating
+- entitlements / add-ons / feature gating (modeling/docs iteration in progress; enforcement rollout pending)
 - stronger security hardening and operational diagnostics
 - usage analytics and outbound webhooks
 
@@ -193,6 +206,7 @@ These capabilities improve service resilience, but they are still **pre-live** b
 For operational procedures (startup checks, state-file hygiene, replay handling, dead-letter triage, and reconciliation troubleshooting), use:
 
 - `docs/Billing-Workflow-Runbook.md`
+- `docs/Entitlements-Model.md`
 
 ## API surface summary
 
@@ -266,6 +280,12 @@ From repository root:
 ```bash
 dotnet ef database update --project Infrastructure --startup-project Presentation
 ```
+
+Entitlements iteration note:
+
+- The entitlements model is documented in `docs/Entitlements-Model.md`.
+- No new entitlements-specific migration is included in this docs-only iteration.
+- Continue applying the latest migration set before local runs/tests.
 
 ### Run the API
 
