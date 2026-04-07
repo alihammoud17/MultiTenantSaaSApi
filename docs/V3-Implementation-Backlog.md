@@ -55,10 +55,11 @@ Remaining gap to close before production billing cutover: live provider integrat
 A documentation-focused checkpoint for the entitlements iteration is now complete:
 
 - root `README.md` now includes a current capability matrix that distinguishes implemented surfaces from pending entitlements enforcement
-- `docs/Entitlements-Model.md` defines entitlement ownership, evaluation rules, lifecycle behavior, tenant-safety constraints, and rollout phases
-- setup/migration notes in `README.md` now explicitly state that this iteration adds model documentation only and does not introduce a new entitlement migration
+- `docs/Entitlements-Model.md` now defines feature-level entitlement keys, deterministic precedence, hard/soft quota policy, add-on composition, lifecycle-aware behavior, and phased migration/enforcement rollout
+- root `README.md` now reflects this expanded design status while keeping implementation marked as pending
+- this checkpoint remains documentation-only; no entitlement schema migration has been applied yet
 
-Remaining gap to close for Iteration 5 execution: implement persistence + evaluation services + runtime feature gates + tests described in the model document.
+Remaining gap to close for Iteration 5 execution: implement additive schema, evaluator/enforcer services, progressive runtime gates, and automated tests described in the model document.
 
 ## V3 priorities in implementation order
 
