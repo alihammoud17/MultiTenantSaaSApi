@@ -20,7 +20,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 | Internal billing callback contract (.NET) | Implemented | Signed callback ingestion, idempotency inbox, and lifecycle application are live in the API. |
 | BillingService durable workflow scaffold | Implemented (pre-live) | Durable retry/dead-letter/reconciliation scaffolding exists, but live provider callback flow is still pending. |
 | Provider webhook verification + live provider sync | Not implemented yet | BillingService remains pre-live for verified external webhook ingestion. |
-| Entitlements model + feature gating | In design/documentation iteration | See `docs/Entitlements-Model.md` for the current model and rollout constraints. |
+| Entitlements model + feature gating | In design/documentation iteration | `docs/Entitlements-Model.md` now defines feature-level keys, hard/soft quota policy, add-on composition, and phased migration/enforcement rollout on top of current plan/subscription behavior. |
 | Usage analytics + outbound webhooks | Not implemented yet | Planned for later V3 slices after billing core stabilizes. |
 
 ## Repository overview
@@ -177,7 +177,7 @@ The next phase is intentionally separate from the already-implemented V2 platfor
 ### Platform maturity priorities
 
 - tenant-facing billing self-service capabilities built on internal subscription state
-- entitlements / add-ons / feature gating (modeling/docs iteration in progress; enforcement rollout pending)
+- entitlements / add-ons / feature gating (design now defines hard/soft quotas + add-on support; implementation rollout still pending)
 - stronger security hardening and operational diagnostics
 - usage analytics and outbound webhooks
 
