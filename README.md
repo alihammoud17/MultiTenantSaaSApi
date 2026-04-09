@@ -20,7 +20,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 | Internal billing callback contract (.NET) | Implemented | Signed callback ingestion, idempotency inbox, and lifecycle application are live in the API. |
 | BillingService durable workflow scaffold | Implemented (pre-live) | Durable retry/dead-letter/reconciliation scaffolding exists, but live provider callback flow is still pending. |
 | Provider webhook verification + live provider sync | Not implemented yet | BillingService remains pre-live for verified external webhook ingestion. |
-| Entitlements model + feature gating | Implemented (progressive rollout started) | Additive entitlement schema, evaluator/enforcer services, and enforcement gates now cover billing invoices, billing self-service mutations, plan upgrades, advanced admin user management, and tenant audit-log analytics access. |
+| Entitlements model + feature gating | Implemented (progressive rollout) | Additive entitlement schema + seeded definitions/mappings are in place, with evaluator/enforcer-backed gates active for billing invoice reads, billing self-service mutations, plan upgrades, advanced admin user management, and tenant audit-log analytics access. |
 | Usage analytics + outbound webhooks | Not implemented yet | Planned for later V3 slices after billing core stabilizes. |
 
 ## Repository overview
@@ -177,7 +177,7 @@ The next phase is intentionally separate from the already-implemented V2 platfor
 ### Platform maturity priorities
 
 - tenant-facing billing self-service capabilities built on internal subscription state
-- entitlements / add-ons / feature gating (foundation schema + evaluator implemented; first enforcement rollout now includes billing and selected admin/analytics surfaces)
+- entitlements / add-ons / feature gating (foundation schema + seeded definitions/mappings + evaluator/enforcer are implemented; progressive enforcement is active on billing/admin/analytics starter surfaces)
 - stronger security hardening and operational diagnostics
 - usage analytics and outbound webhooks
 
@@ -281,11 +281,13 @@ From repository root:
 dotnet ef database update --project Infrastructure --startup-project Presentation
 ```
 
-Entitlements iteration note:
+Entitlements iteration notes:
 
-- The entitlements model is documented in `docs/Entitlements-Model.md`.
-- Entitlement gate coverage has expanded in runtime enforcement; apply the latest migration set before local runs/tests.
-- Continue applying the latest migration set before local runs/tests.
+- The entitlements model and rollout contract are documented in `docs/Entitlements-Model.md`.
+- Entitlements require the latest migration chain that includes:
+  - `20260409090000_AddEntitlementsFoundation`
+  - `20260409185041_AddProgressiveEntitlementGates`
+- Re-run database update after pulling changes to ensure seeded entitlement keys/plan mappings are present before local runs/tests.
 
 ### Run the API
 
@@ -346,3 +348,4 @@ npm test
 - `docs/V3-Implementation-Backlog.md`
 - `docs/Internal-Billing-Contract.md`
 - `docs/Billing-Workflow-Runbook.md`
+- `docs/Entitlements-Model.md`

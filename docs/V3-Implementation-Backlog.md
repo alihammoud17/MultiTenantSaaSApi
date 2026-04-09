@@ -50,16 +50,19 @@ A documentation-focused operational checkpoint for durable billing workflows is 
 
 Remaining gap to close before production billing cutover: live provider integration, webhook verification, and authenticated callback delivery to the .NET internal billing endpoint.
 
-## Entitlements model documentation checkpoint (April 9, 2026)
+## Entitlements iteration checkpoint (April 9, 2026)
 
-A documentation-focused checkpoint for the entitlements iteration is now complete:
+The entitlements iteration documentation is now aligned with the implemented baseline:
 
-- root `README.md` now includes a current capability matrix that distinguishes implemented surfaces from pending entitlements enforcement
-- `docs/Entitlements-Model.md` now defines feature-level entitlement keys, deterministic precedence, hard/soft quota policy, add-on composition, lifecycle-aware behavior, and phased migration/enforcement rollout
-- root `README.md` now reflects this expanded design status while keeping implementation marked as pending
-- execution follow-up is now in progress: additive entitlement schema, evaluator/enforcer services, and an expanded first enforcement slice are implemented in the .NET API across billing/admin/analytics endpoints
+- root `README.md` capability matrix/current-capabilities wording now reflects active progressive entitlement enforcement
+- `docs/Entitlements-Model.md` now serves as the implementation contract for key taxonomy, resolution precedence, lifecycle behavior, and rollout sequencing
+- setup notes now call out the required migration chain for entitlement schema + seeded progressive gates
 
-Remaining gap to close for Iteration 5 execution: expand enforcement to additional endpoints and service operations, add add-on assignment workflows, and finish parity-driven migration of existing quota/feature checks.
+Current remaining execution gaps for Iteration 5:
+
+- expand enforcement to additional endpoints/service operations beyond the current starter slice
+- add tenant add-on assignment lifecycle workflows
+- complete parity-driven migration of legacy quota/feature checks to entitlement evaluation
 
 ## V3 priorities in implementation order
 
@@ -221,7 +224,7 @@ Once internal billing events are trustworthy and durable, the platform can safel
 
 ---
 
-## Iteration 5 - Entitlements and feature gating tied to plans and subscription lifecycle (next implementation slice)
+## Iteration 5 - Entitlements and feature gating tied to plans and subscription lifecycle (in progress)
 
 ### Goal
 Extend the current plan model into explicit entitlements and feature gating so the platform can enforce more than API call quotas.
@@ -233,6 +236,11 @@ The repo already has plan records, plan-based rate limiting, and subscription li
 - Stable subscription lifecycle state.
 - Existing RBAC and tenant context enforcement.
 - A clear ownership model for entitlement definitions versus tenant assignment state.
+
+### Implemented baseline in this repository now
+- Additive entitlement schema and seeded key/plan mappings are applied through entitlement-focused EF migrations.
+- Application-layer entitlement evaluator/enforcer services are available and used by progressive gates.
+- Progressive enforcement is currently active for billing invoice reads, billing self-service mutations, plan upgrades, advanced admin user management, and tenant audit-log analytics reads.
 
 ### Concrete implementation scope
 - Use `docs/Entitlements-Model.md` as the contract for implementation boundaries and rollout sequencing.
