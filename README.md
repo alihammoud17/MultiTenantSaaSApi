@@ -55,8 +55,11 @@ This repository currently contains:
 
 - JWT Bearer authentication for API access.
 - Login and tenant registration endpoints.
+- Identity lifecycle foundation endpoints for invite issuance/acceptance, verification requests/completions, and password-reset requests/completions.
 - Refresh token issuance on register/login.
 - Refresh token rotation on `POST /api/auth/refresh`.
+- Session inventory endpoint at `GET /api/auth/sessions`.
+- Session revoke-all endpoint at `POST /api/auth/sessions/revoke-all`.
 - Refresh token revocation via:
   - `POST /api/auth/logout`
   - `POST /api/auth/revoke`
@@ -217,6 +220,14 @@ For operational procedures (startup checks, state-file hygiene, replay handling,
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
 - `POST /api/auth/revoke` (authenticated + RBAC-protected)
+- `GET /api/auth/sessions` (authenticated)
+- `POST /api/auth/sessions/revoke-all` (authenticated)
+- `POST /api/auth/invites` (authenticated + RBAC-protected)
+- `POST /api/auth/invites/accept`
+- `POST /api/auth/verification/request`
+- `POST /api/auth/verification/complete`
+- `POST /api/auth/password-reset/request`
+- `POST /api/auth/password-reset/complete`
 - `GET /api/plans`
 - `GET /health`
 - `GET /metrics`

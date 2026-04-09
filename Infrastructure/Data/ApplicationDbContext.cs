@@ -71,6 +71,9 @@ namespace Infrastructure.Data
         public DbSet<AddOnEntitlement> AddOnEntitlements => Set<AddOnEntitlement>();
         public DbSet<TenantAddOnAssignment> TenantAddOnAssignments => Set<TenantAddOnAssignment>();
         public DbSet<TenantEntitlementOverride> TenantEntitlementOverrides => Set<TenantEntitlementOverride>();
+        public DbSet<UserInvite> UserInvites => Set<UserInvite>();
+        public DbSet<UserVerificationToken> UserVerificationTokens => Set<UserVerificationToken>();
+        public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -91,10 +94,44 @@ namespace Infrastructure.Data
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.TenantId, e.Email }).IsUnique();
                 entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.Role).IsRequired().HasMaxLength(32);
                 entity.HasOne(e => e.Tenant)
                       .WithMany(t => t.Users)
                       .HasForeignKey(e => e.TenantId)
                       .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<UserInvite>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.Email, e.AcceptedAt });
+                entity.HasIndex(e => e.TokenHash).IsUnique();
+                entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.Role).IsRequired().HasMaxLength(32);
+                entity.Property(e => e.RbacRoleName).HasMaxLength(100);
+                entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(128);
+                entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<UserVerificationToken>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.TokenHash).IsUnique();
+                entity.HasIndex(e => new { e.TenantId, e.UserId, e.UsedAt });
+                entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(128);
+                entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<PasswordResetToken>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.TokenHash).IsUnique();
+                entity.HasIndex(e => new { e.TenantId, e.UserId, e.UsedAt });
+                entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(128);
+                entity.Property(e => e.RequestedByIp).HasMaxLength(64);
+                entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
             });
 
             // Plan

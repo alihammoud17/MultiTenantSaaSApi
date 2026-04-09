@@ -10,6 +10,7 @@ The current repository has already completed the major V2 platform slices:
 
 - **Tenant registration and tenant context enforcement** are implemented in the .NET API, including active-tenant checks and tenant resolution from subdomain, request header, and JWT claims.
 - **Authentication and refresh token lifecycle** are implemented, including refresh token issuance, rotation, logout, and authenticated revocation.
+- **Identity lifecycle foundation** is now implemented for tenant-scoped invite issuance/acceptance, verification token issuance/completion, password-reset token issuance/completion, active session inventory, and revoke-all session invalidation.
 - **RBAC foundation** is implemented with roles, permissions, policy registration, authorization handlers, and tenant-scoped role assignments.
 - **Tenant administration** is implemented for tenant detail retrieval, user listing, user creation, user role changes, user deletion, and tenant audit log access.
 - **Plan catalog and subscription upgrade flow** are implemented in the .NET API, with subscription lifecycle state persisted on the subscription aggregate.
@@ -63,6 +64,23 @@ Current remaining execution gaps for Iteration 5:
 - expand enforcement to additional endpoints/service operations beyond the current starter slice
 - add tenant add-on assignment lifecycle workflows
 - complete parity-driven migration of legacy quota/feature checks to entitlement evaluation
+
+## Identity lifecycle checkpoint (April 9, 2026)
+
+The first V3 identity-hardening slice is now in place in the .NET API:
+
+- tenant-scoped user invite records with tokenized acceptance
+- verification token records and explicit verification completion
+- password-reset token records and explicit reset completion
+- active session inventory backed by refresh-token state
+- tenant-safe revoke-all session invalidation support
+- minimal notification abstraction to isolate email/notification delivery from lifecycle orchestration
+
+Remaining follow-up for this area:
+
+- connect `IIdentityNotificationService` to a live provider-backed mail channel
+- add dedicated anti-automation controls (rate limits/challenges) around public verification/reset endpoints
+- add expiry cleanup/retention jobs for invite/verification/reset token tables
 
 ## V3 priorities in implementation order
 

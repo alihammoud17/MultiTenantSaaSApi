@@ -30,5 +30,19 @@ namespace Domain.Interfaces
             DateTime newExpiresAtUtc,
             string? requestIp = null,
             CancellationToken cancellationToken = default);
+
+        Task<IReadOnlyList<SessionInventoryItem>> GetActiveSessionsAsync(
+            Guid tenantId,
+            Guid userId,
+            string? currentRefreshToken = null,
+            CancellationToken cancellationToken = default);
+
+        Task<int> RevokeAllActiveTokensAsync(
+            Guid tenantId,
+            Guid userId,
+            string? revokedByIp = null,
+            string? reason = null,
+            string? exceptRefreshToken = null,
+            CancellationToken cancellationToken = default);
     }
 }

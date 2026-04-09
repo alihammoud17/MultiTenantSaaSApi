@@ -127,6 +127,7 @@ namespace Presentation.Controllers
                 TenantId = tenantId,
                 Email = request.Email,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                EmailVerifiedAt = DateTime.UtcNow,
                 Role = string.IsNullOrWhiteSpace(request.Role) ? "MEMBER" : request.Role.Trim().ToUpperInvariant(),
                 CreatedAt = DateTime.UtcNow
             };
