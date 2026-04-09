@@ -3,6 +3,7 @@ using Domain.Entites;
 using Domain.Interfaces;
 using Domain.Outputs;
 using Infrastructure.Data;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Services;
