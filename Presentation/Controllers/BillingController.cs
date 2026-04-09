@@ -17,15 +17,18 @@ public class BillingController : ControllerBase
     private readonly ApplicationDbContext _dbContext;
     private readonly ITenantContext _tenantContext;
     private readonly IAuditService _auditService;
+    private readonly IEntitlementEnforcer _entitlementEnforcer;
 
     public BillingController(
         ApplicationDbContext dbContext,
         ITenantContext tenantContext,
-        IAuditService auditService)
+        IAuditService auditService,
+        IEntitlementEnforcer entitlementEnforcer)
     {
         _dbContext = dbContext;
         _tenantContext = tenantContext;
         _auditService = auditService;
+        _entitlementEnforcer = entitlementEnforcer;
     }
 
     [HttpGet("status")]
@@ -62,6 +65,11 @@ public class BillingController : ControllerBase
     public async Task<IActionResult> ListInvoices()
     {
         var tenantId = _tenantContext.TenantId;
+        var enforcement = await _entitlementEnforcer.EnsureFeatureEnabledAsync(tenantId, "feature.billing.invoices.read");
+        if (!enforcement.Allowed)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = enforcement.DenialReason });
+        }
 
         var invoices = await _dbContext.BillingEventInboxes
             .AsNoTracking()
