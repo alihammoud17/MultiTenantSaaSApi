@@ -1,10 +1,24 @@
 # Entitlements Model (V3)
 
-_Last updated: April 9, 2026._
+_Last updated: April 9, 2026 (entitlements iteration docs refresh)._
 
 This document defines the V3 entitlements design **on top of the current plan/subscription implementation** so implementation can proceed incrementally without breaking existing plan upgrade behavior.
 
 > Scope note: foundation implementation is now started (schema + evaluator/enforcer), and the first progressive enforcement slice is now active for billing invoice reads, billing self-service mutations, plan upgrades, advanced admin user management, and tenant audit-log analytics reads. Runtime entitlement enforcement is still **not** fully rolled out platform-wide yet.
+
+## Implementation snapshot (current repository)
+
+Implemented now:
+
+- additive entitlement persistence model (`EntitlementDefinitions`, `PlanEntitlements`, `AddOnDefinitions`, `AddOnEntitlements`, `TenantAddOnAssignments`, `TenantEntitlementOverrides`)
+- seeded entitlement keys and plan mappings for foundational quotas/features
+- application-layer entitlement evaluation/enforcement primitives used by progressive gates
+
+Still pending in later slices:
+
+- broad platform-wide enforcement coverage
+- tenant/self-service add-on purchase and assignment lifecycle orchestration
+- complete retirement of legacy non-entitlement quota checks after parity soak
 
 ## Current baseline (what exists today)
 
@@ -199,6 +213,19 @@ To minimize change risk:
 - no provider-specific entitlement decisions in this API path
 
 This ensures current tests and tenant workflows around plan upgrades stay valid while entitlements are introduced additively.
+
+## Local setup / migration notes
+
+When bootstrapping or updating a local database for entitlements work:
+
+1. apply the latest EF migrations from repo root:
+   - `dotnet ef database update --project Infrastructure --startup-project Presentation`
+2. verify the migration chain includes:
+   - `20260409090000_AddEntitlementsFoundation`
+   - `20260409185041_AddProgressiveEntitlementGates`
+3. if you are validating entitlement behavior, re-run the migration command after pulling new changes so seeded entitlement keys and per-plan mappings are current
+
+These migrations are additive and designed to preserve existing plan/subscription behavior while progressive gates are expanded.
 
 ## Migration strategy (phased)
 
