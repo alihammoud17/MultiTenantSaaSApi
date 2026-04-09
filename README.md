@@ -12,7 +12,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 
 ## Feature matrix (current capabilities)
 
-| Capability area | Current status (April 6, 2026) | Notes |
+| Capability area | Current status (April 9, 2026) | Notes |
 | --- | --- | --- |
 | Multi-tenant auth + RBAC + audit | Implemented | Core tenant isolation, auth lifecycle, RBAC, and tenant audit surfaces are in production-ready shape. |
 | Plan catalog + lifecycle state | Implemented | Plan upgrades and subscription lifecycle state are persisted in the .NET API. |
@@ -20,7 +20,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 | Internal billing callback contract (.NET) | Implemented | Signed callback ingestion, idempotency inbox, and lifecycle application are live in the API. |
 | BillingService durable workflow scaffold | Implemented (pre-live) | Durable retry/dead-letter/reconciliation scaffolding exists, but live provider callback flow is still pending. |
 | Provider webhook verification + live provider sync | Not implemented yet | BillingService remains pre-live for verified external webhook ingestion. |
-| Entitlements model + feature gating | Implemented (foundation) | Additive entitlement schema, evaluator/enforcer services, and first API enforcement hook for tenant billing invoice visibility are now implemented in the .NET API; progressive rollout for additional gates remains pending. |
+| Entitlements model + feature gating | Implemented (progressive rollout started) | Additive entitlement schema, evaluator/enforcer services, and enforcement gates now cover billing invoices, billing self-service mutations, plan upgrades, advanced admin user management, and tenant audit-log analytics access. |
 | Usage analytics + outbound webhooks | Not implemented yet | Planned for later V3 slices after billing core stabilizes. |
 
 ## Repository overview
@@ -177,7 +177,7 @@ The next phase is intentionally separate from the already-implemented V2 platfor
 ### Platform maturity priorities
 
 - tenant-facing billing self-service capabilities built on internal subscription state
-- entitlements / add-ons / feature gating (foundation schema + evaluator + first invoice read gate implemented; broader rollout still pending)
+- entitlements / add-ons / feature gating (foundation schema + evaluator implemented; first enforcement rollout now includes billing and selected admin/analytics surfaces)
 - stronger security hardening and operational diagnostics
 - usage analytics and outbound webhooks
 
@@ -284,7 +284,7 @@ dotnet ef database update --project Infrastructure --startup-project Presentatio
 Entitlements iteration note:
 
 - The entitlements model is documented in `docs/Entitlements-Model.md`.
-- No new entitlements-specific migration is included in this docs-only iteration.
+- Entitlement gate coverage has expanded in runtime enforcement; apply the latest migration set before local runs/tests.
 - Continue applying the latest migration set before local runs/tests.
 
 ### Run the API

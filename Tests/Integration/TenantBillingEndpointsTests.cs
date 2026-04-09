@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Domain.Authorization;
 using Domain.Entites;
 using FluentAssertions;
 using Infrastructure.Data;
@@ -210,5 +211,36 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
 
         var secondCancelBody = await secondCancel.Content.ReadFromJsonAsync<JsonElement>();
         secondCancelBody.GetProperty("error").GetString().Should().Be("Subscription is already canceled");
+    }
+
+    [Fact]
+    public async Task BillingSubscriptionActions_ShouldReturnForbidden_WhenEntitlementOverrideDisablesPremiumCapability()
+    {
+        using var client = _factory.CreateClient();
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"billing-manage-entitlement-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.TenantEntitlementOverrides.Add(new TenantEntitlementOverride
+            {
+                Id = Guid.NewGuid(),
+                TenantId = auth.TenantId,
+                EntitlementKey = EntitlementKeys.BillingSubscriptionManage,
+                Value = "false",
+                Reason = "Contractual package downgrade",
+                Source = TenantEntitlementOverrideSource.ManualCorrection,
+                EffectiveFromUtc = DateTime.UtcNow.AddMinutes(-1),
+                CreatedUtc = DateTime.UtcNow
+            });
+            db.SaveChanges();
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+        var response = await client.PostAsJsonAsync("/api/billing/subscription/cancel", new { reason = "Should be blocked by entitlement gate" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Contain(EntitlementKeys.BillingSubscriptionManage);
     }
 }

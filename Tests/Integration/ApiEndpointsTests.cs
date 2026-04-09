@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Domain.Authorization;
 using Domain.Entites;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -440,6 +441,38 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("error").GetString().Should().Be("Tenant is already on this plan");
+    }
+
+    [Fact]
+    public async Task UpgradePlan_ShouldReturnForbidden_WhenEntitlementOverrideDisablesPlanUpgrade()
+    {
+        using var client = CreateClient();
+
+        var auth = await RegisterTenant(client, $"upgrade-entitlement-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.TenantEntitlementOverrides.Add(new TenantEntitlementOverride
+            {
+                Id = Guid.NewGuid(),
+                TenantId = auth.TenantId,
+                EntitlementKey = EntitlementKeys.BillingPlanUpgrade,
+                Value = "false",
+                Reason = "Feature temporarily disabled for this tenant",
+                Source = TenantEntitlementOverrideSource.ManualCorrection,
+                EffectiveFromUtc = DateTime.UtcNow.AddMinutes(-1),
+                CreatedUtc = DateTime.UtcNow
+            });
+            db.SaveChanges();
+        }
+
+        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Contain(EntitlementKeys.BillingPlanUpgrade);
     }
 
     [Fact]

@@ -6,6 +6,7 @@ using Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Presentation.Authorization;
 
 namespace Presentation.Controllers
 {
@@ -17,15 +18,18 @@ namespace Presentation.Controllers
         private readonly ApplicationDbContext _dbContext;
         private readonly ITenantContext _tenantContext;
         private readonly IAuditService _auditService;
+        private readonly IEntitlementEnforcer _entitlementEnforcer;
 
         public AdminTenantManagementController(
             ApplicationDbContext dbContext,
             ITenantContext tenantContext,
-            IAuditService auditService)
+            IAuditService auditService,
+            IEntitlementEnforcer entitlementEnforcer)
         {
             _dbContext = dbContext;
             _tenantContext = tenantContext;
             _auditService = auditService;
+            _entitlementEnforcer = entitlementEnforcer;
         }
 
         [HttpGet]
@@ -33,6 +37,12 @@ namespace Presentation.Controllers
         public async Task<IActionResult> GetTenantDetails()
         {
             var tenantId = _tenantContext.TenantId;
+            var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, tenantId, EntitlementKeys.ModulesFutureHook);
+            if (deniedResult is not null)
+            {
+                return deniedResult;
+            }
+
             var tenant = await _dbContext.Tenants
                 .AsNoTracking()
                 .Where(t => t.Id == tenantId)
@@ -58,6 +68,11 @@ namespace Presentation.Controllers
         public async Task<IActionResult> ListTenantUsers()
         {
             var tenantId = _tenantContext.TenantId;
+            var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, tenantId, EntitlementKeys.AdminAdvancedUserManagement);
+            if (deniedResult is not null)
+            {
+                return deniedResult;
+            }
 
             var users = await _dbContext.Users
                 .AsNoTracking()
@@ -96,6 +111,11 @@ namespace Presentation.Controllers
                 return BadRequest(new { error = "Password is required" });
 
             var tenantId = _tenantContext.TenantId;
+            var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, tenantId, EntitlementKeys.AdminAdvancedUserManagement);
+            if (deniedResult is not null)
+            {
+                return deniedResult;
+            }
 
             var exists = await _dbContext.Users.AnyAsync(u => u.TenantId == tenantId && u.Email == request.Email);
             if (exists)
@@ -152,6 +172,12 @@ namespace Presentation.Controllers
         public async Task<IActionResult> RemoveUser(Guid userId)
         {
             var tenantId = _tenantContext.TenantId;
+            var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, tenantId, EntitlementKeys.AdminAdvancedUserManagement);
+            if (deniedResult is not null)
+            {
+                return deniedResult;
+            }
+
             var actorUserId = GetActorUserId();
             if (actorUserId == userId)
                 return BadRequest(new { error = "Cannot remove current authenticated user" });
@@ -181,6 +207,12 @@ namespace Presentation.Controllers
                 return BadRequest(new { error = "Role is required" });
 
             var tenantId = _tenantContext.TenantId;
+            var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, tenantId, EntitlementKeys.AdminAdvancedUserManagement);
+            if (deniedResult is not null)
+            {
+                return deniedResult;
+            }
+
             var user = await _dbContext.Users
                 .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Id == userId);
 
@@ -237,6 +269,12 @@ namespace Presentation.Controllers
             [FromQuery] DateTime? fromUtc = null,
             [FromQuery] DateTime? toUtc = null)
         {
+            var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, _tenantContext.TenantId, EntitlementKeys.AnalyticsAuditLogsRead);
+            if (deniedResult is not null)
+            {
+                return deniedResult;
+            }
+
             var logs = await _auditService.GetTenantAuditLogsAsync(page, pageSize, action, fromUtc, toUtc);
             return Ok(logs);
         }
