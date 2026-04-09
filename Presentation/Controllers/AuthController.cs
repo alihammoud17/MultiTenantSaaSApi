@@ -20,6 +20,7 @@ namespace Presentation.Controllers
         private readonly IAuditService _auditService;
         private readonly IRefreshTokenService _refreshTokenService;
         private readonly ITenantContext _tenantContext;
+        private readonly IIdentityLifecycleService _identityLifecycleService;
 
         public AuthController(
             ApplicationDbContext dbContext,
@@ -27,7 +28,8 @@ namespace Presentation.Controllers
             ILogger<AuthController> logger,
             IAuditService auditService,
             IRefreshTokenService refreshTokenService,
-            ITenantContext tenantContext)
+            ITenantContext tenantContext,
+            IIdentityLifecycleService identityLifecycleService)
         {
             _dbContext = dbContext;
             _jwtService = jwtService;
@@ -35,6 +37,7 @@ namespace Presentation.Controllers
             _auditService = auditService;
             _refreshTokenService = refreshTokenService;
             _tenantContext = tenantContext;
+            _identityLifecycleService = identityLifecycleService;
         }
 
         [HttpPost("register")]
@@ -68,6 +71,7 @@ namespace Presentation.Controllers
                     TenantId = tenant.Id,
                     Email = request.AdminEmail,
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.AdminPassword),
+                    EmailVerifiedAt = DateTime.UtcNow,
                     Role = "ADMIN",
                     CreatedAt = DateTime.UtcNow
                 };
@@ -134,6 +138,9 @@ namespace Presentation.Controllers
 
             if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
                 return Unauthorized(new { error = "Invalid credentials" });
+
+            if (!user.EmailVerifiedAt.HasValue)
+                return Unauthorized(new { error = "Email is not verified" });
 
             if (user.Tenant.Status != TenantStatus.Active)
                 return StatusCode(403, new { error = "Tenant account is suspended" });
@@ -229,6 +236,194 @@ namespace Presentation.Controllers
             return await RevokeRefreshTokenInternal(request, request.Reason, "USER_TOKEN_REVOKED", cancellationToken);
         }
 
+        [HttpGet("sessions")]
+        [Authorize]
+        public async Task<IActionResult> GetSessions([FromQuery] string? currentRefreshToken, CancellationToken cancellationToken)
+        {
+            var tenantId = ResolveCurrentTenantId();
+            var userId = ResolveCurrentUserId();
+            if (tenantId == Guid.Empty || userId == Guid.Empty)
+            {
+                return Unauthorized(new { error = "Invalid authenticated context" });
+            }
+
+            _tenantContext.SetTenantId(tenantId);
+            var sessions = await _refreshTokenService.GetActiveSessionsAsync(tenantId, userId, currentRefreshToken, cancellationToken);
+            return Ok(sessions);
+        }
+
+        [HttpPost("sessions/revoke-all")]
+        [Authorize]
+        public async Task<IActionResult> RevokeAllSessions([FromBody] RevokeAllSessionsRequest request, CancellationToken cancellationToken)
+        {
+            if (request.TenantId == Guid.Empty)
+                return BadRequest(new { error = "TenantId is required" });
+
+            var actorTenantId = ResolveCurrentTenantId();
+            var actorUserId = ResolveCurrentUserId();
+            if (actorTenantId == Guid.Empty || actorTenantId != request.TenantId || actorUserId == Guid.Empty)
+                return Unauthorized(new { error = "Invalid authenticated context" });
+
+            var effectiveUserId = request.UserId ?? actorUserId;
+            if (effectiveUserId != actorUserId && !string.Equals(User.FindFirst("role")?.Value, "ADMIN", StringComparison.OrdinalIgnoreCase))
+                return Forbid();
+
+            var revokedCount = await _refreshTokenService.RevokeAllActiveTokensAsync(
+                request.TenantId,
+                effectiveUserId,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                string.IsNullOrWhiteSpace(request.Reason) ? "REVOKE_ALL" : request.Reason,
+                cancellationToken: cancellationToken);
+
+            _tenantContext.SetTenantId(request.TenantId);
+            await _auditService.LogAsync("USER_SESSIONS_REVOKED_ALL", nameof(User), effectiveUserId.ToString(), new
+            {
+                TenantId = request.TenantId,
+                RevokedCount = revokedCount,
+                ActorUserId = actorUserId
+            });
+
+            return Ok(new
+            {
+                revokedCount,
+                userId = effectiveUserId
+            });
+        }
+
+        [HttpPost("invites")]
+        [Authorize(Policy = RbacPolicyNames.UsersManage)]
+        public async Task<IActionResult> CreateInvite([FromBody] CreateInviteRequest request, CancellationToken cancellationToken)
+        {
+            var tenantId = ResolveCurrentTenantId();
+            var actorUserId = ResolveCurrentUserId();
+            if (tenantId == Guid.Empty || actorUserId == Guid.Empty)
+                return Unauthorized(new { error = "Invalid authenticated context" });
+
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return BadRequest(new { error = "Email is required" });
+
+            _tenantContext.SetTenantId(tenantId);
+
+            try
+            {
+                var result = await _identityLifecycleService.CreateInviteAsync(
+                    tenantId,
+                    actorUserId,
+                    request.Email,
+                    request.Role,
+                    request.RbacRoleName,
+                    request.ExpiresInHours,
+                    cancellationToken);
+
+                await _auditService.LogAsync("USER_INVITE_CREATED", nameof(User), actorUserId.ToString(), new
+                {
+                    request.Email,
+                    request.Role,
+                    request.RbacRoleName,
+                    result.ExpiresAt
+                });
+
+                return Ok(result);
+            }
+            catch (InvalidOperationException)
+            {
+                return BadRequest(new { error = "User already exists for tenant" });
+            }
+        }
+
+        [HttpPost("invites/accept")]
+        public async Task<IActionResult> AcceptInvite([FromBody] AcceptInviteRequest request, CancellationToken cancellationToken)
+        {
+            if (request.TenantId == Guid.Empty)
+                return BadRequest(new { error = "TenantId is required" });
+            if (string.IsNullOrWhiteSpace(request.InviteToken))
+                return BadRequest(new { error = "InviteToken is required" });
+            if (string.IsNullOrWhiteSpace(request.Password))
+                return BadRequest(new { error = "Password is required" });
+
+            _tenantContext.SetTenantId(request.TenantId);
+            var userId = await _identityLifecycleService.AcceptInviteAsync(request.TenantId, request.InviteToken, request.Password, cancellationToken);
+            if (!userId.HasValue)
+                return BadRequest(new { error = "Invalid or expired invite token" });
+
+            await _auditService.LogAsync("USER_INVITE_ACCEPTED", nameof(User), userId.Value.ToString(), new
+            {
+                request.TenantId
+            });
+
+            return Ok(new { message = "Invite accepted. Verify email before login." });
+        }
+
+        [HttpPost("verification/request")]
+        public async Task<IActionResult> RequestVerification([FromBody] RequestVerificationRequest request, CancellationToken cancellationToken)
+        {
+            if (request.TenantId == Guid.Empty)
+                return BadRequest(new { error = "TenantId is required" });
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return BadRequest(new { error = "Email is required" });
+
+            _tenantContext.SetTenantId(request.TenantId);
+            await _identityLifecycleService.RequestVerificationAsync(request.TenantId, request.Email, cancellationToken);
+            return Ok(new { message = "If account exists, verification was requested." });
+        }
+
+        [HttpPost("verification/complete")]
+        public async Task<IActionResult> CompleteVerification([FromBody] CompleteVerificationRequest request, CancellationToken cancellationToken)
+        {
+            if (request.TenantId == Guid.Empty)
+                return BadRequest(new { error = "TenantId is required" });
+            if (string.IsNullOrWhiteSpace(request.VerificationToken))
+                return BadRequest(new { error = "VerificationToken is required" });
+
+            _tenantContext.SetTenantId(request.TenantId);
+            var verified = await _identityLifecycleService.CompleteVerificationAsync(request.TenantId, request.VerificationToken, cancellationToken);
+            if (!verified)
+                return BadRequest(new { error = "Invalid or expired verification token" });
+
+            return Ok(new { message = "Email verified." });
+        }
+
+        [HttpPost("password-reset/request")]
+        public async Task<IActionResult> RequestPasswordReset([FromBody] RequestPasswordResetRequest request, CancellationToken cancellationToken)
+        {
+            if (request.TenantId == Guid.Empty)
+                return BadRequest(new { error = "TenantId is required" });
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return BadRequest(new { error = "Email is required" });
+
+            _tenantContext.SetTenantId(request.TenantId);
+            await _identityLifecycleService.RequestPasswordResetAsync(
+                request.TenantId,
+                request.Email,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                cancellationToken);
+
+            return Ok(new { message = "If account exists, password reset was requested." });
+        }
+
+        [HttpPost("password-reset/complete")]
+        public async Task<IActionResult> CompletePasswordReset([FromBody] CompletePasswordResetRequest request, CancellationToken cancellationToken)
+        {
+            if (request.TenantId == Guid.Empty)
+                return BadRequest(new { error = "TenantId is required" });
+            if (string.IsNullOrWhiteSpace(request.ResetToken))
+                return BadRequest(new { error = "ResetToken is required" });
+            if (string.IsNullOrWhiteSpace(request.NewPassword))
+                return BadRequest(new { error = "NewPassword is required" });
+
+            _tenantContext.SetTenantId(request.TenantId);
+            var updated = await _identityLifecycleService.CompletePasswordResetAsync(
+                request.TenantId,
+                request.ResetToken,
+                request.NewPassword,
+                cancellationToken);
+
+            if (!updated)
+                return BadRequest(new { error = "Invalid or expired reset token" });
+
+            return Ok(new { message = "Password reset successful." });
+        }
+
         private async Task<IActionResult> RevokeRefreshTokenInternal(
             RevokeRefreshTokenRequest request,
             string? defaultReason,
@@ -264,6 +459,18 @@ namespace Presentation.Controllers
             });
 
             return Ok(new { message = "Refresh token revoked" });
+        }
+
+        private Guid ResolveCurrentTenantId()
+        {
+            var claim = User.FindFirst("tenant_id")?.Value;
+            return Guid.TryParse(claim, out var tenantId) ? tenantId : Guid.Empty;
+        }
+
+        private Guid ResolveCurrentUserId()
+        {
+            var claim = User.FindFirst("sub")?.Value;
+            return Guid.TryParse(claim, out var userId) ? userId : Guid.Empty;
         }
     }
 }

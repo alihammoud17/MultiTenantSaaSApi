@@ -125,6 +125,65 @@ namespace Application.Services
             return new RefreshTokenIssueResult(newTokenValue, newToken.Id, newToken.ExpiresAt);
         }
 
+        public async Task<IReadOnlyList<SessionInventoryItem>> GetActiveSessionsAsync(
+            Guid tenantId,
+            Guid userId,
+            string? currentRefreshToken = null,
+            CancellationToken cancellationToken = default)
+        {
+            string? currentTokenHash = string.IsNullOrWhiteSpace(currentRefreshToken)
+                ? null
+                : ComputeHash(currentRefreshToken);
+
+            var sessions = await _dbContext.RefreshTokens
+                .AsNoTracking()
+                .Where(t => t.TenantId == tenantId
+                    && t.UserId == userId
+                    && t.RevokedAt == null
+                    && t.ExpiresAt > DateTime.UtcNow)
+                .OrderByDescending(t => t.CreatedAt)
+                .Select(t => new SessionInventoryItem(
+                    t.Id,
+                    t.CreatedAt,
+                    t.ExpiresAt,
+                    t.CreatedByIp,
+                    currentTokenHash != null && t.TokenHash == currentTokenHash))
+                .ToListAsync(cancellationToken);
+
+            return sessions;
+        }
+
+        public async Task<int> RevokeAllActiveTokensAsync(
+            Guid tenantId,
+            Guid userId,
+            string? revokedByIp = null,
+            string? reason = null,
+            string? exceptRefreshToken = null,
+            CancellationToken cancellationToken = default)
+        {
+            string? exceptHash = string.IsNullOrWhiteSpace(exceptRefreshToken)
+                ? null
+                : ComputeHash(exceptRefreshToken);
+
+            var activeTokens = await _dbContext.RefreshTokens
+                .Where(t => t.TenantId == tenantId
+                    && t.UserId == userId
+                    && t.RevokedAt == null
+                    && t.ExpiresAt > DateTime.UtcNow
+                    && (exceptHash == null || t.TokenHash != exceptHash))
+                .ToListAsync(cancellationToken);
+
+            foreach (var token in activeTokens)
+            {
+                token.RevokedAt = DateTime.UtcNow;
+                token.RevokedByIp = revokedByIp;
+                token.RevocationReason = reason;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return activeTokens.Count;
+        }
+
         private static string GenerateToken()
         {
             var bytes = RandomNumberGenerator.GetBytes(64);

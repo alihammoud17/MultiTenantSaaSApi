@@ -93,4 +93,74 @@ public class AuthenticationSecurityTests : IClassFixture<ApiWebApplicationFactor
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("error").GetString().Should().Be("TenantId is required");
     }
+
+    [Fact]
+    public async Task InvitedUser_ShouldRequireVerificationBeforeLogin()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"invite-admin-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
+
+        var invitedEmail = $"member-{Guid.NewGuid():N}@example.com";
+        var inviteResponse = await client.PostAsJsonAsync("/api/auth/invites", new
+        {
+            email = invitedEmail,
+            role = "MEMBER"
+        });
+        inviteResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var invitePayload = await inviteResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var inviteToken = invitePayload.GetProperty("inviteToken").GetString();
+
+        var acceptResponse = await client.PostAsJsonAsync("/api/auth/invites/accept", new
+        {
+            tenantId = admin.TenantId,
+            inviteToken,
+            password = "Passw0rd!"
+        });
+        acceptResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email = invitedEmail,
+            password = "Passw0rd!"
+        });
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var body = await loginResponse.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Email is not verified");
+    }
+
+    [Fact]
+    public async Task RevokeAllSessions_ShouldInvalidateOutstandingRefreshTokens()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var email = $"sessions-{Guid.NewGuid():N}@example.com";
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, email, "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "Passw0rd!"
+        });
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var loginPayload = await loginResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var secondRefreshToken = loginPayload.GetProperty("refreshToken").GetString();
+
+        var inventoryResponse = await client.GetAsync("/api/auth/sessions");
+        inventoryResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var sessions = await inventoryResponse.Content.ReadFromJsonAsync<JsonElement>();
+        sessions.GetArrayLength().Should().BeGreaterOrEqualTo(2);
+
+        var revokeResponse = await client.PostAsJsonAsync("/api/auth/sessions/revoke-all", new
+        {
+            tenantId = auth.TenantId
+        });
+        revokeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var refreshOne = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
+        var refreshTwo = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId = auth.TenantId, refreshToken = secondRefreshToken });
+        refreshOne.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        refreshTwo.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }

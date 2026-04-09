@@ -13,6 +13,7 @@ namespace Domain.Entites
         public string UserExternalId { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string PasswordHash { get; set; } = string.Empty;
+        public DateTime? EmailVerifiedAt { get; set; }
         public string Role { get; set; } = "MEMBER";
         public DateTime CreatedAt { get; set; }
         public DateTime? LastLoginAt { get; set; }
