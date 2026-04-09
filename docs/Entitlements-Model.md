@@ -4,7 +4,7 @@ _Last updated: April 6, 2026._
 
 This document defines the V3 entitlements design **on top of the current plan/subscription implementation** so implementation can proceed incrementally without breaking existing plan upgrade behavior.
 
-> Scope note: this is a design checkpoint only. It does **not** claim that runtime entitlement enforcement is fully implemented yet.
+> Scope note: foundation implementation is now started (schema + evaluator/enforcer + first billing invoice gate), but runtime entitlement enforcement is **not** fully rolled out yet.
 
 ## Current baseline (what exists today)
 

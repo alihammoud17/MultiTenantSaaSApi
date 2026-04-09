@@ -65,6 +65,12 @@ namespace Infrastructure.Data
         public DbSet<Permission> Permissions => Set<Permission>();
         public DbSet<UserRole> UserRoles => Set<UserRole>();
         public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+        public DbSet<EntitlementDefinition> EntitlementDefinitions => Set<EntitlementDefinition>();
+        public DbSet<PlanEntitlement> PlanEntitlements => Set<PlanEntitlement>();
+        public DbSet<AddOnDefinition> AddOnDefinitions => Set<AddOnDefinition>();
+        public DbSet<AddOnEntitlement> AddOnEntitlements => Set<AddOnEntitlement>();
+        public DbSet<TenantAddOnAssignment> TenantAddOnAssignments => Set<TenantAddOnAssignment>();
+        public DbSet<TenantEntitlementOverride> TenantEntitlementOverrides => Set<TenantEntitlementOverride>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -124,6 +130,64 @@ namespace Infrastructure.Data
                 entity.Property(e => e.ProviderEventId).IsRequired().HasMaxLength(120);
                 entity.Property(e => e.CorrelationId).IsRequired().HasMaxLength(120);
                 entity.Property(e => e.TargetPlanId).HasMaxLength(64);
+            });
+
+            builder.Entity<EntitlementDefinition>(entity =>
+            {
+                entity.HasKey(e => e.Key);
+                entity.Property(e => e.Key).HasMaxLength(160);
+                entity.Property(e => e.DisplayName).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.Description).HasMaxLength(512);
+                entity.Property(e => e.DefaultValue).HasMaxLength(1024);
+            });
+
+            builder.Entity<PlanEntitlement>(entity =>
+            {
+                entity.HasKey(e => new { e.PlanId, e.EntitlementKey });
+                entity.Property(e => e.EntitlementKey).HasMaxLength(160);
+                entity.Property(e => e.Value).IsRequired().HasMaxLength(1024);
+                entity.HasOne(e => e.Plan).WithMany().HasForeignKey(e => e.PlanId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.EntitlementDefinition).WithMany(e => e.PlanEntitlements).HasForeignKey(e => e.EntitlementKey).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<AddOnDefinition>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasMaxLength(120);
+                entity.Property(e => e.DisplayName).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.Description).HasMaxLength(512);
+                entity.Property(e => e.BillingProviderProductRef).HasMaxLength(200);
+            });
+
+            builder.Entity<AddOnEntitlement>(entity =>
+            {
+                entity.HasKey(e => new { e.AddOnId, e.EntitlementKey });
+                entity.Property(e => e.EntitlementKey).HasMaxLength(160);
+                entity.Property(e => e.Value).IsRequired().HasMaxLength(1024);
+                entity.HasOne(e => e.AddOn).WithMany(e => e.Entitlements).HasForeignKey(e => e.AddOnId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.EntitlementDefinition).WithMany().HasForeignKey(e => e.EntitlementKey).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<TenantAddOnAssignment>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.Status, e.EffectiveFromUtc });
+                entity.HasIndex(e => new { e.TenantId, e.AddOnId, e.Status });
+                entity.Property(e => e.AddOnId).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.ExternalReference).HasMaxLength(200);
+                entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.AddOn).WithMany().HasForeignKey(e => e.AddOnId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<TenantEntitlementOverride>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.EntitlementKey, e.EffectiveFromUtc });
+                entity.Property(e => e.EntitlementKey).HasMaxLength(160);
+                entity.Property(e => e.Value).IsRequired().HasMaxLength(1024);
+                entity.Property(e => e.Reason).IsRequired().HasMaxLength(300);
+                entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.EntitlementDefinition).WithMany().HasForeignKey(e => e.EntitlementKey).OnDelete(DeleteBehavior.Cascade);
             });
 
 
@@ -282,6 +346,100 @@ namespace Infrastructure.Data
                 new Permission { Id = Guid.Parse("55555555-5555-5555-5555-555555555555"), Name = "billing.manage", Description = "Manage billing" },
                 new Permission { Id = Guid.Parse("66666666-6666-6666-6666-666666666666"), Name = "auditlogs.read", Description = "View tenant audit logs" }
             );
+
+            builder.Entity<EntitlementDefinition>().HasData(
+                new EntitlementDefinition
+                {
+                    Key = "feature.billing.invoices.read",
+                    DisplayName = "Billing invoice list access",
+                    Description = "Allows tenant users to read tenant-scoped billing invoice summaries.",
+                    ValueType = EntitlementValueType.Boolean,
+                    Category = EntitlementCategory.Feature,
+                    IsActive = true,
+                    DefaultValue = "false",
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new EntitlementDefinition
+                {
+                    Key = "quota.api.calls.monthly",
+                    DisplayName = "Monthly API call quota",
+                    Description = "Plan-level monthly API call quota baseline.",
+                    ValueType = EntitlementValueType.Integer,
+                    Category = EntitlementCategory.Quota,
+                    IsActive = true,
+                    DefaultValue = "0",
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new EntitlementDefinition
+                {
+                    Key = "quota.users.max",
+                    DisplayName = "Maximum tenant users",
+                    Description = "Plan-level max allowed tenant users.",
+                    ValueType = EntitlementValueType.Integer,
+                    Category = EntitlementCategory.Quota,
+                    IsActive = true,
+                    DefaultValue = "1",
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                });
+
+            builder.Entity<PlanEntitlement>().HasData(
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "feature.billing.invoices.read",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "feature.billing.invoices.read",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "quota.api.calls.monthly",
+                    Value = "1000",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "quota.api.calls.monthly",
+                    Value = "50000",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "quota.users.max",
+                    Value = "1",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "quota.users.max",
+                    Value = "10",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                });
         }
     }
 }

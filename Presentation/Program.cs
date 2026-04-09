@@ -57,6 +57,8 @@ builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IBillingCallbackProcessor, BillingCallbackProcessor>();
 builder.Services.AddSingleton<IInternalRequestSignatureValidator, InternalRequestSignatureValidator>();
+builder.Services.AddScoped<IEntitlementEvaluator, EntitlementEvaluator>();
+builder.Services.AddScoped<IEntitlementEnforcer, EntitlementEnforcer>();
 
 // RBAC
 builder.Services.AddScoped<IRbacAuthorizationService, RbacAuthorizationService>();

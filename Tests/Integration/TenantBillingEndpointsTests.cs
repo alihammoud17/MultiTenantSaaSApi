@@ -101,6 +101,67 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
     }
 
     [Fact]
+    public async Task BillingInvoices_ShouldReturnForbidden_WhenTenantOverrideDisablesFeature()
+    {
+        using var client = _factory.CreateClient();
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"billing-entitlement-deny-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.TenantEntitlementOverrides.Add(new TenantEntitlementOverride
+            {
+                Id = Guid.NewGuid(),
+                TenantId = auth.TenantId,
+                EntitlementKey = "feature.billing.invoices.read",
+                Value = "false",
+                Reason = "Security review disablement",
+                Source = TenantEntitlementOverrideSource.ManualCorrection,
+                EffectiveFromUtc = DateTime.UtcNow.AddMinutes(-1),
+                CreatedUtc = DateTime.UtcNow
+            });
+            db.SaveChanges();
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+        var response = await client.GetAsync("/api/billing/invoices");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Contain("feature.billing.invoices.read");
+    }
+
+    [Fact]
+    public async Task BillingInvoices_EntitlementOverrideMustRemainTenantScoped()
+    {
+        using var client = _factory.CreateClient();
+        var authA = await SecurityTestHelpers.RegisterTenantAsync(client, $"billing-entitlement-scope-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var authB = await SecurityTestHelpers.RegisterTenantAsync(client, $"billing-entitlement-scope-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.TenantEntitlementOverrides.Add(new TenantEntitlementOverride
+            {
+                Id = Guid.NewGuid(),
+                TenantId = authB.TenantId,
+                EntitlementKey = "feature.billing.invoices.read",
+                Value = "false",
+                Reason = "Tenant-specific disablement",
+                Source = TenantEntitlementOverrideSource.ManualCorrection,
+                EffectiveFromUtc = DateTime.UtcNow.AddMinutes(-1),
+                CreatedUtc = DateTime.UtcNow
+            });
+            db.SaveChanges();
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authA.Token);
+        var response = await client.GetAsync("/api/billing/invoices");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task BillingSubscriptionActions_ShouldRequireBillingManagePermission()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
