@@ -6,6 +6,7 @@ using Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Presentation.Authorization;
 
 namespace Presentation.Controllers
 {
@@ -16,15 +17,18 @@ namespace Presentation.Controllers
         private readonly ApplicationDbContext _dbContext;
         private readonly ITenantContext _tenantContext;
         private readonly IAuditService _auditService;
+        private readonly IEntitlementEnforcer _entitlementEnforcer;
 
         public PlansController(
             ApplicationDbContext dbContext,
             ITenantContext tenantContext,
-            IAuditService auditService)
+            IAuditService auditService,
+            IEntitlementEnforcer entitlementEnforcer)
         {
             _dbContext = dbContext;
             _tenantContext = tenantContext;
             _auditService = auditService;
+            _entitlementEnforcer = entitlementEnforcer;
         }
 
         [HttpGet]
@@ -51,6 +55,12 @@ namespace Presentation.Controllers
         [Authorize(Policy = RbacPolicyNames.BillingManage)]
         public async Task<IActionResult> UpgradePlan([FromBody] UpgradePlanRequest request)
         {
+            var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, _tenantContext.TenantId, EntitlementKeys.BillingPlanUpgrade);
+            if (deniedResult is not null)
+            {
+                return deniedResult;
+            }
+
             if (string.IsNullOrWhiteSpace(request.PlanId))
             {
                 return BadRequest(new { error = "PlanId is required" });

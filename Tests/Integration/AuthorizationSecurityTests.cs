@@ -2,7 +2,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Domain.Authorization;
+using Domain.Entites;
 using FluentAssertions;
+using Infrastructure.Data;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Tests.Integration;
 
@@ -107,5 +111,61 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
         });
 
         create.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public async Task AdminUserManagement_ShouldReturnForbidden_WhenAdvancedAdminEntitlementDisabled()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"authz-admin-entitlement-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.TenantEntitlementOverrides.Add(new TenantEntitlementOverride
+            {
+                Id = Guid.NewGuid(),
+                TenantId = admin.TenantId,
+                EntitlementKey = EntitlementKeys.AdminAdvancedUserManagement,
+                Value = "false",
+                Reason = "Advanced admin module disabled",
+                Source = TenantEntitlementOverrideSource.ManualCorrection,
+                EffectiveFromUtc = DateTime.UtcNow.AddMinutes(-1),
+                CreatedUtc = DateTime.UtcNow
+            });
+            db.SaveChanges();
+        }
+
+        var response = await client.GetAsync("/api/admin/tenant/users");
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task AuditLogs_ShouldReturnForbidden_WhenAnalyticsEntitlementDisabled()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"authz-analytics-entitlement-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.TenantEntitlementOverrides.Add(new TenantEntitlementOverride
+            {
+                Id = Guid.NewGuid(),
+                TenantId = admin.TenantId,
+                EntitlementKey = EntitlementKeys.AnalyticsAuditLogsRead,
+                Value = "false",
+                Reason = "Analytics module disabled",
+                Source = TenantEntitlementOverrideSource.ManualCorrection,
+                EffectiveFromUtc = DateTime.UtcNow.AddMinutes(-1),
+                CreatedUtc = DateTime.UtcNow
+            });
+            db.SaveChanges();
+        }
+
+        var response = await client.GetAsync("/api/tenant/audit-logs");
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

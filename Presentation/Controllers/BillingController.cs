@@ -6,6 +6,7 @@ using Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Presentation.Authorization;
 
 namespace Presentation.Controllers;
 
@@ -65,10 +66,10 @@ public class BillingController : ControllerBase
     public async Task<IActionResult> ListInvoices()
     {
         var tenantId = _tenantContext.TenantId;
-        var enforcement = await _entitlementEnforcer.EnsureFeatureEnabledAsync(tenantId, "feature.billing.invoices.read");
-        if (!enforcement.Allowed)
+        var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, tenantId, EntitlementKeys.BillingInvoicesRead);
+        if (deniedResult is not null)
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = enforcement.DenialReason });
+            return deniedResult;
         }
 
         var invoices = await _dbContext.BillingEventInboxes
@@ -96,6 +97,12 @@ public class BillingController : ControllerBase
     public async Task<IActionResult> CancelSubscription([FromBody] CancelSubscriptionRequest request)
     {
         var tenantId = _tenantContext.TenantId;
+        var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, tenantId, EntitlementKeys.BillingSubscriptionManage);
+        if (deniedResult is not null)
+        {
+            return deniedResult;
+        }
+
         var subscription = await _dbContext.Subscriptions.SingleOrDefaultAsync(s => s.TenantId == tenantId);
         if (subscription is null)
         {
@@ -128,6 +135,12 @@ public class BillingController : ControllerBase
     public async Task<IActionResult> ReactivateSubscription([FromBody] ReactivateSubscriptionRequest request)
     {
         var tenantId = _tenantContext.TenantId;
+        var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, tenantId, EntitlementKeys.BillingSubscriptionManage);
+        if (deniedResult is not null)
+        {
+            return deniedResult;
+        }
+
         var subscription = await _dbContext.Subscriptions.SingleOrDefaultAsync(s => s.TenantId == tenantId);
         if (subscription is null)
         {

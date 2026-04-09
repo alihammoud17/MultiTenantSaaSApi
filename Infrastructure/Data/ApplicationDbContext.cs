@@ -362,6 +362,66 @@ namespace Infrastructure.Data
                 },
                 new EntitlementDefinition
                 {
+                    Key = "feature.billing.subscription.manage",
+                    DisplayName = "Billing subscription self-service management",
+                    Description = "Allows cancellation and reactivation actions for tenant subscriptions.",
+                    ValueType = EntitlementValueType.Boolean,
+                    Category = EntitlementCategory.Feature,
+                    IsActive = true,
+                    DefaultValue = "false",
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new EntitlementDefinition
+                {
+                    Key = "feature.billing.plan.upgrade",
+                    DisplayName = "Billing plan upgrade flow",
+                    Description = "Allows tenant billing managers to perform plan upgrades.",
+                    ValueType = EntitlementValueType.Boolean,
+                    Category = EntitlementCategory.Feature,
+                    IsActive = true,
+                    DefaultValue = "false",
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new EntitlementDefinition
+                {
+                    Key = "feature.analytics.audit_logs.read",
+                    DisplayName = "Tenant analytics and audit visibility",
+                    Description = "Allows tenant users to access analytics-oriented audit log read surfaces.",
+                    ValueType = EntitlementValueType.Boolean,
+                    Category = EntitlementCategory.Feature,
+                    IsActive = true,
+                    DefaultValue = "false",
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new EntitlementDefinition
+                {
+                    Key = "feature.admin.advanced.user_management",
+                    DisplayName = "Advanced tenant user management",
+                    Description = "Allows privileged tenant administrators to access advanced user management capabilities.",
+                    ValueType = EntitlementValueType.Boolean,
+                    Category = EntitlementCategory.Feature,
+                    IsActive = true,
+                    DefaultValue = "false",
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new EntitlementDefinition
+                {
+                    Key = "feature.modules.future.hooks",
+                    DisplayName = "Future module gating hook",
+                    Description = "Reserved module-level gate to support progressive rollout for future protected modules.",
+                    ValueType = EntitlementValueType.Boolean,
+                    Category = EntitlementCategory.Feature,
+                    IsActive = true,
+                    DefaultValue = "false",
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new EntitlementDefinition
+                {
                     Key = "quota.api.calls.monthly",
                     DisplayName = "Monthly API call quota",
                     Description = "Plan-level monthly API call quota baseline.",
@@ -399,6 +459,96 @@ namespace Infrastructure.Data
                 {
                     PlanId = "plan-pro",
                     EntitlementKey = "feature.billing.invoices.read",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "feature.billing.subscription.manage",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "feature.billing.subscription.manage",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "feature.billing.plan.upgrade",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "feature.billing.plan.upgrade",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "feature.analytics.audit_logs.read",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "feature.analytics.audit_logs.read",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "feature.admin.advanced.user_management",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "feature.admin.advanced.user_management",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "feature.modules.future.hooks",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "feature.modules.future.hooks",
                     Value = "true",
                     Source = EntitlementSourceType.PlanDefault,
                     CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
