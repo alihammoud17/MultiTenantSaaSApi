@@ -19,18 +19,13 @@ namespace Application.Services
         private static string MaskEmailForLog(string email)
         {
             var sanitized = SanitizeForLog(email).Trim();
-            var atIndex = sanitized.IndexOf('@');
 
-            if (atIndex <= 0 || atIndex == sanitized.Length - 1)
+            if (string.IsNullOrWhiteSpace(sanitized))
             {
-                return "***";
+                return "[REDACTED_EMAIL]";
             }
 
-            var localPart = sanitized[..atIndex];
-            var domainPart = sanitized[(atIndex + 1)..];
-
-            var visiblePrefix = localPart.Length <= 1 ? "*" : localPart[..1];
-            return $"{visiblePrefix}***@{domainPart}";
+            return "[REDACTED_EMAIL]";
         }
 
         public Task SendInviteAsync(Guid tenantId, string email, string inviteToken, DateTime expiresAt, CancellationToken cancellationToken = default)
