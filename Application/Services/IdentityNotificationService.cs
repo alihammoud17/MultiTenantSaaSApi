@@ -11,14 +11,19 @@ namespace Application.Services
             _logger = logger;
         }
 
+        private static string SanitizeForLog(string value)
+        {
+            return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+        }
+
         public Task SendInviteAsync(Guid tenantId, string email, string inviteToken, DateTime expiresAt, CancellationToken cancellationToken = default)
         {
             _logger.LogInformation(
                 "Identity invite notification queued. TenantId={TenantId}, Email={Email}, ExpiresAt={ExpiresAt}, TokenPreview={TokenPreview}",
                 tenantId,
-                email,
+                SanitizeForLog(email),
                 expiresAt,
-                inviteToken[..Math.Min(8, inviteToken.Length)]);
+                SanitizeForLog(inviteToken[..Math.Min(8, inviteToken.Length)]));
 
             return Task.CompletedTask;
         }
@@ -28,9 +33,9 @@ namespace Application.Services
             _logger.LogInformation(
                 "Verification notification queued. TenantId={TenantId}, Email={Email}, ExpiresAt={ExpiresAt}, TokenPreview={TokenPreview}",
                 tenantId,
-                email,
+                SanitizeForLog(email),
                 expiresAt,
-                verificationToken[..Math.Min(8, verificationToken.Length)]);
+                SanitizeForLog(verificationToken[..Math.Min(8, verificationToken.Length)]));
 
             return Task.CompletedTask;
         }
@@ -40,9 +45,9 @@ namespace Application.Services
             _logger.LogInformation(
                 "Password reset notification queued. TenantId={TenantId}, Email={Email}, ExpiresAt={ExpiresAt}, TokenPreview={TokenPreview}",
                 tenantId,
-                email,
+                SanitizeForLog(email),
                 expiresAt,
-                resetToken[..Math.Min(8, resetToken.Length)]);
+                SanitizeForLog(resetToken[..Math.Min(8, resetToken.Length)]));
 
             return Task.CompletedTask;
         }
