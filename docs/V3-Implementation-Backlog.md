@@ -99,6 +99,20 @@ Remaining follow-up for this area:
 - add recovery-code issuance/rotation flow
 - tighten replay protection/cleanup for stale enrollment and step-up records with scheduled retention jobs
 
+## Identity hardening documentation checkpoint (April 10, 2026)
+
+Documentation for the identity-hardening iteration is now aligned:
+
+- root `README.md` includes explicit identity-hardening setup notes and environment/secret guidance
+- new `docs/Identity-and-Security.md` captures implemented identity lifecycle + MFA step-up behavior, tenant safety rules, and remaining hardening backlog
+- this backlog now references the identity/security doc as the source-of-truth for the iteration status
+
+Secrets/environment update for this iteration:
+
+- no **new mandatory** runtime secrets or environment variables were introduced by the current identity-hardening implementation
+- existing JWT configuration remains required (`Jwt:Secret`, `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpirationMinutes`)
+- a future live notification-provider integration will require provider-specific secrets and should be documented when implemented
+
 ## V3 priorities in implementation order
 
 The implementation order below is driven by current dependencies in the repo.

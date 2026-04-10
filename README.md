@@ -213,6 +213,7 @@ For operational procedures (startup checks, state-file hygiene, replay handling,
 
 - `docs/Billing-Workflow-Runbook.md`
 - `docs/Entitlements-Model.md`
+- `docs/Identity-and-Security.md`
 
 ## API surface summary
 
@@ -283,6 +284,13 @@ dotnet user-secrets set "Jwt:ExpirationMinutes" "60"
 dotnet user-secrets set "BillingIntegration:SharedSecret" "YOUR_INTERNAL_BILLING_SHARED_SECRET"
 dotnet user-secrets set "BillingIntegration:AllowedClockSkewMinutes" "5"
 ```
+
+Identity hardening iteration notes:
+
+- No additional mandatory runtime secrets were introduced for invites, verification/reset tokens, MFA enrollment, or step-up sessions in this iteration.
+- Existing JWT settings (`Jwt:Secret`, issuer/audience, expiration) remain required and security-sensitive.
+- `IIdentityNotificationService` is still a logging placeholder and does **not** require provider credentials yet. When a live mail provider is wired, add the provider API key/secret in user-secrets or environment configuration (do not hardcode).
+- For identity/security behavior and current follow-up items, see `docs/Identity-and-Security.md`.
 
 Optional verification:
 
