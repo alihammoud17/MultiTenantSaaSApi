@@ -1,3 +1,4 @@
+using BCrypt.Net;
 using Domain.Entites;
 using Domain.Interfaces;
 using Domain.Outputs;

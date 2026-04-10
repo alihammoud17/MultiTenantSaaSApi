@@ -1,4 +1,5 @@
 using Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Services
 {
