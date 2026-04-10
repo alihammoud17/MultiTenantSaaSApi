@@ -7,8 +7,6 @@ using Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 
 namespace Presentation.Controllers
 {
@@ -471,21 +469,8 @@ namespace Presentation.Controllers
 
         private Guid ResolveCurrentUserId()
         {
-            var claimTypesToCheck = new[]
-            {
-                "sub",
-                JwtRegisteredClaimNames.Sub,
-                ClaimTypes.NameIdentifier
-            };
-
-            foreach (var claimType in claimTypesToCheck)
-            {
-                var claimValue = User.FindFirst(claimType)?.Value;
-                if (Guid.TryParse(claimValue, out var userId))
-                    return userId;
-            }
-
-            return Guid.Empty;
+            var claim = User.FindFirst("sub")?.Value;
+            return Guid.TryParse(claim, out var userId) ? userId : Guid.Empty;
         }
     }
 }
