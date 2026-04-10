@@ -138,22 +138,21 @@ Run the relevant commands after changes.
 
 ### For .NET work
 Run:
-- /tmp/dotnet/dotnet --info
-- dotnet-ef --version
-- /tmp/dotnet/dotnet restore
-- /tmp/dotnet/dotnet build --no-restore
-- /tmp/dotnet/dotnet test --no-build --verbosity normal
-If needed, specify:
-- --project <path-to-infrastructure-or-data-project>
-- --startup-project <path-to-api-or-host-project>
+- dotnet --info
+- /tmp/dotnet-tools/dotnet-ef --version
+- dotnet restore
+- dotnet build --no-restore
+- dotnet test --no-build --verbosity normal
 
 ## EF Core
-For migration commands, use:
-- dotnet-ef migrations add <Name>
-- dotnet-ef database update
-If needed, specify:
-- --project <path-to-infrastructure-or-data-project>
-- --startup-project <path-to-api-or-host-project>
+When a schema/model change requires a migration, you may use:
+- /tmp/dotnet-tools/dotnet-ef migrations add <MigrationName>
+- /tmp/dotnet-tools/dotnet-ef database update
+
+If the DbContext is not in the startup project, specify:
+- --project <path-to-ef-project>
+- --startup-project <path-to-startup-project>
+<path-to-startup-project> is normally the Infrastructure project.
 
 ### For BillingService work
 - run the project-specific install/build/test commands documented in BillingService
