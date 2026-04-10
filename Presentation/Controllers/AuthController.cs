@@ -270,6 +270,7 @@ namespace Presentation.Controllers
             if (effectiveUserId != actorUserId && !string.Equals(User.FindFirst("role")?.Value, "ADMIN", StringComparison.OrdinalIgnoreCase))
                 return Forbid();
 
+            _tenantContext.SetTenantId(request.TenantId);
             var revokedCount = await _refreshTokenService.RevokeAllActiveTokensAsync(
                 request.TenantId,
                 effectiveUserId,
@@ -277,7 +278,6 @@ namespace Presentation.Controllers
                 string.IsNullOrWhiteSpace(request.Reason) ? "REVOKE_ALL" : request.Reason,
                 cancellationToken: cancellationToken);
 
-            _tenantContext.SetTenantId(request.TenantId);
             await _auditService.LogAsync("USER_SESSIONS_REVOKED_ALL", nameof(User), effectiveUserId.ToString(), new
             {
                 TenantId = request.TenantId,

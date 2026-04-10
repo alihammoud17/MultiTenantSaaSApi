@@ -157,10 +157,18 @@ public class AuthenticationSecurityTests : IClassFixture<ApiWebApplicationFactor
             tenantId = auth.TenantId
         });
         revokeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var revokePayload = await revokeResponse.Content.ReadFromJsonAsync<JsonElement>();
+        revokePayload.GetProperty("revokedCount").GetInt32().Should().BeGreaterThanOrEqualTo(2);
 
         var refreshOne = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
         var refreshTwo = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId = auth.TenantId, refreshToken = secondRefreshToken });
+
         refreshOne.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var refreshOnePayload = await refreshOne.Content.ReadFromJsonAsync<JsonElement>();
+        refreshOnePayload.GetProperty("error").GetString().Should().Be("Invalid or expired refresh token");
+
         refreshTwo.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var refreshTwoPayload = await refreshTwo.Content.ReadFromJsonAsync<JsonElement>();
+        refreshTwoPayload.GetProperty("error").GetString().Should().Be("Invalid or expired refresh token");
     }
 }
