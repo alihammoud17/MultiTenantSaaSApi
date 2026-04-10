@@ -137,8 +137,13 @@ Add or update tests for:
 Run the relevant commands after changes.
 
 ### For .NET work
-- dotnet build
-- dotnet test
+Run:
+- /tmp/dotnet/dotnet --info
+- /tmp/dotnet/dotnet restore
+- /tmp/dotnet/dotnet build --no-restore
+- /tmp/dotnet/dotnet test --no-build --verbosity normal
+If `.config/dotnet-tools.json` exists, run:
+- /tmp/dotnet/dotnet tool restore
 
 ### For BillingService work
 - run the project-specific install/build/test commands documented in BillingService
