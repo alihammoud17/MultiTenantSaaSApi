@@ -139,11 +139,21 @@ Run the relevant commands after changes.
 ### For .NET work
 Run:
 - /tmp/dotnet/dotnet --info
+- dotnet-ef --version
 - /tmp/dotnet/dotnet restore
 - /tmp/dotnet/dotnet build --no-restore
 - /tmp/dotnet/dotnet test --no-build --verbosity normal
-If `.config/dotnet-tools.json` exists, run:
-- /tmp/dotnet/dotnet tool restore
+If needed, specify:
+- --project <path-to-infrastructure-or-data-project>
+- --startup-project <path-to-api-or-host-project>
+
+## EF Core
+For migration commands, use:
+- dotnet-ef migrations add <Name>
+- dotnet-ef database update
+If needed, specify:
+- --project <path-to-infrastructure-or-data-project>
+- --startup-project <path-to-api-or-host-project>
 
 ### For BillingService work
 - run the project-specific install/build/test commands documented in BillingService
