@@ -39,4 +39,14 @@ namespace Domain.DTOs
         Guid? UserId,
         string? Reason = null
     );
+
+    public record CompleteMfaEnrollmentRequest(
+        string EnrollmentToken,
+        string Code
+    );
+
+    public record StepUpAuthenticationRequest(
+        string Code,
+        string? Purpose = null
+    );
 }

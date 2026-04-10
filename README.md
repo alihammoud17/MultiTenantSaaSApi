@@ -60,6 +60,8 @@ This repository currently contains:
 - Refresh token rotation on `POST /api/auth/refresh`.
 - Session inventory endpoint at `GET /api/auth/sessions`.
 - Session revoke-all endpoint at `POST /api/auth/sessions/revoke-all`.
+- MFA enrollment and verification endpoints for authenticated users.
+- MFA step-up endpoint for admin-sensitive actions when MFA is enrolled.
 - Refresh token revocation via:
   - `POST /api/auth/logout`
   - `POST /api/auth/revoke`
@@ -228,6 +230,9 @@ For operational procedures (startup checks, state-file hygiene, replay handling,
 - `POST /api/auth/verification/complete`
 - `POST /api/auth/password-reset/request`
 - `POST /api/auth/password-reset/complete`
+- `POST /api/auth/mfa/enroll/initiate` (authenticated)
+- `POST /api/auth/mfa/enroll/verify` (authenticated)
+- `POST /api/auth/mfa/step-up` (authenticated)
 - `GET /api/plans`
 - `GET /health`
 - `GET /metrics`

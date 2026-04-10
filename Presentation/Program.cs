@@ -35,6 +35,7 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 builder.Services.AddScoped<IIdentityLifecycleService, IdentityLifecycleService>();
 builder.Services.AddScoped<IIdentityNotificationService, IdentityNotificationService>();
+builder.Services.AddScoped<IMfaService, MfaService>();
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>

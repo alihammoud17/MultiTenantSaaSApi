@@ -74,6 +74,8 @@ namespace Infrastructure.Data
         public DbSet<UserInvite> UserInvites => Set<UserInvite>();
         public DbSet<UserVerificationToken> UserVerificationTokens => Set<UserVerificationToken>();
         public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+        public DbSet<UserMfaEnrollmentChallenge> UserMfaEnrollmentChallenges => Set<UserMfaEnrollmentChallenge>();
+        public DbSet<UserStepUpSession> UserStepUpSessions => Set<UserStepUpSession>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -95,10 +97,29 @@ namespace Infrastructure.Data
                 entity.HasIndex(e => new { e.TenantId, e.Email }).IsUnique();
                 entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
                 entity.Property(e => e.Role).IsRequired().HasMaxLength(32);
+                entity.Property(e => e.MfaSecret).HasMaxLength(128);
                 entity.HasOne(e => e.Tenant)
                       .WithMany(t => t.Users)
                       .HasForeignKey(e => e.TenantId)
                       .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<UserMfaEnrollmentChallenge>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.UserId, e.ExpiresAt });
+                entity.HasIndex(e => e.EnrollmentTokenHash).IsUnique();
+                entity.Property(e => e.EnrollmentTokenHash).IsRequired().HasMaxLength(128);
+                entity.Property(e => e.Secret).IsRequired().HasMaxLength(128);
+            });
+
+            builder.Entity<UserStepUpSession>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.UserId, e.Purpose, e.ExpiresAt });
+                entity.HasIndex(e => e.SessionTokenHash).IsUnique();
+                entity.Property(e => e.Purpose).IsRequired().HasMaxLength(64);
+                entity.Property(e => e.SessionTokenHash).IsRequired().HasMaxLength(128);
             });
 
             builder.Entity<UserInvite>(entity =>

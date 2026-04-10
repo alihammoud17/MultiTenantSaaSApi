@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Presentation.Authorization;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace Presentation.Controllers
 {
@@ -19,17 +21,20 @@ namespace Presentation.Controllers
         private readonly ITenantContext _tenantContext;
         private readonly IAuditService _auditService;
         private readonly IEntitlementEnforcer _entitlementEnforcer;
+        private readonly IMfaService _mfaService;
 
         public AdminTenantManagementController(
             ApplicationDbContext dbContext,
             ITenantContext tenantContext,
             IAuditService auditService,
-            IEntitlementEnforcer entitlementEnforcer)
+            IEntitlementEnforcer entitlementEnforcer,
+            IMfaService mfaService)
         {
             _dbContext = dbContext;
             _tenantContext = tenantContext;
             _auditService = auditService;
             _entitlementEnforcer = entitlementEnforcer;
+            _mfaService = mfaService;
         }
 
         [HttpGet]
@@ -104,6 +109,10 @@ namespace Presentation.Controllers
         [Authorize(Policy = RbacPolicyNames.UsersManage)]
         public async Task<IActionResult> InviteOrAddUser([FromBody] InviteTenantUserRequest request)
         {
+            var stepUp = await ValidateStepUpOrForbidAsync("admin_sensitive");
+            if (stepUp is not null)
+                return stepUp;
+
             if (string.IsNullOrWhiteSpace(request.Email))
                 return BadRequest(new { error = "Email is required" });
 
@@ -172,6 +181,10 @@ namespace Presentation.Controllers
         [Authorize(Policy = RbacPolicyNames.UsersManage)]
         public async Task<IActionResult> RemoveUser(Guid userId)
         {
+            var stepUp = await ValidateStepUpOrForbidAsync("admin_sensitive");
+            if (stepUp is not null)
+                return stepUp;
+
             var tenantId = _tenantContext.TenantId;
             var deniedResult = await this.EnforceFeatureAsync(_entitlementEnforcer, tenantId, EntitlementKeys.AdminAdvancedUserManagement);
             if (deniedResult is not null)
@@ -204,6 +217,10 @@ namespace Presentation.Controllers
         [Authorize(Policy = RbacPolicyNames.UsersManage)]
         public async Task<IActionResult> AssignOrChangeRole(Guid userId, [FromBody] ChangeTenantUserRoleRequest request)
         {
+            var stepUp = await ValidateStepUpOrForbidAsync("admin_sensitive");
+            if (stepUp is not null)
+                return stepUp;
+
             if (string.IsNullOrWhiteSpace(request.Role))
                 return BadRequest(new { error = "Role is required" });
 
@@ -282,8 +299,51 @@ namespace Presentation.Controllers
 
         private Guid GetActorUserId()
         {
-            var subject = User.FindFirst("sub")?.Value;
-            return Guid.TryParse(subject, out var userId) ? userId : Guid.Empty;
+            var claimTypesToCheck = new[]
+            {
+                "sub",
+                JwtRegisteredClaimNames.Sub,
+                ClaimTypes.NameIdentifier
+            };
+
+            foreach (var claimType in claimTypesToCheck)
+            {
+                var claimValue = User.FindFirst(claimType)?.Value;
+                if (Guid.TryParse(claimValue, out var userId))
+                    return userId;
+            }
+
+            return Guid.Empty;
+        }
+
+        private async Task<IActionResult?> ValidateStepUpOrForbidAsync(string purpose)
+        {
+            var tenantId = _tenantContext.TenantId;
+            var userId = GetActorUserId();
+            if (tenantId == Guid.Empty || userId == Guid.Empty)
+                return null;
+
+            var user = await _dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Id == userId);
+            if (user == null)
+                return null;
+            if (!user.MfaEnabled)
+                return null;
+
+            var stepUpToken = Request.Headers["X-Step-Up-Token"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(stepUpToken))
+                return StatusCode(403, new { error = "Step-up authentication required" });
+
+            var tokenHash = _mfaService.HashToken(stepUpToken.Trim());
+            var session = await _dbContext.UserStepUpSessions.FirstOrDefaultAsync(s =>
+                s.TenantId == tenantId &&
+                s.UserId == userId &&
+                s.Purpose == purpose &&
+                s.SessionTokenHash == tokenHash);
+
+            if (session == null || session.ExpiresAt <= DateTime.UtcNow)
+                return StatusCode(403, new { error = "Invalid or expired step-up token" });
+
+            return null;
         }
     }
 }
