@@ -82,6 +82,22 @@ Remaining follow-up for this area:
 - add dedicated anti-automation controls (rate limits/challenges) around public verification/reset endpoints
 - add expiry cleanup/retention jobs for invite/verification/reset token tables
 
+## MFA step-up checkpoint (April 10, 2026)
+
+An MFA hardening slice for admin-sensitive actions is now implemented in the .NET API:
+
+- tenant-safe TOTP enrollment initiation + verification endpoints for authenticated users
+- persisted MFA enrollment state on user records
+- persisted, short-lived step-up sessions for sensitive admin actions
+- step-up enforcement on admin user-management and selected auth-sensitive revocation/invite endpoints when the actor has MFA enrolled
+- integration tests covering enrollment success and step-up enforcement/failure behavior
+
+Remaining follow-up for this area:
+
+- encrypt MFA secrets at rest (currently stored as a bounded column value)
+- add recovery-code issuance/rotation flow
+- tighten replay protection/cleanup for stale enrollment and step-up records with scheduled retention jobs
+
 ## V3 priorities in implementation order
 
 The implementation order below is driven by current dependencies in the repo.

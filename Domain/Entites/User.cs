@@ -17,6 +17,9 @@ namespace Domain.Entites
         public string Role { get; set; } = "MEMBER";
         public DateTime CreatedAt { get; set; }
         public DateTime? LastLoginAt { get; set; }
+        public bool MfaEnabled { get; set; }
+        public string? MfaSecret { get; set; }
+        public DateTime? MfaEnabledAt { get; set; }
 
         // Navigation
         public Tenant Tenant { get; set; } = null!;

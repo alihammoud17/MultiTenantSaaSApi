@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 
@@ -170,5 +172,111 @@ public class AuthenticationSecurityTests : IClassFixture<ApiWebApplicationFactor
         refreshTwo.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         var refreshTwoPayload = await refreshTwo.Content.ReadFromJsonAsync<JsonElement>();
         refreshTwoPayload.GetProperty("error").GetString().Should().Be("Invalid or expired refresh token");
+    }
+
+    [Fact]
+    public async Task MfaEnrollment_ShouldSucceed_WithValidTotpCode()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"mfa-enroll-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var initiateResponse = await client.PostAsync("/api/auth/mfa/enroll/initiate", null);
+        initiateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var initiateBody = await initiateResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var enrollmentToken = initiateBody.GetProperty("enrollmentToken").GetString();
+        var secret = initiateBody.GetProperty("secret").GetString();
+
+        var completeResponse = await client.PostAsJsonAsync("/api/auth/mfa/enroll/verify", new
+        {
+            enrollmentToken,
+            code = GenerateTotpCode(secret!)
+        });
+
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task SensitiveAction_ShouldRequireStepUp_WhenMfaIsEnabled()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"mfa-stepup-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var initiateResponse = await client.PostAsync("/api/auth/mfa/enroll/initiate", null);
+        var initiateBody = await initiateResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var enrollmentToken = initiateBody.GetProperty("enrollmentToken").GetString();
+        var secret = initiateBody.GetProperty("secret").GetString();
+
+        var completeResponse = await client.PostAsJsonAsync("/api/auth/mfa/enroll/verify", new
+        {
+            enrollmentToken,
+            code = GenerateTotpCode(secret!)
+        });
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var missingStepUp = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        {
+            email = $"blocked-{Guid.NewGuid():N}@example.com",
+            password = "Passw0rd!",
+            role = "MEMBER"
+        });
+        missingStepUp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var stepUpResponse = await client.PostAsJsonAsync("/api/auth/mfa/step-up", new
+        {
+            code = GenerateTotpCode(secret!),
+            purpose = "admin_sensitive"
+        });
+        stepUpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var stepUpBody = await stepUpResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var stepUpToken = stepUpBody.GetProperty("stepUpToken").GetString();
+
+        client.DefaultRequestHeaders.Remove("X-Step-Up-Token");
+        client.DefaultRequestHeaders.Add("X-Step-Up-Token", stepUpToken);
+
+        var withStepUp = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        {
+            email = $"allowed-{Guid.NewGuid():N}@example.com",
+            password = "Passw0rd!",
+            role = "MEMBER"
+        });
+        withStepUp.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    private static string GenerateTotpCode(string secret)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var sanitized = secret.Trim().TrimEnd('=').ToUpperInvariant();
+        var bytes = new List<byte>();
+        var bitBuffer = 0;
+        var bitsInBuffer = 0;
+        foreach (var character in sanitized)
+        {
+            var value = alphabet.IndexOf(character);
+            if (value < 0)
+                throw new InvalidOperationException("Invalid base32 secret");
+            bitBuffer = (bitBuffer << 5) | value;
+            bitsInBuffer += 5;
+            if (bitsInBuffer >= 8)
+            {
+                bitsInBuffer -= 8;
+                bytes.Add((byte)((bitBuffer >> bitsInBuffer) & 0xFF));
+            }
+        }
+
+        var step = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        Span<byte> timestep = stackalloc byte[8];
+        BitConverter.TryWriteBytes(timestep, step);
+        if (BitConverter.IsLittleEndian)
+            timestep.Reverse();
+        using var hmac = new HMACSHA1(bytes.ToArray());
+        var hash = hmac.ComputeHash(timestep.ToArray());
+        var offset = hash[^1] & 0x0F;
+        var binaryCode = ((hash[offset] & 0x7f) << 24)
+                         | ((hash[offset + 1] & 0xff) << 16)
+                         | ((hash[offset + 2] & 0xff) << 8)
+                         | (hash[offset + 3] & 0xff);
+        return (binaryCode % 1_000_000).ToString("D6");
     }
 }
