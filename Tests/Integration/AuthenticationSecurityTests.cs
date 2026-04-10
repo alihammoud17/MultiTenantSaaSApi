@@ -4,7 +4,10 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Domain.Entites;
 using FluentAssertions;
+using Infrastructure.Data;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Tests.Integration;
 
@@ -242,6 +245,153 @@ public class AuthenticationSecurityTests : IClassFixture<ApiWebApplicationFactor
             role = "MEMBER"
         });
         withStepUp.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public async Task SensitiveAction_ShouldRejectStepUpToken_WithWrongPurpose()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"mfa-purpose-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
+
+        var initiateResponse = await client.PostAsync("/api/auth/mfa/enroll/initiate", null);
+        var initiateBody = await initiateResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var enrollmentToken = initiateBody.GetProperty("enrollmentToken").GetString();
+        var secret = initiateBody.GetProperty("secret").GetString();
+
+        var completeResponse = await client.PostAsJsonAsync("/api/auth/mfa/enroll/verify", new
+        {
+            enrollmentToken,
+            code = GenerateTotpCode(secret!)
+        });
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var stepUpResponse = await client.PostAsJsonAsync("/api/auth/mfa/step-up", new
+        {
+            code = GenerateTotpCode(secret!),
+            purpose = "billing_sensitive"
+        });
+        stepUpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var stepUpToken = (await stepUpResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("stepUpToken").GetString();
+
+        client.DefaultRequestHeaders.Remove("X-Step-Up-Token");
+        client.DefaultRequestHeaders.Add("X-Step-Up-Token", stepUpToken);
+
+        var forbiddenResponse = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        {
+            email = $"purpose-blocked-{Guid.NewGuid():N}@example.com",
+            password = "Passw0rd!",
+            role = "MEMBER"
+        });
+
+        forbiddenResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var payload = await forbiddenResponse.Content.ReadFromJsonAsync<JsonElement>();
+        payload.GetProperty("error").GetString().Should().Be("Invalid or expired step-up token");
+    }
+
+    [Fact]
+    public async Task CompleteVerification_ShouldRejectReplayedToken()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var email = $"verify-replay-{Guid.NewGuid():N}@example.com";
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, email, "Passw0rd!");
+        var userId = ResolveUserId(auth.TenantId, email);
+
+        var verificationToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+        var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(verificationToken)));
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.UserVerificationTokens.Add(new UserVerificationToken
+            {
+                Id = Guid.NewGuid(),
+                TenantId = auth.TenantId,
+                UserId = userId,
+                TokenHash = tokenHash,
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddHours(1)
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var firstUse = await client.PostAsJsonAsync("/api/auth/verification/complete", new
+        {
+            tenantId = auth.TenantId,
+            verificationToken
+        });
+        firstUse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var replayUse = await client.PostAsJsonAsync("/api/auth/verification/complete", new
+        {
+            tenantId = auth.TenantId,
+            verificationToken
+        });
+        replayUse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await replayUse.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Invalid or expired verification token");
+    }
+
+    [Fact]
+    public async Task CompletePasswordReset_ShouldRejectReplayedToken_AndRotateCredentials()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var email = $"reset-replay-{Guid.NewGuid():N}@example.com";
+        var auth = await SecurityTestHelpers.RegisterTenantAsync(client, email, "Passw0rd!");
+        var userId = ResolveUserId(auth.TenantId, email);
+
+        var resetToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+        var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(resetToken)));
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.PasswordResetTokens.Add(new PasswordResetToken
+            {
+                Id = Guid.NewGuid(),
+                TenantId = auth.TenantId,
+                UserId = userId,
+                TokenHash = tokenHash,
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddHours(1)
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var firstUse = await client.PostAsJsonAsync("/api/auth/password-reset/complete", new
+        {
+            tenantId = auth.TenantId,
+            resetToken,
+            newPassword = "N3wPassw0rd!"
+        });
+        firstUse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var replayUse = await client.PostAsJsonAsync("/api/auth/password-reset/complete", new
+        {
+            tenantId = auth.TenantId,
+            resetToken,
+            newPassword = "An0therPass!"
+        });
+        replayUse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var oldPasswordLogin = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "Passw0rd!"
+        });
+        oldPasswordLogin.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var newPasswordLogin = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email,
+            password = "N3wPassw0rd!"
+        });
+        newPasswordLogin.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    private Guid ResolveUserId(Guid tenantId, string email)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return db.Users.Single(u => u.TenantId == tenantId && u.Email == email).Id;
     }
 
     private static string GenerateTotpCode(string secret)

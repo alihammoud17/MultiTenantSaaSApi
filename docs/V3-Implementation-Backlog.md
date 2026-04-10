@@ -91,6 +91,7 @@ An MFA hardening slice for admin-sensitive actions is now implemented in the .NE
 - persisted, short-lived step-up sessions for sensitive admin actions
 - step-up enforcement on admin user-management and selected auth-sensitive revocation/invite endpoints when the actor has MFA enrolled
 - integration tests covering enrollment success and step-up enforcement/failure behavior
+- integration tests covering MFA step-up purpose binding and replay rejection for verification/password-reset tokens
 
 Remaining follow-up for this area:
 
