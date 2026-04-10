@@ -150,7 +150,7 @@ public class AuthenticationSecurityTests : IClassFixture<ApiWebApplicationFactor
         var inventoryResponse = await client.GetAsync("/api/auth/sessions");
         inventoryResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var sessions = await inventoryResponse.Content.ReadFromJsonAsync<JsonElement>();
-        sessions.GetArrayLength().Should().BeGreaterOrEqualTo(2);
+        sessions.GetArrayLength().Should().BeGreaterThanOrEqualTo(2);
 
         var revokeResponse = await client.PostAsJsonAsync("/api/auth/sessions/revoke-all", new
         {
