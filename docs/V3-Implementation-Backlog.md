@@ -113,6 +113,19 @@ Secrets/environment update for this iteration:
 - existing JWT configuration remains required (`Jwt:Secret`, `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpirationMinutes`)
 - a future live notification-provider integration will require provider-specific secrets and should be documented when implemented
 
+## Observability and operations design checkpoint (April 12, 2026)
+
+A design-only V3 observability/operations slice is now documented in `docs/V3-Observability-and-Operations-Design.md` and intentionally **not implemented yet**.
+
+The design defines:
+
+- lightweight exporter strategy via OTEL Collector for both .NET API and BillingService
+- initial dashboard set for API reliability, billing workflow operations, and cross-service correlation
+- low-noise alert set for API failures, dead-letter growth, retry exhaustion, reconciliation drift, and telemetry pipeline outage
+- exact planned config/documentation deltas required when implementation starts
+
+This checkpoint is planning-only and does not change runtime behavior in either service.
+
 ## V3 priorities in implementation order
 
 The implementation order below is driven by current dependencies in the repo.

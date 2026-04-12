@@ -223,6 +223,7 @@ For operational procedures (startup checks, state-file hygiene, replay handling,
 - `docs/Billing-Workflow-Runbook.md`
 - `docs/Entitlements-Model.md`
 - `docs/Identity-and-Security.md`
+- `docs/V3-Observability-and-Operations-Design.md` (design-only plan for exporters, dashboards, and alerts)
 
 ## API surface summary
 
