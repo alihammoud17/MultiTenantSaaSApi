@@ -173,6 +173,7 @@ These changes should keep provider-specific logic inside `BillingService` and pr
 - `../docs/V3-Implementation-Backlog.md`
 - `../docs/Internal-Billing-Contract.md`
 - `../docs/Billing-Workflow-Runbook.md`
+- `../docs/V3-Observability-and-Operations-Design.md`
 - `../docs/technical-documentation.md`
 
 ## Manual confirmation still recommended
