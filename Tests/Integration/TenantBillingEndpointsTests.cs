@@ -35,7 +35,7 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         db.SaveChanges();
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authA.Token);
-        var response = await client.GetAsync("/api/billing/status");
+        var response = await client.GetAsync("/api/v1/billing/status");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -93,7 +93,7 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authA.Token);
-        var response = await client.GetAsync("/api/billing/invoices");
+        var response = await client.GetAsync("/api/v1/billing/invoices");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -125,7 +125,7 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
-        var response = await client.GetAsync("/api/billing/invoices");
+        var response = await client.GetAsync("/api/v1/billing/invoices");
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -157,7 +157,7 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authA.Token);
-        var response = await client.GetAsync("/api/billing/invoices");
+        var response = await client.GetAsync("/api/v1/billing/invoices");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -172,7 +172,7 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         var memberToken = await SecurityTestHelpers.CreateMemberAndLoginAsync(client);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
-        var response = await client.PostAsJsonAsync("/api/billing/subscription/cancel", new { reason = "No longer needed" });
+        var response = await client.PostAsJsonAsync("/api/v1/billing/subscription/cancel", new { reason = "No longer needed" });
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -183,10 +183,10 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"billing-admin-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var cancel = await client.PostAsJsonAsync("/api/billing/subscription/cancel", new { reason = "User requested cancelation" });
+        var cancel = await client.PostAsJsonAsync("/api/v1/billing/subscription/cancel", new { reason = "User requested cancelation" });
         cancel.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var reactivate = await client.PostAsJsonAsync("/api/billing/subscription/reactivate", new { reason = "Customer returned" });
+        var reactivate = await client.PostAsJsonAsync("/api/v1/billing/subscription/reactivate", new { reason = "Customer returned" });
         reactivate.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using var scope = _factory.Services.CreateScope();
@@ -203,10 +203,10 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"billing-state-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var firstCancel = await client.PostAsJsonAsync("/api/billing/subscription/cancel", new { reason = "Initial cancellation" });
+        var firstCancel = await client.PostAsJsonAsync("/api/v1/billing/subscription/cancel", new { reason = "Initial cancellation" });
         firstCancel.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var secondCancel = await client.PostAsJsonAsync("/api/billing/subscription/cancel", new { reason = "Duplicate cancellation" });
+        var secondCancel = await client.PostAsJsonAsync("/api/v1/billing/subscription/cancel", new { reason = "Duplicate cancellation" });
         secondCancel.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var secondCancelBody = await secondCancel.Content.ReadFromJsonAsync<JsonElement>();
@@ -237,7 +237,7 @@ public class TenantBillingEndpointsTests : IClassFixture<ApiWebApplicationFactor
         }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
-        var response = await client.PostAsJsonAsync("/api/billing/subscription/cancel", new { reason = "Should be blocked by entitlement gate" });
+        var response = await client.PostAsJsonAsync("/api/v1/billing/subscription/cancel", new { reason = "Should be blocked by entitlement gate" });
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();

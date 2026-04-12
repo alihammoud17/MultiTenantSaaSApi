@@ -36,10 +36,10 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
             await db.SaveChangesAsync();
         }
 
-        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password });
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
         login.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var refresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = registered.TenantId,
             refreshToken = registered.RefreshToken
@@ -47,7 +47,7 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         refresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", registered.Token);
-        var protectedResponse = await client.GetAsync("/api/admin/tenant");
+        var protectedResponse = await client.GetAsync("/api/v1/admin/tenant");
 
         protectedResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var body = await protectedResponse.Content.ReadFromJsonAsync<JsonElement>();
@@ -62,7 +62,7 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         var tenantA = await RegisterTenantWithSubdomainAsync(client, $"host-a-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"host-a-{Guid.NewGuid():N}");
         var tenantB = await RegisterTenantWithSubdomainAsync(client, $"host-b-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"host-b-{Guid.NewGuid():N}");
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/admin/tenant");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/tenant");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
         request.Headers.Add("X-Tenant-ID", tenantB.TenantId.ToString());
         request.Headers.Host = $"{tenantA.Subdomain}.example.test";
@@ -83,7 +83,7 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         var password = "Passw0rd!";
         await RegisterTenantWithSubdomainAsync(client, email, password, $"audit-{Guid.NewGuid():N}");
 
-        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password });
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
         login.StatusCode.Should().Be(HttpStatusCode.OK);
         var loginBody = await login.Content.ReadFromJsonAsync<JsonElement>();
 
@@ -91,16 +91,16 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         var tenantId = loginBody.GetProperty("tenantId").GetGuid();
         var refreshToken = loginBody.GetProperty("refreshToken").GetString()!;
 
-        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId, refreshToken });
+        var refresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new { tenantId, refreshToken });
         refresh.StatusCode.Should().Be(HttpStatusCode.OK);
         var rotated = await refresh.Content.ReadFromJsonAsync<JsonElement>();
         var rotatedRefreshToken = rotated.GetProperty("refreshToken").GetString()!;
 
-        var logout = await client.PostAsJsonAsync("/api/auth/logout", new { tenantId, refreshToken = rotatedRefreshToken });
+        var logout = await client.PostAsJsonAsync("/api/v1/auth/logout", new { tenantId, refreshToken = rotatedRefreshToken });
         logout.StatusCode.Should().Be(HttpStatusCode.OK);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
-        var addUser = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var addUser = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"audit-member-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -111,7 +111,7 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         var addBody = await addUser.Content.ReadFromJsonAsync<JsonElement>();
         var userId = addBody.GetProperty("id").GetGuid();
 
-        var changeRole = await client.PutAsJsonAsync($"/api/admin/tenant/users/{userId}/role", new { role = "ADMIN" });
+        var changeRole = await client.PutAsJsonAsync($"/api/v1/admin/tenant/users/{userId}/role", new { role = "ADMIN" });
         changeRole.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using var scope = _factory.Services.CreateScope();
@@ -134,7 +134,7 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         string password,
         string subdomain)
     {
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new
+        var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", new
         {
             companyName = $"Company {Guid.NewGuid():N}",
             subdomain,

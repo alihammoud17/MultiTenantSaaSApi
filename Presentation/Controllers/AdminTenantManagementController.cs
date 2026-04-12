@@ -12,7 +12,7 @@ using System.Security.Claims;
 
 namespace Presentation.Controllers
 {
-    [Route("api/admin/tenant")]
+    [Route("api/v1/admin/tenant")]
     [ApiController]
     [Authorize]
     public class AdminTenantManagementController : ControllerBase
@@ -169,7 +169,7 @@ namespace Presentation.Controllers
                 request.RbacRoleName
             });
 
-            return Created($"/api/admin/tenant/users/{user.Id}", new
+            return Created($"/api/v1/admin/tenant/users/{user.Id}", new
             {
                 user.Id,
                 user.Email,

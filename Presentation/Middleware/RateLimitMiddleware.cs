@@ -18,7 +18,7 @@ namespace Presentation.Middleware
         {
             // Skip for public endpoints
             var path = context.Request.Path.Value?.ToLower() ?? "";
-            if (path.StartsWith("/api/auth") ||
+            if (ApiVersionedRouteMatcher.IsAuthPath(path) ||
                 // Internal billing callbacks are service-to-service signed requests.
                 // They are not tenant-authenticated API traffic, so tenant plan limits do not apply here.
                 // Tenant/subscription validation is performed by the internal billing callback processor.
@@ -26,7 +26,7 @@ namespace Presentation.Middleware
                 path.StartsWith("/health") ||
                 path.StartsWith("/metrics") ||
                 path.StartsWith("/swagger") ||
-                (path == "/api/plans" && HttpMethods.IsGet(context.Request.Method)))
+                (ApiVersionedRouteMatcher.IsPlansPath(path) && HttpMethods.IsGet(context.Request.Method)))
             {
                 await _next(context);
                 return;
@@ -48,7 +48,7 @@ namespace Presentation.Middleware
                     message = $"You've exceeded your plan limit of {result.Limit} API calls per month",
                     limit = result.Limit,
                     resetDate = result.ResetDate,
-                    upgradeUrl = "/api/plans"
+                    upgradeUrl = "/api/v1/plans"
                 });
                 return;
             }

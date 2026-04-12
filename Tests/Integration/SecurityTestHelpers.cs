@@ -23,7 +23,7 @@ internal static class SecurityTestHelpers
 
     internal static async Task<(string Token, string RefreshToken, Guid TenantId)> RegisterTenantAsync(HttpClient client, string email, string password)
     {
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new
+        var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", new
         {
             companyName = $"Company {Guid.NewGuid():N}",
             subdomain = $"tenant-{Guid.NewGuid():N}",
@@ -44,7 +44,7 @@ internal static class SecurityTestHelpers
     {
         var memberEmail = $"member-{Guid.NewGuid():N}@example.com";
 
-        var addResponse = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var addResponse = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = memberEmail,
             password = "Passw0rd!",
@@ -53,7 +53,7 @@ internal static class SecurityTestHelpers
 
         addResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var login = await client.PostAsJsonAsync("/api/auth/login", new
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             email = memberEmail,
             password = "Passw0rd!"

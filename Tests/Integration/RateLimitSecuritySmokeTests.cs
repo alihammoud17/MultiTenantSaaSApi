@@ -20,7 +20,7 @@ public class RateLimitSecuritySmokeTests : IClassFixture<ApiWebApplicationFactor
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"rl-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var response = await client.GetAsync("/api/admin/tenant");
+        var response = await client.GetAsync("/api/v1/admin/tenant");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Headers.Contains("X-RateLimit-Limit").Should().BeTrue();

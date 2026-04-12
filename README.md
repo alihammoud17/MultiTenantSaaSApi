@@ -10,6 +10,15 @@ The .NET API is the current system of record for tenant identity, authorization,
 - The .NET API already contains the internal billing callback contract and subscription lifecycle application logic needed for that next phase.
 - `BillingService/` exists as the provider-facing billing companion service, but it is still in a pre-live scaffold state and does **not** yet implement live provider integrations.
 
+## Versioning
+
+- Public API routes use URL-segment versioning (`/api/v1/...`).
+- The first production public API version is **v1**.
+- API major versions should change only for breaking contract changes.
+- Application release versions follow SemVer (`1.0.0`, `1.0.1`, `1.1.0`, `2.0.0`).
+- Branches are workflow-only (`master`, `feature/*`, `release/*`, `hotfix/*`) and do not control runtime API version selection.
+- Production deployments should come from SemVer release tags.
+
 ## Feature matrix (current capabilities)
 
 | Capability area | Current status (April 9, 2026) | Notes |
@@ -57,14 +66,14 @@ This repository currently contains:
 - Login and tenant registration endpoints.
 - Identity lifecycle foundation endpoints for invite issuance/acceptance, verification requests/completions, and password-reset requests/completions.
 - Refresh token issuance on register/login.
-- Refresh token rotation on `POST /api/auth/refresh`.
-- Session inventory endpoint at `GET /api/auth/sessions`.
-- Session revoke-all endpoint at `POST /api/auth/sessions/revoke-all`.
+- Refresh token rotation on `POST /api/v1/auth/refresh`.
+- Session inventory endpoint at `GET /api/v1/auth/sessions`.
+- Session revoke-all endpoint at `POST /api/v1/auth/sessions/revoke-all`.
 - MFA enrollment and verification endpoints for authenticated users.
 - MFA step-up endpoint for admin-sensitive actions when MFA is enrolled.
 - Refresh token revocation via:
-  - `POST /api/auth/logout`
-  - `POST /api/auth/revoke`
+  - `POST /api/v1/auth/logout`
+  - `POST /api/v1/auth/revoke`
 - Tenant-aware refresh token validation that prevents cross-tenant token reuse.
 - Password hashing with BCrypt.
 
@@ -79,12 +88,12 @@ This repository currently contains:
   - changing a tenant user's role / RBAC assignment
   - deleting tenant users
   - reading tenant audit logs
-- Dedicated tenant audit log endpoint at `GET /api/tenant/audit-logs`.
+- Dedicated tenant audit log endpoint at `GET /api/v1/tenant/audit-logs`.
 
 ### Plans and subscription management
 
-- Public plan catalog endpoint at `GET /api/plans`.
-- RBAC-protected plan upgrade endpoint at `POST /api/plans/upgrade`.
+- Public plan catalog endpoint at `GET /api/v1/plans`.
+- RBAC-protected plan upgrade endpoint at `POST /api/v1/plans/upgrade`.
 - Subscription records that track:
   - current plan
   - active / grace-period / canceled / expired lifecycle state
@@ -219,23 +228,23 @@ For operational procedures (startup checks, state-file hygiene, replay handling,
 
 ### Public/auth endpoints
 
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/refresh`
-- `POST /api/auth/logout`
-- `POST /api/auth/revoke` (authenticated + RBAC-protected)
-- `GET /api/auth/sessions` (authenticated)
-- `POST /api/auth/sessions/revoke-all` (authenticated)
-- `POST /api/auth/invites` (authenticated + RBAC-protected)
-- `POST /api/auth/invites/accept`
-- `POST /api/auth/verification/request`
-- `POST /api/auth/verification/complete`
-- `POST /api/auth/password-reset/request`
-- `POST /api/auth/password-reset/complete`
-- `POST /api/auth/mfa/enroll/initiate` (authenticated)
-- `POST /api/auth/mfa/enroll/verify` (authenticated)
-- `POST /api/auth/mfa/step-up` (authenticated)
-- `GET /api/plans`
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/revoke` (authenticated + RBAC-protected)
+- `GET /api/v1/auth/sessions` (authenticated)
+- `POST /api/v1/auth/sessions/revoke-all` (authenticated)
+- `POST /api/v1/auth/invites` (authenticated + RBAC-protected)
+- `POST /api/v1/auth/invites/accept`
+- `POST /api/v1/auth/verification/request`
+- `POST /api/v1/auth/verification/complete`
+- `POST /api/v1/auth/password-reset/request`
+- `POST /api/v1/auth/password-reset/complete`
+- `POST /api/v1/auth/mfa/enroll/initiate` (authenticated)
+- `POST /api/v1/auth/mfa/enroll/verify` (authenticated)
+- `POST /api/v1/auth/mfa/step-up` (authenticated)
+- `GET /api/v1/plans`
 - `GET /health`
 - `GET /metrics`
 
@@ -243,20 +252,20 @@ For operational procedures (startup checks, state-file hygiene, replay handling,
 
 Under `api/admin/tenant`:
 
-- `GET /api/admin/tenant`
-- `GET /api/admin/tenant/users`
-- `POST /api/admin/tenant/users`
-- `PUT /api/admin/tenant/users/{userId}/role`
-- `DELETE /api/admin/tenant/users/{userId}`
-- `GET /api/admin/tenant/audit-logs`
+- `GET /api/v1/admin/tenant`
+- `GET /api/v1/admin/tenant/users`
+- `POST /api/v1/admin/tenant/users`
+- `PUT /api/v1/admin/tenant/users/{userId}/role`
+- `DELETE /api/v1/admin/tenant/users/{userId}`
+- `GET /api/v1/admin/tenant/audit-logs`
 
 Additional tenant-scoped endpoint:
 
-- `GET /api/tenant/audit-logs`
-- `GET /api/billing/status`
-- `GET /api/billing/invoices` (foundation feed sourced from tenant-scoped internal invoice billing events)
-- `POST /api/billing/subscription/cancel`
-- `POST /api/billing/subscription/reactivate`
+- `GET /api/v1/tenant/audit-logs`
+- `GET /api/v1/billing/status`
+- `GET /api/v1/billing/invoices` (foundation feed sourced from tenant-scoped internal invoice billing events)
+- `POST /api/v1/billing/subscription/cancel`
+- `POST /api/v1/billing/subscription/reactivate`
 
 ### Internal service endpoint
 

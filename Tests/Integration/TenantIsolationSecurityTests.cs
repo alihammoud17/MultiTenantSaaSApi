@@ -25,7 +25,7 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
         client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantB.TenantId.ToString());
 
-        var response = await client.GetAsync("/api/admin/tenant/users");
+        var response = await client.GetAsync("/api/v1/admin/tenant/users");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var users = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -43,7 +43,7 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
         var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-admin-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantB.Token);
-        var addUser = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var addUser = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"tenantb-user-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -53,8 +53,8 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
 
-        var updateRole = await client.PutAsJsonAsync($"/api/admin/tenant/users/{targetUserId}/role", new { role = "ADMIN" });
-        var delete = await client.DeleteAsync($"/api/admin/tenant/users/{targetUserId}");
+        var updateRole = await client.PutAsJsonAsync($"/api/v1/admin/tenant/users/{targetUserId}/role", new { role = "ADMIN" });
+        var delete = await client.DeleteAsync($"/api/v1/admin/tenant/users/{targetUserId}");
 
         updateRole.StatusCode.Should().Be(HttpStatusCode.NotFound);
         delete.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -71,7 +71,7 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
         var memberToken = await SecurityTestHelpers.CreateMemberAndLoginAsync(client);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantB.Token);
-        var addUser = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var addUser = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"tenantb-member-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -80,7 +80,7 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
         var tenantBUserId = (await addUser.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
-        var response = await client.DeleteAsync($"/api/admin/tenant/users/{tenantBUserId}");
+        var response = await client.DeleteAsync($"/api/v1/admin/tenant/users/{tenantBUserId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -93,12 +93,12 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
         var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-audit-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
-        await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
 
         client.DefaultRequestHeaders.Remove("X-Tenant-ID");
         client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantB.TenantId.ToString());
 
-        var response = await client.GetAsync("/api/tenant/audit-logs?action=TENANT_PLAN_CHANGED");
+        var response = await client.GetAsync("/api/v1/tenant/audit-logs?action=TENANT_PLAN_CHANGED");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var logs = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -116,7 +116,7 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
         var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-refresh-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-refresh-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var response = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = tenantB.TenantId,
             refreshToken = tenantA.RefreshToken

@@ -75,7 +75,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
             adminPassword = "Passw0rd!"
         };
 
-        var response = await client.PostAsJsonAsync("/api/auth/register", payload);
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", payload);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -95,7 +95,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         await RegisterTenant(client, email, password);
 
-        var response = await client.PostAsJsonAsync("/api/auth/login", new
+        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             email,
             password
@@ -115,7 +115,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         var auth = await RegisterTenant(client, $"refresh-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var response = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = auth.TenantId,
             refreshToken = auth.RefreshToken
@@ -137,7 +137,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var authA = await RegisterTenant(client, $"refresh-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         var authB = await RegisterTenant(client, $"refresh-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var response = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = authB.TenantId,
             refreshToken = authA.RefreshToken
@@ -154,7 +154,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         using var client = CreateClient();
         var auth = await RegisterTenant(client, $"refresh-invalid-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var response = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = auth.TenantId,
             refreshToken = "not-a-valid-token"
@@ -172,7 +172,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"refresh-revoked-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
+        var revokeResponse = await client.PostAsJsonAsync("/api/v1/auth/revoke", new
         {
             tenantId = auth.TenantId,
             refreshToken = auth.RefreshToken,
@@ -181,7 +181,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         revokeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var refreshResponse = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var refreshResponse = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = auth.TenantId,
             refreshToken = auth.RefreshToken
@@ -198,7 +198,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         using var client = CreateClient();
         var auth = await RegisterTenant(client, $"refresh-rotate-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var firstRefresh = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var firstRefresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = auth.TenantId,
             refreshToken = auth.RefreshToken
@@ -210,7 +210,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         rotatedRefreshToken.Should().NotBeNullOrWhiteSpace();
         rotatedRefreshToken.Should().NotBe(auth.RefreshToken);
 
-        var oldTokenRefresh = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var oldTokenRefresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = auth.TenantId,
             refreshToken = auth.RefreshToken
@@ -218,7 +218,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         oldTokenRefresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
-        var rotatedTokenRefresh = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var rotatedTokenRefresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = auth.TenantId,
             refreshToken = rotatedRefreshToken
@@ -234,7 +234,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         var auth = await RegisterTenant(client, $"logout-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var logoutResponse = await client.PostAsJsonAsync("/api/auth/logout", new
+        var logoutResponse = await client.PostAsJsonAsync("/api/v1/auth/logout", new
         {
             tenantId = auth.TenantId,
             refreshToken = auth.RefreshToken
@@ -242,7 +242,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         logoutResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var refreshResponse = await client.PostAsJsonAsync("/api/auth/refresh", new
+        var refreshResponse = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             tenantId = auth.TenantId,
             refreshToken = auth.RefreshToken
@@ -259,7 +259,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         var auth = await RegisterTenant(client, $"revoke-no-auth-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
+        var revokeResponse = await client.PostAsJsonAsync("/api/v1/auth/revoke", new
         {
             tenantId = auth.TenantId,
             refreshToken = auth.RefreshToken,
@@ -277,7 +277,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"revoke-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
+        var revokeResponse = await client.PostAsJsonAsync("/api/v1/auth/revoke", new
         {
             tenantId = auth.TenantId,
             refreshToken = auth.RefreshToken,
@@ -296,7 +296,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var authB = await RegisterTenant(client, $"revoke-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authA.Token);
 
-        var revokeResponse = await client.PostAsJsonAsync("/api/auth/revoke", new
+        var revokeResponse = await client.PostAsJsonAsync("/api/v1/auth/revoke", new
         {
             tenantId = authB.TenantId,
             refreshToken = authA.RefreshToken,
@@ -314,7 +314,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         using var client = CreateClient();
         var subdomain = $"dup-{Guid.NewGuid():N}";
 
-        var first = await client.PostAsJsonAsync("/api/auth/register", new
+        var first = await client.PostAsJsonAsync("/api/v1/auth/register", new
         {
             companyName = "First Company",
             subdomain,
@@ -324,7 +324,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         first.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var second = await client.PostAsJsonAsync("/api/auth/register", new
+        var second = await client.PostAsJsonAsync("/api/v1/auth/register", new
         {
             companyName = "Second Company",
             subdomain,
@@ -345,7 +345,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         await RegisterTenant(client, email, "Passw0rd!");
 
-        var response = await client.PostAsJsonAsync("/api/auth/login", new
+        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             email,
             password = "WrongPass123!"
@@ -361,7 +361,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     {
         using var client = CreateClient();
 
-        var response = await client.GetAsync("/api/plans");
+        var response = await client.GetAsync("/api/v1/plans");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var plans = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -375,7 +375,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     {
         using var client = CreateClient();
 
-        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        var response = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -388,7 +388,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"up-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        var response = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -406,7 +406,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"missing-plan-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "" });
+        var response = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -421,7 +421,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"invalid-plan-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-does-not-exist" });
+        var response = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-does-not-exist" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -436,7 +436,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"same-plan-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-free" });
+        var response = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-free" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -468,7 +468,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
             db.SaveChanges();
         }
 
-        var response = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        var response = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -480,7 +480,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     {
         using var client = CreateClient();
 
-        var response = await client.GetAsync("/api/tenant/audit-logs");
+        var response = await client.GetAsync("/api/v1/tenant/audit-logs");
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -493,10 +493,10 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"audit-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var upgrade = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        var upgrade = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
         upgrade.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var response = await client.GetAsync("/api/tenant/audit-logs");
+        var response = await client.GetAsync("/api/v1/tenant/audit-logs");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var logs = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -515,10 +515,10 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"audit-filter-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var upgrade = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        var upgrade = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
         upgrade.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var response = await client.GetAsync("/api/tenant/audit-logs?action=TENANT_PLAN_CHANGED");
+        var response = await client.GetAsync("/api/v1/tenant/audit-logs?action=TENANT_PLAN_CHANGED");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var logs = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -539,10 +539,10 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"admin-mgmt-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var details = await client.GetAsync("/api/admin/tenant");
+        var details = await client.GetAsync("/api/v1/admin/tenant");
         details.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var added = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var added = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"new-user-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -553,19 +553,19 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var addBody = await added.Content.ReadFromJsonAsync<JsonElement>();
         var newUserId = addBody.GetProperty("id").GetGuid();
 
-        var roleChanged = await client.PutAsJsonAsync($"/api/admin/tenant/users/{newUserId}/role", new
+        var roleChanged = await client.PutAsJsonAsync($"/api/v1/admin/tenant/users/{newUserId}/role", new
         {
             role = "ADMIN"
         });
 
         roleChanged.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var users = await client.GetAsync("/api/admin/tenant/users");
+        var users = await client.GetAsync("/api/v1/admin/tenant/users");
         users.StatusCode.Should().Be(HttpStatusCode.OK);
         var usersBody = await users.Content.ReadFromJsonAsync<JsonElement>();
         usersBody.EnumerateArray().Select(u => u.GetProperty("id").GetGuid()).Should().Contain(newUserId);
 
-        var remove = await client.DeleteAsync($"/api/admin/tenant/users/{newUserId}");
+        var remove = await client.DeleteAsync($"/api/v1/admin/tenant/users/{newUserId}");
         remove.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
@@ -579,7 +579,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
 
-        var addUserInTenantA = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var addUserInTenantA = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"tenant-a-user-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -592,7 +592,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantB.Token);
 
-        var crossTenantRemove = await client.DeleteAsync($"/api/admin/tenant/users/{tenantAUserId}");
+        var crossTenantRemove = await client.DeleteAsync($"/api/v1/admin/tenant/users/{tenantAUserId}");
         crossTenantRemove.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -605,7 +605,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token);
 
         var memberEmail = $"rbac-member-{Guid.NewGuid():N}@example.com";
-        var addMember = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var addMember = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = memberEmail,
             password = "Passw0rd!",
@@ -613,7 +613,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         });
         addMember.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var memberLogin = await client.PostAsJsonAsync("/api/auth/login", new
+        var memberLogin = await client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             email = memberEmail,
             password = "Passw0rd!"
@@ -624,7 +624,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var memberToken = loginBody.GetProperty("token").GetString();
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
-        var forbidden = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var forbidden = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"should-fail-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -642,7 +642,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var auth = await RegisterTenant(client, $"admin-audit-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var addUser = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var addUser = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"audit-user-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -650,7 +650,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         });
         addUser.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var response = await client.GetAsync("/api/admin/tenant/audit-logs?action=TENANT_USER_ADDED");
+        var response = await client.GetAsync("/api/v1/admin/tenant/audit-logs?action=TENANT_USER_ADDED");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var logs = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -963,7 +963,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 
     private static async Task<(string Token, string RefreshToken, Guid TenantId)> RegisterTenant(HttpClient client, string email, string password)
     {
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new
+        var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", new
         {
             companyName = $"Company {Guid.NewGuid():N}",
             subdomain = $"tenant-{Guid.NewGuid():N}",
