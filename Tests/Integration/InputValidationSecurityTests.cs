@@ -21,11 +21,11 @@ public class InputValidationSecurityTests : IClassFixture<ApiWebApplicationFacto
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"validate-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId = auth.TenantId, refreshToken = "" });
+        var refresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new { tenantId = auth.TenantId, refreshToken = "" });
         refresh.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
-        var invite = await client.PostAsJsonAsync("/api/admin/tenant/users", new { email = "", password = "Passw0rd!" });
+        var invite = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new { email = "", password = "Passw0rd!" });
         invite.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -36,7 +36,7 @@ public class InputValidationSecurityTests : IClassFixture<ApiWebApplicationFacto
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"guid-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var response = await client.PutAsJsonAsync("/api/admin/tenant/users/not-a-guid/role", new { role = "ADMIN" });
+        var response = await client.PutAsJsonAsync("/api/v1/admin/tenant/users/not-a-guid/role", new { role = "ADMIN" });
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -48,10 +48,10 @@ public class InputValidationSecurityTests : IClassFixture<ApiWebApplicationFacto
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"page-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var invalidDate = await client.GetAsync("/api/tenant/audit-logs?fromUtc=not-a-date");
+        var invalidDate = await client.GetAsync("/api/v1/tenant/audit-logs?fromUtc=not-a-date");
         invalidDate.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        var clampedPaging = await client.GetAsync("/api/tenant/audit-logs?page=-5&pageSize=0");
+        var clampedPaging = await client.GetAsync("/api/v1/tenant/audit-logs?page=-5&pageSize=0");
         clampedPaging.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
@@ -62,7 +62,7 @@ public class InputValidationSecurityTests : IClassFixture<ApiWebApplicationFacto
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"overpost-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var response = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var response = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"regular-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",

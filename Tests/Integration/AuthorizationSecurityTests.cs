@@ -28,7 +28,7 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
         var memberToken = await SecurityTestHelpers.CreateMemberAndLoginAsync(client);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
-        var response = await client.GetAsync("/api/admin/tenant/users");
+        var response = await client.GetAsync("/api/v1/admin/tenant/users");
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -42,7 +42,7 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
         var memberToken = await SecurityTestHelpers.CreateMemberAndLoginAsync(client);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
-        var response = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var response = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"blocked-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -59,7 +59,7 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
         var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"authz-role-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
 
-        var addResponse = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var addResponse = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"target-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -71,8 +71,8 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
         var memberToken = await SecurityTestHelpers.CreateMemberAndLoginAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
 
-        var roleChange = await client.PutAsJsonAsync($"/api/admin/tenant/users/{userId}/role", new { role = "ADMIN" });
-        var delete = await client.DeleteAsync($"/api/admin/tenant/users/{userId}");
+        var roleChange = await client.PutAsJsonAsync($"/api/v1/admin/tenant/users/{userId}/role", new { role = "ADMIN" });
+        var delete = await client.DeleteAsync($"/api/v1/admin/tenant/users/{userId}");
 
         roleChange.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         delete.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -88,11 +88,11 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
         var memberToken = await SecurityTestHelpers.CreateMemberAndLoginAsync(client);
 
         client.DefaultRequestHeaders.Authorization = null;
-        var unauthorized = await client.GetAsync("/api/tenant/audit-logs");
+        var unauthorized = await client.GetAsync("/api/v1/tenant/audit-logs");
         unauthorized.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
-        var forbidden = await client.GetAsync("/api/tenant/audit-logs");
+        var forbidden = await client.GetAsync("/api/v1/tenant/audit-logs");
         forbidden.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -103,7 +103,7 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
         var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"authz-pos-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
 
-        var create = await client.PostAsJsonAsync("/api/admin/tenant/users", new
+        var create = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
         {
             email = $"ok-{Guid.NewGuid():N}@example.com",
             password = "Passw0rd!",
@@ -137,7 +137,7 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
             db.SaveChanges();
         }
 
-        var response = await client.GetAsync("/api/admin/tenant/users");
+        var response = await client.GetAsync("/api/v1/admin/tenant/users");
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -165,7 +165,7 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
             db.SaveChanges();
         }
 
-        var response = await client.GetAsync("/api/tenant/audit-logs");
+        var response = await client.GetAsync("/api/v1/tenant/audit-logs");
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

@@ -23,10 +23,10 @@ public class BusinessAbuseSecurityTests : IClassFixture<ApiWebApplicationFactory
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"abuse-rotate-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var rotate = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
+        var rotate = await client.PostAsJsonAsync("/api/v1/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
         rotate.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var oldReuse = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
+        var oldReuse = await client.PostAsJsonAsync("/api/v1/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
         oldReuse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -37,8 +37,8 @@ public class BusinessAbuseSecurityTests : IClassFixture<ApiWebApplicationFactory
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"abuse-revoke-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var first = await client.PostAsJsonAsync("/api/auth/revoke", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken, reason = "TEST" });
-        var second = await client.PostAsJsonAsync("/api/auth/revoke", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken, reason = "TEST" });
+        var first = await client.PostAsJsonAsync("/api/v1/auth/revoke", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken, reason = "TEST" });
+        var second = await client.PostAsJsonAsync("/api/v1/auth/revoke", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken, reason = "TEST" });
 
         first.StatusCode.Should().Be(HttpStatusCode.OK);
         second.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -50,10 +50,10 @@ public class BusinessAbuseSecurityTests : IClassFixture<ApiWebApplicationFactory
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"abuse-logout-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        var logout = await client.PostAsJsonAsync("/api/auth/logout", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
+        var logout = await client.PostAsJsonAsync("/api/v1/auth/logout", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
         logout.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
+        var refresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
         refresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -64,8 +64,8 @@ public class BusinessAbuseSecurityTests : IClassFixture<ApiWebApplicationFactory
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"abuse-plan-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var first = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
-        var replay = await client.PostAsJsonAsync("/api/plans/upgrade", new { planId = "plan-pro" });
+        var first = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
+        var replay = await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
 
         first.StatusCode.Should().Be(HttpStatusCode.OK);
         replay.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -85,7 +85,7 @@ public class BusinessAbuseSecurityTests : IClassFixture<ApiWebApplicationFactory
             db.SaveChanges();
         }
 
-        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
+        var refresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new { tenantId = auth.TenantId, refreshToken = auth.RefreshToken });
 
         refresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         var body = await refresh.Content.ReadFromJsonAsync<JsonElement>();

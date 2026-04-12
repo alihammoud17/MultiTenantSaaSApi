@@ -41,7 +41,7 @@ public class RateLimitEnforcementTests : IClassFixture<RateLimitDeniedWebApplica
         var auth = await SecurityTestHelpers.RegisterTenantAsync(client, $"rl-denied-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
 
-        var response = await client.GetAsync("/api/admin/tenant");
+        var response = await client.GetAsync("/api/v1/admin/tenant");
 
         response.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         response.Headers.Contains("X-RateLimit-Limit").Should().BeTrue();
@@ -51,7 +51,7 @@ public class RateLimitEnforcementTests : IClassFixture<RateLimitDeniedWebApplica
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("error").GetString().Should().Be("RateLimitExceeded");
         body.GetProperty("limit").GetInt32().Should().Be(1);
-        body.GetProperty("upgradeUrl").GetString().Should().Be("/api/plans");
+        body.GetProperty("upgradeUrl").GetString().Should().Be("/api/v1/plans");
     }
 }
 

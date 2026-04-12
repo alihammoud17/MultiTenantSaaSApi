@@ -6,7 +6,7 @@ using Presentation.Authorization;
 
 namespace Presentation.Controllers;
 
-[Route("api/tenant/audit-logs")]
+[Route("api/v1/tenant/audit-logs")]
 [ApiController]
 [Authorize(Policy = RbacPolicyNames.AuditLogsRead)]
 public class AuditLogsController : ControllerBase
