@@ -21,7 +21,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 
 ## Feature matrix (current capabilities)
 
-| Capability area | Current status (April 9, 2026) | Notes |
+| Capability area | Current status (April 13, 2026) | Notes |
 | --- | --- | --- |
 | Multi-tenant auth + RBAC + audit | Implemented | Core tenant isolation, auth lifecycle, RBAC, and tenant audit surfaces are in production-ready shape. |
 | Plan catalog + lifecycle state | Implemented | Plan upgrades and subscription lifecycle state are persisted in the .NET API. |
@@ -30,7 +30,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 | BillingService durable workflow scaffold | Implemented (pre-live) | Durable retry/dead-letter/reconciliation scaffolding exists, but live provider callback flow is still pending. |
 | Provider webhook verification + live provider sync | Not implemented yet | BillingService remains pre-live for verified external webhook ingestion. |
 | Entitlements model + feature gating | Implemented (progressive rollout) | Additive entitlement schema + seeded definitions/mappings are in place, with evaluator/enforcer-backed gates active for billing invoice reads, billing self-service mutations, plan upgrades, advanced admin user management, and tenant audit-log analytics access. |
-| Usage analytics + outbound webhooks | Not implemented yet | Planned for later V3 slices after billing core stabilizes. |
+| Usage analytics + outbound webhooks | Partially implemented (analytics foundation) | Tenant-scoped usage aggregation/query service and analytics endpoint foundation are now implemented; outbound webhooks remain pending. |
 
 ## Repository overview
 
@@ -89,6 +89,7 @@ This repository currently contains:
   - deleting tenant users
   - reading tenant audit logs
 - Dedicated tenant audit log endpoint at `GET /api/v1/tenant/audit-logs`.
+- Dedicated tenant usage analytics foundation endpoint at `GET /api/v1/tenant/analytics/usage` (tenant-scoped aggregation from audit events).
 
 ### Plans and subscription management
 
@@ -194,7 +195,7 @@ The next phase is intentionally separate from the already-implemented V2 platfor
 - tenant-facing billing self-service capabilities built on internal subscription state
 - entitlements / add-ons / feature gating (foundation schema + seeded definitions/mappings + evaluator/enforcer are implemented; progressive enforcement is active on billing/admin/analytics starter surfaces)
 - stronger security hardening and operational diagnostics
-- usage analytics and outbound webhooks
+- usage analytics maturity improvements and outbound webhooks
 
 ### Work that is **not** complete yet
 

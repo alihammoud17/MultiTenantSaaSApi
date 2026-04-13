@@ -168,4 +168,22 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
         var response = await client.GetAsync("/api/v1/tenant/audit-logs");
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
+
+    [Fact]
+    public async Task MemberCannotReadUsageAnalytics_ShouldReturn403_AndMissingTokenShouldReturn401()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"authz-usage-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
+
+        var memberToken = await SecurityTestHelpers.CreateMemberAndLoginAsync(client);
+
+        client.DefaultRequestHeaders.Authorization = null;
+        var unauthorized = await client.GetAsync("/api/v1/tenant/analytics/usage");
+        unauthorized.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
+        var forbidden = await client.GetAsync("/api/v1/tenant/analytics/usage");
+        forbidden.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 }
