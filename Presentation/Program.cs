@@ -62,6 +62,7 @@ builder.Services.AddScoped<IBillingCallbackProcessor, BillingCallbackProcessor>(
 builder.Services.AddSingleton<IInternalRequestSignatureValidator, InternalRequestSignatureValidator>();
 builder.Services.AddScoped<IEntitlementEvaluator, EntitlementEvaluator>();
 builder.Services.AddScoped<IEntitlementEnforcer, EntitlementEnforcer>();
+builder.Services.AddScoped<IUsageAnalyticsService, UsageAnalyticsService>();
 
 // RBAC
 builder.Services.AddScoped<IRbacAuthorizationService, RbacAuthorizationService>();

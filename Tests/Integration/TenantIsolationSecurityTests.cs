@@ -124,4 +124,25 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+
+    [Fact]
+    public async Task UsageAnalyticsRemainHeaderTenantScoped_WithCrossTenantHeaderTampering()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-usage-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-usage-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
+        await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
+
+        client.DefaultRequestHeaders.Remove("X-Tenant-ID");
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantB.TenantId.ToString());
+
+        var response = await client.GetAsync("/api/v1/tenant/analytics/usage?days=30");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var analytics = await response.Content.ReadFromJsonAsync<JsonElement>();
+        analytics.GetProperty("tenantId").GetGuid().Should().Be(tenantB.TenantId);
+        analytics.GetProperty("totalEvents").GetInt32().Should().BeGreaterThan(0);
+    }
 }

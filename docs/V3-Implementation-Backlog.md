@@ -1,6 +1,6 @@
 # V3 Implementation Backlog
 
-This backlog is based on the current repository state as of April 9, 2026. It treats the existing .NET API as the system of record, keeps provider-specific billing logic inside `BillingService`, and builds from functionality that already exists in code rather than proposing a rewrite.
+This backlog is based on the current repository state as of April 13, 2026. It treats the existing .NET API as the system of record, keeps provider-specific billing logic inside `BillingService`, and builds from functionality that already exists in code rather than proposing a rewrite.
 
 ## Current repository baseline
 
@@ -35,7 +35,7 @@ The codebase has V3 groundwork, but the production billing path is not complete 
 - `BillingService` does not yet publish authenticated callbacks into the .NET API.
 - `BillingService` now has a durable workflow foundation (file-backed queue + retry/dead-letter + replay-safe dedup) plus drift-aware reconciliation comparison logic. This iteration is documented and operationalized, but it still needs live provider/.NET state readers and provider-connected callback delivery for production readiness.
 - The .NET API now includes a first tenant-facing billing foundation (`/api/v1/billing/status`, `/api/v1/billing/invoices`, cancel/reactivate actions), but richer invoice data models and provider-backed mutation orchestration are still pending.
-- Entitlements add-on execution, usage analytics exports, outbound webhooks, and deeper billing reconciliation workflows are not yet implemented (initial entitlement enforcement rollout is now expanded, but still partial).
+- Entitlements add-on execution, outbound webhooks, and deeper billing reconciliation workflows are not yet implemented (initial entitlement enforcement rollout is now expanded, and a tenant-safe usage analytics foundation endpoint is now in place).
 
 ## Durable workflow iteration checkpoint (April 5, 2026)
 
@@ -125,6 +125,22 @@ The design defines:
 - exact planned config/documentation deltas required when implementation starts
 
 This checkpoint is planning-only and does not change runtime behavior in either service.
+
+## Usage analytics foundation checkpoint (April 13, 2026)
+
+A first tenant-safe usage analytics slice is now implemented in the .NET API:
+
+- usage aggregation/query service based on tenant-scoped audit-log activity
+- analytics endpoint foundation at `GET /api/v1/tenant/analytics/usage`
+- bounded query window support (`days` query parameter clamped to safe limits)
+- optional action-level filtering and top-action aggregation
+- integration coverage for authorization and cross-tenant header tampering behavior
+
+Remaining follow-up for this area:
+
+- add export/read-model options for larger analytical workloads if needed
+- introduce richer usage dimensions (feature/add-on keyed metrics) as entitlement rollout expands
+- add outbound webhook/eventing for external analytics sinks when contract design is finalized
 
 ## V3 priorities in implementation order
 
