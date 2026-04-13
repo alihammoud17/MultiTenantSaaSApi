@@ -161,6 +161,15 @@ Remaining follow-up for this area:
 
 Reference: `docs/Outbound-Webhooks.md` is now the implementation/status companion for this slice.
 
+## Documentation alignment checkpoint (April 13, 2026)
+
+Documentation for the completed iteration has been reviewed and aligned to implemented behavior only:
+
+- root `README.md` now documents the canonical .NET validation sequence (`dotnet --info`, `dotnet-ef --version`, `restore`, `build --no-restore`, `test --no-build`)
+- root `README.md` includes an explicit documentation-status section describing what changed in docs during this iteration
+- `docs/Internal-Billing-Contract.md` was reviewed and remains accurate for contract version `2026-03-18` (no contract delta in this slice)
+- `BillingService/README.md` was reviewed and intentionally left unchanged because BillingService implementation scope did not change
+
 ## V3 priorities in implementation order
 
 The implementation order below is driven by current dependencies in the repo.
