@@ -224,6 +224,8 @@ For operational procedures (startup checks, state-file hygiene, replay handling,
 - `docs/Billing-Workflow-Runbook.md`
 - `docs/Entitlements-Model.md`
 - `docs/Identity-and-Security.md`
+- `docs/Usage-Analytics.md`
+- `docs/Outbound-Webhooks.md`
 - `docs/V3-Observability-and-Operations-Design.md` (design-only plan for exporters, dashboards, and alerts)
 
 ## API surface summary
@@ -264,6 +266,7 @@ Under `api/admin/tenant`:
 Additional tenant-scoped endpoint:
 
 - `GET /api/v1/tenant/audit-logs`
+- `GET /api/v1/tenant/analytics/usage`
 - `GET /api/v1/billing/status`
 - `GET /api/v1/billing/invoices` (foundation feed sourced from tenant-scoped internal invoice billing events)
 - `POST /api/v1/billing/subscription/cancel`
@@ -283,6 +286,18 @@ The .NET API includes a first outbound webhook infrastructure slice for tenant e
 - replay/idempotency support via `SourceEventKey` dedupe at publish time and stable `X-Tenant-Webhook-Idempotency-Key` per delivery
 
 See `docs/Outbound-Webhook-Contract.md` for contract and verification details.
+Implementation and rollout notes for this iteration are in `docs/Outbound-Webhooks.md`.
+
+### Tenant usage analytics (foundation)
+
+The .NET API includes a tenant-safe usage analytics foundation sourced from tenant-scoped audit events:
+
+- endpoint: `GET /api/v1/tenant/analytics/usage`
+- bounded lookback window using `days` query clamping for safe query cost
+- optional action filtering and top-action aggregation to support product and operations reads
+- RBAC + tenant-context enforcement aligned with existing tenant/admin safeguards
+
+Implementation and follow-up notes for this iteration are in `docs/Usage-Analytics.md`.
 
 ## Local setup and run
 

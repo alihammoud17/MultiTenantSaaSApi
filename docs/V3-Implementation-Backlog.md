@@ -140,7 +140,26 @@ Remaining follow-up for this area:
 
 - add export/read-model options for larger analytical workloads if needed
 - introduce richer usage dimensions (feature/add-on keyed metrics) as entitlement rollout expands
-- add outbound webhook/eventing for external analytics sinks when contract design is finalized
+- expand event publication coverage for analytics-relevant lifecycle events as outbound webhooks mature
+
+Reference: `docs/Usage-Analytics.md` is now the implementation/status companion for this slice.
+
+## Outbound webhook foundation checkpoint (April 13, 2026)
+
+A first outbound tenant webhook infrastructure slice is now implemented in the .NET API:
+
+- versioned tenant-event contract envelope (`2026-04-13`) for stable downstream handling
+- HMAC-signed delivery model with timestamp and delivery-id binding
+- durable delivery persistence with retry scheduling, attempt metadata, and terminal state tracking
+- publish-time dedupe keyed by source event identity to reduce duplicate downstream delivery
+
+Remaining follow-up for this area:
+
+- add tenant-managed endpoint registration/rotation/disable workflows
+- broaden event coverage beyond the initial foundation event set
+- add operator-facing replay tooling and delivery-health dashboards/alerts
+
+Reference: `docs/Outbound-Webhooks.md` is now the implementation/status companion for this slice.
 
 ## V3 priorities in implementation order
 
