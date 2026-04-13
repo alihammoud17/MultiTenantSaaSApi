@@ -392,17 +392,29 @@ Notes:
 Run directly from the repository root:
 
 ```bash
-dotnet build MultiTenantSaaSApi.sln
-dotnet test MultiTenantSaaSApi.sln
+dotnet --info
+/tmp/dotnet-tools/dotnet-ef --version
+dotnet restore
+dotnet build --no-restore
+dotnet test --no-build --verbosity normal
 ```
 
-BillingService validation commands:
+BillingService validation commands (required only when BillingService code changes in the iteration):
 
 ```bash
 cd BillingService
 npm run build
 npm test
 ```
+
+## Documentation status for this completed iteration
+
+Documentation was reviewed for accuracy against the current implemented baseline.
+
+- `README.md` updated with the canonical .NET validation command sequence used for this repository.
+- `docs/V3-Implementation-Backlog.md` updated with a documentation alignment checkpoint for this iteration.
+- `docs/Internal-Billing-Contract.md` reviewed with **no contract changes required** for this iteration.
+- `BillingService/README.md` reviewed with **no changes required** because BillingService implementation scope did not change.
 
 ## Additional docs
 
