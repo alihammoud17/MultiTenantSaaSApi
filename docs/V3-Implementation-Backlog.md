@@ -40,4 +40,5 @@ The following V3 outcomes are implemented in the repository:
 
 - Do not document V3 as "planned next" or "in progress" in repository docs.
 - For future work, open a new post-V3 roadmap/phase document instead of reusing this closed V3 backlog file.
+- Active post-V3 execution planning now lives in `docs/V4-Implementation-Backlog.md` and should be used for implementation prioritization.
 - Preserve system boundaries: .NET API remains system of record; provider-specific billing logic stays isolated in BillingService.

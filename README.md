@@ -6,6 +6,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 ## Project status
 
 - **V1, V2, and V3 are complete** in the current repository state.
+- **V4 planning is now defined for pre-deployment code-first maturity** in `docs/V4-Implementation-Backlog.md`.
 - The repository now documents V3 as a completed milestone instead of a pending phase.
 - The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
 - `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
@@ -421,6 +422,7 @@ Documentation was reviewed for accuracy against the current implemented baseline
 
 - `BillingService/README.md`
 - `docs/V3-Implementation-Backlog.md`
+- `docs/V4-Implementation-Backlog.md`
 - `docs/Internal-Billing-Contract.md`
 - `docs/Billing-Workflow-Runbook.md`
 - `docs/Entitlements-Model.md`
