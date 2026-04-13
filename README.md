@@ -30,7 +30,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 | BillingService durable workflow scaffold | Implemented (pre-live) | Durable retry/dead-letter/reconciliation scaffolding exists, but live provider callback flow is still pending. |
 | Provider webhook verification + live provider sync | Not implemented yet | BillingService remains pre-live for verified external webhook ingestion. |
 | Entitlements model + feature gating | Implemented (progressive rollout) | Additive entitlement schema + seeded definitions/mappings are in place, with evaluator/enforcer-backed gates active for billing invoice reads, billing self-service mutations, plan upgrades, advanced admin user management, and tenant audit-log analytics access. |
-| Usage analytics + outbound webhooks | Partially implemented (analytics foundation) | Tenant-scoped usage aggregation/query service and analytics endpoint foundation are now implemented; outbound webhooks remain pending. |
+| Usage analytics + outbound webhooks | Partially implemented (analytics + outbound delivery foundation) | Tenant-scoped usage aggregation/query service and a first outbound webhook foundation (signed payloads, retries, delivery status, idempotency key headers, and replay-safe event dedupe) are implemented. |
 
 ## Repository overview
 
@@ -195,7 +195,7 @@ The next phase is intentionally separate from the already-implemented V2 platfor
 - tenant-facing billing self-service capabilities built on internal subscription state
 - entitlements / add-ons / feature gating (foundation schema + seeded definitions/mappings + evaluator/enforcer are implemented; progressive enforcement is active on billing/admin/analytics starter surfaces)
 - stronger security hardening and operational diagnostics
-- usage analytics maturity improvements and outbound webhooks
+- usage analytics maturity improvements and expanded outbound webhook tenant self-service tooling
 
 ### Work that is **not** complete yet
 
@@ -272,6 +272,17 @@ Additional tenant-scoped endpoint:
 ### Internal service endpoint
 
 - `POST /api/internal/billing/subscription-events`
+
+### Outbound tenant webhooks (foundation)
+
+The .NET API includes a first outbound webhook infrastructure slice for tenant events:
+
+- versioned envelope contract (`2026-04-13`) containing `eventId`, `tenantId`, `eventType`, `correlationId`, and `occurredAtUtc`
+- endpoint-specific HMAC-SHA256 request signing (`X-Tenant-Webhook-Signature`) with timestamp and delivery id binding
+- persisted delivery state with retry scheduling and terminal status tracking
+- replay/idempotency support via `SourceEventKey` dedupe at publish time and stable `X-Tenant-Webhook-Idempotency-Key` per delivery
+
+See `docs/Outbound-Webhook-Contract.md` for contract and verification details.
 
 ## Local setup and run
 
