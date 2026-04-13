@@ -35,7 +35,7 @@ The codebase has V3 groundwork, but the production billing path is not complete 
 - `BillingService` does not yet publish authenticated callbacks into the .NET API.
 - `BillingService` now has a durable workflow foundation (file-backed queue + retry/dead-letter + replay-safe dedup) plus drift-aware reconciliation comparison logic. This iteration is documented and operationalized, but it still needs live provider/.NET state readers and provider-connected callback delivery for production readiness.
 - The .NET API now includes a first tenant-facing billing foundation (`/api/v1/billing/status`, `/api/v1/billing/invoices`, cancel/reactivate actions), but richer invoice data models and provider-backed mutation orchestration are still pending.
-- Entitlements add-on execution, outbound webhooks, and deeper billing reconciliation workflows are not yet implemented (initial entitlement enforcement rollout is now expanded, and a tenant-safe usage analytics foundation endpoint is now in place).
+- Entitlements add-on execution and deeper billing reconciliation workflows are not yet implemented. Outbound webhook delivery infrastructure is now in place (signed contracts, retry scheduling, and idempotent publish semantics), but tenant self-service management and broader event coverage remain pending.
 
 ## Durable workflow iteration checkpoint (April 5, 2026)
 
@@ -354,6 +354,7 @@ These improvements depend on the billing core, tenant self-service surface, and 
 - Expand structured metrics and logs around webhook rejection reasons, callback failures, retries, reconciliation outcomes, and entitlement transitions.
 - Add tenant-safe usage analytics exports or read models if the product needs them.
 - Add outbound webhooks using explicit, versioned contracts and replay-safe delivery.
+  - Status (April 13, 2026): first infrastructure slice implemented in the .NET API with signed deliveries, retry state, and source-event dedupe; next slice should add tenant endpoint management UX/API and expanded event types.
 - Add runbook-oriented documentation for failure handling, retries, replay, and reconciliation.
 
 ### Acceptance criteria

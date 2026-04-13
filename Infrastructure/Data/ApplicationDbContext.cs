@@ -76,6 +76,9 @@ namespace Infrastructure.Data
         public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
         public DbSet<UserMfaEnrollmentChallenge> UserMfaEnrollmentChallenges => Set<UserMfaEnrollmentChallenge>();
         public DbSet<UserStepUpSession> UserStepUpSessions => Set<UserStepUpSession>();
+        public DbSet<TenantWebhookEndpoint> TenantWebhookEndpoints => Set<TenantWebhookEndpoint>();
+        public DbSet<OutboundWebhookEvent> OutboundWebhookEvents => Set<OutboundWebhookEvent>();
+        public DbSet<OutboundWebhookDelivery> OutboundWebhookDeliveries => Set<OutboundWebhookDelivery>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -188,6 +191,47 @@ namespace Infrastructure.Data
                 entity.Property(e => e.ProviderEventId).IsRequired().HasMaxLength(120);
                 entity.Property(e => e.CorrelationId).IsRequired().HasMaxLength(120);
                 entity.Property(e => e.TargetPlanId).HasMaxLength(64);
+            });
+
+
+            builder.Entity<TenantWebhookEndpoint>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.Name }).IsUnique();
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.CallbackUrl).IsRequired().HasMaxLength(500);
+                entity.Property(e => e.SigningSecret).IsRequired().HasMaxLength(256);
+                entity.Property(e => e.SubscribedEventTypes).IsRequired().HasMaxLength(500);
+            });
+
+            builder.Entity<OutboundWebhookEvent>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.EventId).IsUnique();
+                entity.HasIndex(e => e.SourceEventKey).IsUnique();
+                entity.HasIndex(e => new { e.TenantId, e.EventType, e.OccurredAtUtc });
+                entity.Property(e => e.EventId).IsRequired().HasMaxLength(80);
+                entity.Property(e => e.ContractVersion).IsRequired().HasMaxLength(32);
+                entity.Property(e => e.EventType).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.CorrelationId).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.PayloadJson).IsRequired();
+                entity.Property(e => e.SourceEventKey).HasMaxLength(160);
+            });
+
+            builder.Entity<OutboundWebhookDelivery>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.Status, e.NextAttemptAtUtc });
+                entity.HasIndex(e => new { e.EventId, e.EndpointId }).IsUnique();
+                entity.Property(e => e.LastError).HasMaxLength(1000);
+                entity.HasOne<OutboundWebhookEvent>()
+                    .WithMany()
+                    .HasForeignKey(e => e.EventId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne<TenantWebhookEndpoint>()
+                    .WithMany()
+                    .HasForeignKey(e => e.EndpointId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             builder.Entity<EntitlementDefinition>(entity =>

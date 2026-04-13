@@ -63,6 +63,9 @@ builder.Services.AddSingleton<IInternalRequestSignatureValidator, InternalReques
 builder.Services.AddScoped<IEntitlementEvaluator, EntitlementEvaluator>();
 builder.Services.AddScoped<IEntitlementEnforcer, EntitlementEnforcer>();
 builder.Services.AddScoped<IUsageAnalyticsService, UsageAnalyticsService>();
+builder.Services.AddScoped<IOutboundWebhookPublisher, OutboundWebhookPublisher>();
+builder.Services.AddHttpClient("outbound-webhooks");
+builder.Services.AddHostedService<OutboundWebhookDeliveryDispatcher>();
 
 // RBAC
 builder.Services.AddScoped<IRbacAuthorizationService, RbacAuthorizationService>();

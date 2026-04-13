@@ -13,11 +13,16 @@ public sealed class BillingCallbackProcessor : IBillingCallbackProcessor
     private static readonly HashSet<string> SupportedContractVersions = ["2026-03-18"];
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<BillingCallbackProcessor> _logger;
+    private readonly IOutboundWebhookPublisher _outboundWebhookPublisher;
 
-    public BillingCallbackProcessor(ApplicationDbContext dbContext, ILogger<BillingCallbackProcessor> logger)
+    public BillingCallbackProcessor(
+        ApplicationDbContext dbContext,
+        ILogger<BillingCallbackProcessor> logger,
+        IOutboundWebhookPublisher outboundWebhookPublisher)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _outboundWebhookPublisher = outboundWebhookPublisher;
     }
 
     public async Task<BillingCallbackProcessingResult> ProcessAsync(BillingCallbackRequest request, CancellationToken cancellationToken = default)
@@ -100,6 +105,24 @@ public sealed class BillingCallbackProcessor : IBillingCallbackProcessor
 
         _dbContext.BillingEventInboxes.Add(inboxEntry);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _outboundWebhookPublisher.PublishAsync(
+            new OutboundWebhookPublishRequest(
+                request.TenantId,
+                "tenant.subscription.updated",
+                new
+                {
+                    subscriptionId = request.SubscriptionId,
+                    status = subscription.Status.ToString(),
+                    planId = subscription.PlanId,
+                    eventType = request.EventType,
+                    targetPlanId = request.TargetPlanId,
+                    effectiveAtUtc = request.EffectiveAtUtc
+                },
+                request.CorrelationId,
+                request.OccurredAtUtc,
+                request.EventId),
+            cancellationToken);
 
         _logger.LogInformation(
             "Billing callback applied. EventId: {EventId}, EventType: {EventType}, TenantId: {TenantId}, SubscriptionId: {SubscriptionId}, Status: {Status}, PlanId: {PlanId}, CorrelationId: {CorrelationId}",
