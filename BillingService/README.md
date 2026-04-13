@@ -4,10 +4,9 @@ Node.js / TypeScript billing companion service for the multi-tenant SaaS platfor
 
 ## Service status
 
-- **Current repository status:** V2 is complete at the platform level, and **V3 is the next phase**.
-- `BillingService` is part of that V3 direction, but it is still a scaffold rather than a live provider integration.
-- The service now includes a durable workflow and reconciliation iteration that is intended for operational hardening before live provider cutover.
-- Do **not** treat this service as production-ready billing infrastructure yet; provider integration and callback delivery are still pending.
+- **Current repository status:** V1, V2, and V3 are complete at the platform level.
+- `BillingService` is part of that completed V3 delivery and now documents shipped billing durability/reconciliation behavior plus implemented provider-facing runtime slices.
+- This README now distinguishes implemented behavior from design-only or post-V3 roadmap items explicitly.
 
 ## Responsibility boundary
 
@@ -55,16 +54,14 @@ This is intentionally still pre-live because the default app wiring does not yet
 
 Operational procedures for this iteration are documented in `../docs/Billing-Workflow-Runbook.md`.
 
-## Not implemented yet
+## Design-only / post-V3 roadmap (not implemented here)
 
-The following work is still upcoming V3 work and should not be documented elsewhere as already complete:
+V3 is closed. The items below are **not** open V3 scope; they are future roadmap/design candidates unless and until implemented in code:
 
-- live billing provider SDK integration
-- real webhook signature verification
-- tenant/subscription mapping from provider webhook payloads
-- authenticated HTTP callback delivery into the .NET API
-- live provider/internal state source integrations (the comparison job is implemented, but default app wiring still uses placeholder sources until provider/.NET fetch clients are connected)
-- tenant-facing billing self-service functionality
+- additional provider expansion beyond the currently implemented provider-facing slice
+- deeper tenant-facing billing management features owned by the .NET API surface
+- further reconciliation automation and operator tooling beyond the current baseline
+- exporter/dashboard/alert maturation described in `../docs/V3-Observability-and-Operations-Design.md`
 
 ## Current folder structure
 
@@ -156,9 +153,9 @@ Returns a lightweight in-memory JSON snapshot for active requests and request co
 ### `POST /webhooks/provider`
 Accepts placeholder webhook requests and returns a `202 Accepted` response indicating that live provider processing is not implemented yet.
 
-## Planned V3 evolution
+## Post-V3 roadmap candidates
 
-The next useful implementation slices for this service are:
+Potential post-V3 implementation slices for this service are:
 
 1. connect the service to the .NET internal billing callback endpoint using the documented HMAC contract
 2. replace the placeholder webhook adapter with a real webhook verification implementation
@@ -178,7 +175,7 @@ These changes should keep provider-specific logic inside `BillingService` and pr
 
 ## Manual confirmation still recommended
 
-Before treating this README as final for V3 planning, manually confirm:
+For post-V3 roadmap execution, manually confirm:
 
 - which billing provider will be implemented first
 - whether Node.js `>=22` is the intended long-term runtime requirement

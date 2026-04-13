@@ -5,10 +5,10 @@ The .NET API is the current system of record for tenant identity, authorization,
 
 ## Project status
 
-- **V2 is complete** in the current repository state.
-- **V3 is the next phase** and is focused on productionizing billing, improving operational durability, strengthening security, and expanding platform maturity.
-- The .NET API already contains the internal billing callback contract and subscription lifecycle application logic needed for that next phase.
-- `BillingService/` exists as the provider-facing billing companion service, but it is still in a pre-live scaffold state and does **not** yet implement live provider integrations.
+- **V1, V2, and V3 are complete** in the current repository state.
+- The repository now documents V3 as a completed milestone instead of a pending phase.
+- The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
+- `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
 
 ## Versioning
 
@@ -48,7 +48,7 @@ This repository currently contains:
 - **Tests** (`Tests/`): integration and unit test coverage for auth, admin, audit, RBAC, observability, and billing callback flows.
 - **BillingService** (`BillingService/`): provider-facing billing scaffold with placeholder webhook handling, normalized event types, durable file-backed workflow queueing, retry/backoff, dead-letter handling, and reconciliation summary skeletons.
 
-## Implemented platform scope (V2 complete)
+## Implemented platform scope (V1-V3 baseline)
 
 ### Multi-tenant foundation
 
@@ -179,34 +179,35 @@ The repository includes automated tests covering:
 - identity-hardening edge cases for verification/password-reset token replay resistance and MFA step-up purpose binding on admin-sensitive actions
 - tenant billing visibility and self-service action behavior, including tenant-scoped subscription/invoice reads, cancel/reactivate state transitions, and clean invalid-state error handling
 
-## V3 work planned next
+## V3 completion summary
 
-The next phase is intentionally separate from the already-implemented V2 platform scope.
+V3 is now closed as complete. The repository should no longer be interpreted as "V3 planned next" or "under active V3 development."
 
-### Billing and workflow priorities
+### What V3 completed
 
-- connect `BillingService` to the .NET internal billing callback endpoint
-- complete Stripe webhook verification/normalization (tenant checkout/portal/invoice-sync provider calls are now scaffolded in BillingService)
-- operationalize the durable retry, replay protection, dead-letter, and reconciliation workflows now scaffolded in `BillingService`
-- keep provider-specific logic inside `BillingService` while the .NET API remains the system of record
+- productionized internal billing callback lifecycle handling in the .NET API with authenticated contract validation and idempotent application semantics
+- productionized BillingService workflow durability foundations including persistent queue/retry/dead-letter state and replay-safe deduplication
+- added tenant-facing billing self-service foundations against internal subscription state (`status`, `invoices`, `cancel`, `reactivate`)
+- delivered entitlements model foundations with progressive enforcement on selected billing/admin/analytics surfaces
+- delivered identity/security hardening slices (invite/verification/reset lifecycle foundations, session inventory/revoke-all, MFA enrollment + step-up)
+- delivered usage analytics foundation endpoints and initial outbound webhook delivery foundation with signed payload semantics
+- expanded docs/runbooks and automated coverage around tenant safety, replay/idempotency handling, and operational diagnostics
 
-### Platform maturity priorities
+### Implemented vs design-only status
 
-- tenant-facing billing self-service capabilities built on internal subscription state
-- entitlements / add-ons / feature gating (foundation schema + seeded definitions/mappings + evaluator/enforcer are implemented; progressive enforcement is active on billing/admin/analytics starter surfaces)
-- stronger security hardening and operational diagnostics
-- usage analytics maturity improvements and expanded outbound webhook tenant self-service tooling
+**Implemented in-repo (V3 complete):**
 
-### Work that is **not** complete yet
+- BillingService durable workflow runtime primitives and reconciliation scaffolding
+- .NET internal billing callback ingestion, signature checks, contract versioning, and event-id inbox protection
+- tenant billing self-service foundation endpoints on internal billing state
+- entitlement schema/seeding/evaluator/enforcer baseline with progressive rollout
+- identity lifecycle hardening + MFA step-up baseline
+- usage analytics foundation + outbound webhook delivery foundation
 
-The repository should still be treated as **pre-live for provider billing integration**:
+**Design-only / post-V3 planning artifacts (not implemented as runtime behavior):**
 
-- live provider webhook verification is not implemented yet (webhook path still uses placeholder adapter)
-- no verified external webhook ingestion flow is implemented
-- `BillingService` does not yet call the .NET internal callback endpoint
-- `BillingService` now includes drift-aware reconciliation logic, but it is not yet connected to live provider/.NET state readers
-- end-to-end provider synchronization across both services is not yet implemented
-
+- `docs/V3-Observability-and-Operations-Design.md` remains a design artifact for future exporter/dashboard/alert maturation
+- any future provider-expansion work beyond the currently implemented provider-connected scope should be tracked as post-V3 roadmap work, not open V3 scope
 
 ## Operational notes (durable workflow iteration)
 
