@@ -3,36 +3,27 @@
 ## Project overview
 This repository contains a multi-tenant SaaS platform with:
 - a primary ASP.NET Core API as the system of record
-- a Node.js BillingService responsible for provider-facing billing integration and billing workflow processing
+- a Node.js BillingService as the provider-facing billing companion service
 
 ## Current project status
-V1 and V2 are complete.
+V1, V2, and V3 are complete.
 
-### Completed platform scope
-- tenant registration and authentication
-- tenant context enforcement
-- refresh tokens and token revocation
-- RBAC / role-permission model
-- plan model and upgrade flow
-- plan-based API usage limits
-- tenant-scoped audit logging
-- admin endpoints for tenant/user management
-- health checks
-- automated tests
-- initial observability foundation
-- initial billing architecture split between .NET and BillingService
+## Active V4 direction (pre-deployment / code-first)
+V4 is the active execution phase and is focused on pre-deployment engineering maturity.
 
-## Current V3 direction
-V3 focuses on productionizing billing, improving operational durability, strengthening security, and expanding platform maturity.
+### V4 north star
+Build a production-like local platform that is:
+- code-first
+- pre-deployment
+- deterministic to validate locally
+- contract-safe and tenant-safe by default
 
-### Primary V3 priorities
-- live billing provider integration
-- durable billing workflows and reconciliation
-- tenant-facing billing self-service capabilities
-- entitlements / add-ons / feature gating
-- identity and security hardening
-- stronger observability and runbooks
-- usage analytics and outbound webhooks
+### V4 priorities
+- deterministic local bootstrap and smoke validation workflows
+- cross-service contract conformance tests (.NET API <-> BillingService)
+- replay/idempotency fixture-driven billing validation
+- tenant-isolation invariant testing across sensitive surfaces
+- documentation and runbook accuracy for every completed slice
 
 ## System boundaries
 
@@ -42,7 +33,7 @@ V3 focuses on productionizing billing, improving operational durability, strengt
 - tenant context enforcement
 - RBAC / authorization
 - tenant-scoped business data
-- plan enforcement and entitlement enforcement
+- plan and entitlement enforcement
 - admin endpoints
 - audit logging
 - internal subscription state exposed to the rest of the platform
@@ -59,13 +50,14 @@ V3 focuses on productionizing billing, improving operational durability, strengt
 
 ## Architecture rules
 - Keep the .NET API as the system of record unless the task explicitly changes ownership.
+- Keep BillingService as the provider-facing companion service.
 - Do not move tenant enforcement or authorization into BillingService.
 - Do not leak raw provider payloads into unrelated .NET domain models.
 - Keep provider-specific logic isolated behind adapters or handlers.
-- Prefer additive, reviewable changes over broad rewrites.
-- Avoid unrelated refactors.
-- Preserve existing working behavior unless the task explicitly changes it.
 - Keep contracts explicit and versionable.
+- Prefer additive, reviewable thin vertical slices.
+- Avoid broad rewrites or unrelated refactors.
+- Preserve existing working behavior unless the task explicitly changes it.
 
 ## Multi-tenant safety rules
 - Never return cross-tenant data.
@@ -74,7 +66,7 @@ V3 focuses on productionizing billing, improving operational durability, strengt
 - Never trust external payload identifiers without internal verification.
 - Add tenant-isolation tests for any new auth, admin, billing, entitlement, analytics, or webhook behavior.
 
-## Billing rules
+## Billing safety rules
 - Treat every provider webhook as untrusted input until verified.
 - Make billing event handling idempotent.
 - Avoid double-processing renewals, cancellations, downgrades, reactivations, and failed payments.
@@ -91,7 +83,7 @@ V3 focuses on productionizing billing, improving operational durability, strengt
   - identify the event type
   - support idempotent processing
   - support traceability in logs
-- Any internal callback, webhook relay, or service-to-service action must be authenticated/validated.
+- Any internal callback, webhook relay, or service-to-service action must be authenticated and validated.
 
 ## Data ownership rules
 - Core tenant, user, RBAC, and business data belong to the .NET API.
@@ -99,15 +91,15 @@ V3 focuses on productionizing billing, improving operational durability, strengt
 - If subscription or invoice data is mirrored across services, ownership and synchronization direction must be explicit in code and docs.
 - Avoid ambiguous write ownership.
 
-## V3 execution style
-For any non-trivial V3 task:
+## V4 execution style
+For any non-trivial V4 task:
 1. Read this file and inspect the current implementation first.
 2. Review the relevant docs before coding.
-3. Plan the smallest safe slice first.
+3. Plan the smallest safe thin vertical slice first.
 4. Implement only the requested scope.
 5. Add or update automated tests.
-6. Update documentation for that iteration.
-7. Run validation commands.
+6. Run explicit local validation commands and record results.
+7. Update documentation for that completed iteration.
 8. Summarize changed files, assumptions, risks, and follow-up work.
 
 ## Required documentation workflow
@@ -115,7 +107,7 @@ Every completed iteration must update docs as applicable.
 
 Always review and update:
 - README.md
-- docs/V3-Implementation-Backlog.md
+- docs/V4-Implementation-Backlog.md
 - docs/Internal-Billing-Contract.md if contracts changed
 - BillingService/README.md if BillingService changed
 - any feature-specific docs added under docs/
@@ -132,6 +124,7 @@ Add or update tests for:
 - subscription and entitlement transitions
 - retry and reconciliation behavior where practical
 - security-sensitive auth/account flows where applicable
+- deterministic local workflow/smoke coverage when affected
 
 ## Validation
 Run the relevant commands after changes.
@@ -144,6 +137,10 @@ Run:
 - dotnet build --no-restore
 - dotnet test --no-build --verbosity normal
 
+### For BillingService work
+- run the project-specific install/build/test commands documented in BillingService
+- if commands change, update BillingService/README.md
+
 ## EF Core
 When a schema/model change requires a migration, you may use:
 - /tmp/dotnet-tools/dotnet-ef migrations add <MigrationName>
@@ -153,10 +150,6 @@ If the DbContext is not in the startup project, specify:
 - --project <path-to-ef-project>
 - --startup-project <path-to-startup-project>
 <path-to-startup-project> is normally the Infrastructure project.
-
-### For BillingService work
-- run the project-specific install/build/test commands documented in BillingService
-- if commands change, update BillingService/README.md
 
 If schema changes are introduced:
 - add the migration
@@ -170,10 +163,10 @@ If schema changes are introduced:
 - Keep error responses consistent with existing API patterns.
 - Do not introduce circular dependencies.
 - Do not embed billing-provider assumptions in unrelated platform code.
-- Keep local development and testability in mind.
+- Keep local development and deterministic testability in mind.
 
 ## Observability expectations
-For V3 work:
+For V4 work:
 - emit structured logs
 - include correlation or trace identifiers where possible
 - log lifecycle transitions and rejection reasons clearly
@@ -190,7 +183,8 @@ For V3 work:
 A task is complete only when:
 - the requested behavior is implemented
 - the change respects system boundaries
-- build passes
+- thin-slice scope was maintained (no broad refactor)
+- explicit validation was executed and results were reported
 - tests pass, or failures are clearly explained
 - docs/readme are updated for that iteration
 - changed files are summarized
