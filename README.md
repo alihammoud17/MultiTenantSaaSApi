@@ -11,6 +11,56 @@ The .NET API is the current system of record for tenant identity, authorization,
 - The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
 - `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
 
+## V4 orchestration profile (local-first, pre-deployment)
+
+### Local bootstrap path (code-ready setup)
+
+From the repository root:
+
+```bash
+scripts/local/bootstrap.sh
+```
+
+What this does today:
+
+1. restores and builds the .NET solution
+2. applies EF Core migrations when `/tmp/dotnet-tools/dotnet-ef` is available
+3. installs BillingService dependencies with `npm ci`
+
+### Local smoke path (code-ready runtime validation)
+
+Run in this order from the repository root:
+
+```bash
+# shell A
+scripts/local/run.sh
+
+# shell B
+scripts/local/smoke.sh
+```
+
+Smoke currently validates only local runtime readiness for the orchestration profile:
+
+- .NET API health endpoint responsiveness
+- BillingService health endpoint responsiveness
+- BillingService placeholder webhook endpoint acceptance
+
+For detailed script behavior, environment overrides, and troubleshooting, use `docs/Local-Orchestration-Profile.md`.
+
+### Code-ready local validation vs production readiness
+
+**Code-ready local validation (implemented now):**
+
+- deterministic bootstrap and two-shell run/smoke workflow
+- repeatable local service startup with captured logs
+- basic smoke assertions over API/BillingService health and placeholder webhook acceptance
+
+**Production readiness (not claimed in this iteration):**
+
+- verified live provider webhook authenticity and end-to-end provider -> BillingService -> .NET callback flow
+- deployment-proven telemetry exporters, dashboards, alerts, and SLO enforcement
+- production operations hardening (incident automation, key-rotation processes, and environment-level DR exercises)
+
 ## Versioning
 
 - Public API routes use URL-segment versioning (`/api/v1/...`).
