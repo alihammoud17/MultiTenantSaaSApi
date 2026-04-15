@@ -130,6 +130,16 @@ npm run dev
 
 The service starts on `http://localhost:3001` by default.
 
+For deterministic platform orchestration from the repository root, use:
+
+```bash
+scripts/local/bootstrap.sh
+scripts/local/run.sh
+scripts/local/smoke.sh
+```
+
+`run.sh` starts both services and keeps them running until interrupted; `smoke.sh` should be run from a second shell while `run.sh` is active.
+
 ## Build and test
 
 From the repository root:

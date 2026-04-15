@@ -301,6 +301,47 @@ The .NET API includes a tenant-safe usage analytics foundation sourced from tena
 
 Implementation and follow-up notes for this iteration are in `docs/Usage-Analytics.md`.
 
+## Local deterministic orchestration profile (P0)
+
+For a repeatable local V4 flow, use the repo-level scripts under `scripts/local/`.
+
+### Scripted sequence (exact order)
+
+From repository root:
+
+```bash
+scripts/local/bootstrap.sh
+scripts/local/run.sh
+# in a second shell while run.sh is active:
+scripts/local/smoke.sh
+```
+
+What each script does:
+
+- `bootstrap.sh`
+  - runs `dotnet restore`
+  - runs `dotnet build --no-restore`
+  - applies EF migrations using `/tmp/dotnet-tools/dotnet-ef` when available
+  - runs `npm ci` in `BillingService`
+- `run.sh`
+  - starts the API on `http://localhost:5000`
+  - starts BillingService on `http://localhost:3001`
+  - writes logs to `.local-api.log` and `.local-billing.log`
+- `smoke.sh`
+  - verifies `GET /health` on API and BillingService
+  - verifies BillingService accepts `POST /webhooks/provider`
+
+Expected behavior:
+
+- `bootstrap.sh` exits non-zero if restore/build/install fail.
+- `run.sh` keeps both services running until `Ctrl+C`, then stops both.
+- `smoke.sh` exits non-zero if any health/webhook check fails.
+
+Manual-only remainder (current P0 scope):
+
+- This smoke path validates service readiness and placeholder webhook acceptance only.
+- End-to-end provider webhook verification and authenticated BillingService -> .NET callback flow remain manual/post-P0 because live provider wiring is still pre-live.
+
 ## Local setup and run
 
 ### Prerequisites
@@ -409,14 +450,22 @@ npm run build
 npm test
 ```
 
+Or run the deterministic local profile sequence:
+
+```bash
+scripts/local/bootstrap.sh
+scripts/local/run.sh
+scripts/local/smoke.sh
+```
+
 ## Documentation status for this completed iteration
 
 Documentation was reviewed for accuracy against the current implemented baseline.
 
-- `README.md` updated with the canonical .NET validation command sequence used for this repository.
-- `docs/V3-Implementation-Backlog.md` updated with a documentation alignment checkpoint for this iteration.
+- `README.md` updated with the P0 deterministic local orchestration profile scripts, exact command sequence, and manual-scope notes.
+- `docs/V4-Implementation-Backlog.md` updated to mark the P0 local deterministic orchestration profile as completed on April 15, 2026.
 - `docs/Internal-Billing-Contract.md` reviewed with **no contract changes required** for this iteration.
-- `BillingService/README.md` reviewed with **no changes required** because BillingService implementation scope did not change.
+- `BillingService/README.md` updated to document use of the new root orchestration scripts for deterministic local runs.
 
 ## Additional docs
 
