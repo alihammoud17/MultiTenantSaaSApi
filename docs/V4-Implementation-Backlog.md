@@ -107,8 +107,10 @@ V4 should be considered successful when:
 
 ## P0 (build now)
 
-1. **Local deterministic orchestration profile**
-   - add a repo-level local orchestration entrypoint (script + docs) that starts dependencies, applies migrations, runs API + BillingService, and executes a smoke scenario.
+1. **Local deterministic orchestration profile** *(Completed April 15, 2026)*
+   - added repo-level local orchestration scripts in `scripts/local/` for bootstrap/run/smoke
+   - documented exact command order and expected behavior in `README.md` and `BillingService/README.md`
+   - current smoke scope validates local API/BillingService health and placeholder webhook acceptance; full provider->callback E2E remains manual until live wiring slices land
 
 2. **Cross-service contract test suite**
    - add explicit tests for signed callback payload shape/version rules and required fields (`tenantId`, `subscriptionId`, `eventId`, `eventType`, timestamps).
