@@ -140,6 +140,43 @@ scripts/local/smoke.sh
 
 `run.sh` starts both services and keeps them running until interrupted; `smoke.sh` should be run from a second shell while `run.sh` is active.
 
+### Orchestration profile quick reference
+
+Local bootstrap path (code-ready setup):
+
+```bash
+scripts/local/bootstrap.sh
+```
+
+Local smoke path (code-ready runtime check):
+
+```bash
+# shell A
+scripts/local/run.sh
+
+# shell B
+scripts/local/smoke.sh
+```
+
+Smoke validates service health and placeholder webhook acceptance only; it does **not** prove live provider webhook verification or authenticated callback delivery into the .NET API.
+
+For script flags/overrides and troubleshooting, see `../docs/Local-Orchestration-Profile.md`.
+
+
+## Code-ready local validation vs production readiness
+
+**Code-ready local validation (implemented):**
+
+- deterministic bootstrap/run/smoke workflow via `scripts/local/`
+- local BillingService runtime validation via `/health`, `/metrics`, and placeholder webhook acceptance smoke checks
+- repeatable local log capture through `.local-api.log` and `.local-billing.log` defaults
+
+**Production readiness (not claimed yet):**
+
+- live provider webhook signature verification in active runtime flow
+- authenticated BillingService-to-.NET callback delivery wired and validated end-to-end
+- production-proven telemetry/exporter/alert runbooks and on-call grade operations automation
+
 ## Build and test
 
 From the repository root:

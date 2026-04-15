@@ -109,8 +109,9 @@ V4 should be considered successful when:
 
 1. **Local deterministic orchestration profile** *(Completed April 15, 2026)*
    - added repo-level local orchestration scripts in `scripts/local/` for bootstrap/run/smoke
-   - documented exact command order and expected behavior in `README.md` and `BillingService/README.md`
+   - documented exact command order and expected behavior in `README.md`, `BillingService/README.md`, and `docs/Local-Orchestration-Profile.md`
    - current smoke scope validates local API/BillingService health and placeholder webhook acceptance; full provider->callback E2E remains manual until live wiring slices land
+   - explicitly split code-ready local validation claims from production-readiness claims in repo-level docs
 
 2. **Cross-service contract test suite**
    - add explicit tests for signed callback payload shape/version rules and required fields (`tenantId`, `subscriptionId`, `eventId`, `eventType`, timestamps).
