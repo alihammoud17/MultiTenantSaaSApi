@@ -226,6 +226,7 @@ The repository includes automated tests covering:
 - rate-limit header behavior plus explicit rate-limit rejection responses
 - RBAC permission evaluation and authorization handler behavior
 - internal billing callback validation (including contract-version rejection), lifecycle handling, cross-tenant rejection, and idempotency/replay protection
+- P0 cross-service contract conformance coverage for BillingService -> .NET callback behavior (valid signed payloads, required-field failures, invalid version/signature, tenant/subscription mismatch, and duplicate-event idempotency expectations)
 - deeper security-focused scenarios for authentication negatives, authorization denials, tenant-isolation tampering, input validation abuse cases, and internal billing signature hardening
 - identity-hardening edge cases for verification/password-reset token replay resistance and MFA step-up purpose binding on admin-sensitive actions
 - tenant billing visibility and self-service action behavior, including tenant-scoped subscription/invoice reads, cancel/reactivate state transitions, and clean invalid-state error handling
