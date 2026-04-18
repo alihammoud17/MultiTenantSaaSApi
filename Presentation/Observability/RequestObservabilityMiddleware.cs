@@ -25,15 +25,18 @@ public sealed class RequestObservabilityMiddleware
         context.TraceIdentifier = correlationId;
         context.Response.Headers[CorrelationHeaderName] = correlationId;
 
+        var requestPath = context.Request.Path.ToString();
+        var sanitizedRequestPath = SanitizeForLog(requestPath);
+
         using var requestScope = _observability.BeginRequest();
         using var logScope = _logger.BeginScope(new Dictionary<string, object>
         {
             ["CorrelationId"] = correlationId,
             ["TraceId"] = Activity.Current?.TraceId.ToString() ?? string.Empty,
-            ["RequestPath"] = context.Request.Path.ToString()
+            ["RequestPath"] = sanitizedRequestPath
         });
 
-        var route = context.Request.Path.HasValue ? context.Request.Path.Value! : "/";
+        var route = context.Request.Path.HasValue ? SanitizeForLog(context.Request.Path.Value!) : "/";
         var stopwatch = Stopwatch.StartNew();
 
         using var activity = ApiObservability.ActivitySource.StartActivity($"{context.Request.Method} {route}", ActivityKind.Server);
@@ -60,6 +63,16 @@ public sealed class RequestObservabilityMiddleware
                 context.Response.StatusCode,
                 stopwatch.Elapsed.TotalMilliseconds);
         }
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     private static string ResolveCorrelationId(HttpContext context)
