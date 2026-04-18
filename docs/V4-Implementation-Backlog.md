@@ -123,6 +123,9 @@ V4 should be considered successful when:
      - duplicate `eventId` idempotent handling
    - implemented BillingService producer contract tests in `BillingService/tests/billingCallbackContract.test.ts` to verify callback payload shape/version and provider-event fallback mapping.
    - the P0 suite remains deterministic and local (test harness signatures and file-backed workflow state only; no live provider dependency).
+   - docs follow-up from test findings:
+     - clarified required-field rejection and duplicate response semantics in `docs/Internal-Billing-Contract.md`
+     - clarified BillingService `providerEventId` fallback-to-`eventId` contract expectation in `docs/Internal-Billing-Contract.md` and `BillingService/README.md`
 
 3. **Billing event fixture pack + replay tests**
    - create fixture-driven tests covering duplicates, out-of-order sequences, stale timestamps, and invalid signatures.
