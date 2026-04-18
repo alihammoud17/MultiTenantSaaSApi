@@ -113,9 +113,16 @@ V4 should be considered successful when:
    - current smoke scope validates local API/BillingService health and placeholder webhook acceptance; full provider->callback E2E remains manual until live wiring slices land
    - explicitly split code-ready local validation claims from production-readiness claims in repo-level docs
 
-2. **Cross-service contract test suite**
-   - add explicit tests for signed callback payload shape/version rules and required fields (`tenantId`, `subscriptionId`, `eventId`, `eventType`, timestamps).
-   - design drafted in `docs/V4-CrossService-Contract-Test-Design.md` (April 18, 2026); implementation pending.
+2. **Cross-service contract test suite** *(Completed April 18, 2026)*
+   - implemented focused automated contract tests in `.NET` integration coverage (`Tests/Integration/CrossServiceBillingContractTests.cs`) for:
+     - valid signed callback acceptance
+     - missing required fields rejection
+     - unsupported contract version rejection
+     - invalid signature rejection
+     - tenant/subscription mismatch rejection
+     - duplicate `eventId` idempotent handling
+   - implemented BillingService producer contract tests in `BillingService/tests/billingCallbackContract.test.ts` to verify callback payload shape/version and provider-event fallback mapping.
+   - the P0 suite remains deterministic and local (test harness signatures and file-backed workflow state only; no live provider dependency).
 
 3. **Billing event fixture pack + replay tests**
    - create fixture-driven tests covering duplicates, out-of-order sequences, stale timestamps, and invalid signatures.
