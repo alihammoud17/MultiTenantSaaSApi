@@ -115,6 +115,7 @@ V4 should be considered successful when:
 
 2. **Cross-service contract test suite**
    - add explicit tests for signed callback payload shape/version rules and required fields (`tenantId`, `subscriptionId`, `eventId`, `eventType`, timestamps).
+   - design drafted in `docs/V4-CrossService-Contract-Test-Design.md` (April 18, 2026); implementation pending.
 
 3. **Billing event fixture pack + replay tests**
    - create fixture-driven tests covering duplicates, out-of-order sequences, stale timestamps, and invalid signatures.
