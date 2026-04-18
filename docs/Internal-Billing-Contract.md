@@ -62,9 +62,16 @@ This keeps the callback payload explicit and versionable.
 - `occurredAtUtc`
 - `correlationId`
 
+If any required string field is missing or empty, the .NET API rejects the callback with:
+
+- `400 Bad Request`
+- `{ "error": "Billing callback is missing required fields." }`
+
 `targetPlanId` is required for `subscription.plan_changed` and `subscription.downgrade_scheduled`.
 
 `effectiveAtUtc` is optional and is used when the billing service needs the .NET API to preserve timing semantics for scheduled downgrades, grace-period deadlines, renewals, or cancellations.
+
+`providerEventId` must always be populated. BillingService currently uses normalized provider event ids and falls back to `eventId` if a provider event id is unavailable during normalization, so downstream idempotency/traceability fields remain non-empty.
 
 ## Supported event types
 
@@ -111,6 +118,11 @@ The API never trusts provider identifiers alone for tenant resolution.
 Processed events are stored in `BillingEventInboxes` using a unique `eventId`.
 
 If the same `eventId` is submitted more than once, the API returns a successful duplicate response and does not reapply the state transition.
+
+Duplicate responses return:
+
+- `200 OK`
+- `{ "eventId": "<same-event-id>", "isDuplicate": true }`
 
 ## Assumptions
 

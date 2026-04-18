@@ -189,6 +189,12 @@ npm test
 
 `npm test` compiles TypeScript and runs the Node test runner against `dist/tests/*.test.js`.
 
+The test suite includes callback-producer contract coverage (`tests/billingCallbackContract.test.ts`) that verifies:
+
+- emitted callback payload compatibility with `../docs/Internal-Billing-Contract.md`
+- fixed contract version emission (`2026-03-18`)
+- `providerEventId` fallback to `eventId` when provider payloads do not include a provider event id
+
 ## Current endpoints
 
 ### `GET /health`

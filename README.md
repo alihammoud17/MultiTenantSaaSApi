@@ -227,6 +227,7 @@ The repository includes automated tests covering:
 - RBAC permission evaluation and authorization handler behavior
 - internal billing callback validation (including contract-version rejection), lifecycle handling, cross-tenant rejection, and idempotency/replay protection
 - P0 cross-service contract conformance coverage for BillingService -> .NET callback behavior (valid signed payloads, required-field failures, invalid version/signature, tenant/subscription mismatch, and duplicate-event idempotency expectations)
+- BillingService callback producer contract coverage to assert payload schema/version plus `providerEventId` fallback-to-`eventId` behavior when provider ids are absent
 - deeper security-focused scenarios for authentication negatives, authorization denials, tenant-isolation tampering, input validation abuse cases, and internal billing signature hardening
 - identity-hardening edge cases for verification/password-reset token replay resistance and MFA step-up purpose binding on admin-sensitive actions
 - tenant billing visibility and self-service action behavior, including tenant-scoped subscription/invoice reads, cancel/reactivate state transitions, and clean invalid-state error handling
@@ -513,10 +514,10 @@ scripts/local/smoke.sh
 
 Documentation was reviewed for accuracy against the current implemented baseline.
 
-- `README.md` updated with the P0 deterministic local orchestration profile scripts, exact command sequence, and manual-scope notes.
-- `docs/V4-Implementation-Backlog.md` updated to mark the P0 local deterministic orchestration profile as completed on April 15, 2026.
-- `docs/Internal-Billing-Contract.md` reviewed with **no contract changes required** for this iteration.
-- `BillingService/README.md` updated to document use of the new root orchestration scripts for deterministic local runs.
+- `README.md` now clarifies that cross-service contract coverage includes BillingService callback-payload schema/version checks and deterministic provider-event fallback behavior.
+- `docs/V4-Implementation-Backlog.md` documents the completed April 18, 2026 P0 cross-service contract test slice and the local deterministic scope.
+- `docs/Internal-Billing-Contract.md` now clarifies callback rejection semantics for missing required fields, duplicate-event response semantics, and `providerEventId` expectations/fallback behavior used by BillingService normalization.
+- `BillingService/README.md` now documents that `npm test` includes contract-producer tests for callback payload shape/version and provider event-id fallback behavior.
 
 ## Additional docs
 
