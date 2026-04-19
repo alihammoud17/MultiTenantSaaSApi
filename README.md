@@ -258,6 +258,7 @@ The repository includes automated tests covering:
 - deeper security-focused scenarios for authentication negatives, authorization denials, tenant-isolation tampering, input validation abuse cases, and internal billing signature hardening
 - identity-hardening edge cases for verification/password-reset token replay resistance and MFA step-up purpose binding on admin-sensitive actions
 - tenant billing visibility and self-service action behavior, including tenant-scoped subscription/invoice reads, cancel/reactivate state transitions, and clean invalid-state error handling
+- entitlement matrix harness foundation coverage in unit tests for deterministic plan/add-on/override precedence and numeric add-on merge semantics
 
 ## V3 completion summary
 
