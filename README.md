@@ -6,8 +6,8 @@ The .NET API is the current system of record for tenant identity, authorization,
 ## Project status
 
 - **V1, V2, and V3 are complete** in the current repository state.
-- **V4 planning is now defined for pre-deployment code-first maturity** in `docs/V4-Implementation-Backlog.md`.
-- The repository now documents V3 as a completed milestone instead of a pending phase.
+- **V4 execution is active for pre-deployment code-first maturity** in `docs/V4-Implementation-Backlog.md`.
+- **P0 slices 1-4 and the documentation-baseline slice are implemented** as of **April 19, 2026**.
 - The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
 - `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
 
@@ -61,6 +61,33 @@ For detailed script behavior, environment overrides, and troubleshooting, use `d
 - deployment-proven telemetry exporters, dashboards, alerts, and SLO enforcement
 - production operations hardening (incident automation, key-rotation processes, and environment-level DR exercises)
 
+## V4 pre-deployment capability map (P0 baseline, April 19, 2026)
+
+| Capability track | Pre-deployment status | Demoable locally today | Post-deployment remaining |
+| --- | --- | --- | --- |
+| Deterministic platform orchestration | Implemented | `scripts/local/bootstrap.sh`, `scripts/local/run.sh`, and `scripts/local/smoke.sh` demonstrate repeatable setup + runtime smoke flow. | Environment-specific deployment bootstrap/runbooks and production incident automation. |
+| .NET internal billing callback contract safety | Implemented | Signed callback validation, version gates, required-field checks, tenant/subscription mapping validation, and duplicate-event idempotency can be validated via integration tests. | Live provider-origin event chain verification under real secrets and rotated key operations. |
+| Cross-service contract conformance | Implemented | .NET consumer contract tests + BillingService producer contract tests prove agreed payload/version behavior in local CI/test runs. | Ongoing version-compatibility rollout policy across deployed service versions. |
+| Billing replay/idempotency fixture validation | Implemented (pre-live fixture slice) | BillingService fixture-driven replay tests validate duplicate delivery safety, out-of-order processing behavior, stale timestamp handling behavior, and invalid-signature rejection pre-enqueue. | Production replay/forensics workflows against real provider delivery retries and incident datasets. |
+| Tenant-isolation invariant coverage | Implemented | Integration tests assert cross-tenant rejection across admin, analytics, audit, billing read, and internal billing callback surfaces. | Continuous production verification with runtime telemetry alerts for isolation regressions. |
+| Provider webhook verification + callback delivery wiring | Partial / pre-live | Placeholder webhook acceptance and scaffolded provider boundaries are locally demoable. | Real provider signature verification and fully wired provider -> BillingService -> .NET callback flow in deployed environments. |
+| Observability and operations hardening | Partial | Local health/metrics and structured logs are demoable for both services. | Deployment-proven exporters, dashboards, alerts, SLO/error-budget operation, and DR exercises. |
+
+### What is demoable locally today (P0-complete baseline)
+
+- full local orchestration bootstrap/run/smoke path for both services
+- cross-service callback contract conformance checks in automated tests
+- fixture-driven billing replay/idempotency validation scenarios in BillingService tests
+- tenant-isolation invariant negatives across sensitive .NET API surfaces
+- health + metrics + structured-log visibility suitable for deterministic local demonstrations
+
+### What remains explicitly post-deployment
+
+- live provider webhook signature verification in active runtime flows with production secrets
+- end-to-end provider event delivery into authenticated .NET callbacks in deployed environments
+- production-grade observability/exporter/alert/SLO maturity proven under real workloads
+- operator automation for key rotation, incident response, and DR exercises
+
 ## Versioning
 
 - Public API routes use URL-segment versioning (`/api/v1/...`).
@@ -72,7 +99,7 @@ For detailed script behavior, environment overrides, and troubleshooting, use `d
 
 ## Feature matrix (current capabilities)
 
-| Capability area | Current status (April 13, 2026) | Notes |
+| Capability area | Current status (April 19, 2026) | Notes |
 | --- | --- | --- |
 | Multi-tenant auth + RBAC + audit | Implemented | Core tenant isolation, auth lifecycle, RBAC, and tenant audit surfaces are in production-ready shape. |
 | Plan catalog + lifecycle state | Implemented | Plan upgrades and subscription lifecycle state are persisted in the .NET API. |
