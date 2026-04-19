@@ -187,7 +187,7 @@ npm run build
 npm test
 ```
 
-`npm test` compiles TypeScript and runs the Node test runner against `dist/tests/*.test.js`.
+`npm test` runs the Node test runner directly against `tests/*.test.ts` using Node's TypeScript transform mode (`--experimental-transform-types`) for deterministic local execution without a pre-build step.
 
 The test suite includes callback-producer contract coverage (`tests/billingCallbackContract.test.ts`) that verifies:
 

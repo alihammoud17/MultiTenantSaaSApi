@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { BillingCallbackPayload, InternalSubscriptionEvent } from '../src/shared/types.ts';
-import { BillingCallbackPublisher, SubscriptionSyncJob } from '../src/jobs/subscriptionSyncJob.ts';
+import type { BillingCallbackPayload, InternalSubscriptionEvent } from '../src/shared/types.ts';
+import { SubscriptionSyncJob } from '../src/jobs/subscriptionSyncJob.ts';
+import type { BillingCallbackPublisher } from '../src/jobs/subscriptionSyncJob.ts';
 
 function makeEvent(overrides: Partial<InternalSubscriptionEvent> = {}): InternalSubscriptionEvent {
   return {
@@ -32,6 +33,19 @@ async function withTempDir(run: (path: string) => Promise<void>) {
   }
 }
 
+async function waitForPublished(job: SubscriptionSyncJob, published: BillingCallbackPayload[], expectedCount: number): Promise<void> {
+  for (let i = 0; i < 40; i += 1) {
+    await job.runWorkerCycle();
+    if (published.length >= expectedCount) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  throw new Error(`Timed out waiting for ${expectedCount} published callbacks.`);
+}
+
 test('SubscriptionSyncJob emits callback payload compatible with the internal billing contract', async () => {
   await withTempDir(async (dir) => {
     const published: BillingCallbackPayload[] = [];
@@ -50,7 +64,7 @@ test('SubscriptionSyncJob emits callback payload compatible with the internal bi
 
     const event = makeEvent();
     const result = await job.enqueue(event);
-    await job.runWorkerCycle();
+    await waitForPublished(job, published, 1);
 
     assert.equal(result.status, 'queued');
     assert.equal(published.length, 1);
@@ -91,6 +105,7 @@ test('SubscriptionSyncJob falls back providerEventId to eventId for contract saf
     });
 
     const result = await job.enqueue(event);
+    await job.runWorkerCycle();
 
     assert.equal(result.payload.providerEventId, 'evt_contract_fallback');
     assert.equal(result.payload.contractVersion, '2026-03-18');

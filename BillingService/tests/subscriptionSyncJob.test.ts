@@ -3,14 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { BillingCallbackPayload, InternalSubscriptionEvent } from '../src/shared/types.ts';
-import {
-  InternalStateSource,
-  ProviderStateSource,
-  ReconciliationJob
-} from '../src/jobs/reconciliationJob.ts';
-import { BillingCallbackPublisher, SubscriptionSyncJob } from '../src/jobs/subscriptionSyncJob.ts';
-import { WorkflowItemStatus } from '../src/workflows/workflowQueue.ts';
+import type { BillingCallbackPayload, InternalSubscriptionEvent } from '../src/shared/types.ts';
+import { ReconciliationJob } from '../src/jobs/reconciliationJob.ts';
+import type { InternalStateSource, ProviderStateSource } from '../src/jobs/reconciliationJob.ts';
+import { SubscriptionSyncJob } from '../src/jobs/subscriptionSyncJob.ts';
+import type { BillingCallbackPublisher } from '../src/jobs/subscriptionSyncJob.ts';
+import type { WorkflowItemStatus } from '../src/workflows/workflowQueue.ts';
 
 function makeEvent(overrides: Partial<InternalSubscriptionEvent> = {}): InternalSubscriptionEvent {
   return {

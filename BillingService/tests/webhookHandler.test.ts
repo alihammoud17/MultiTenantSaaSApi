@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SubscriptionSyncJob } from '../src/jobs/subscriptionSyncJob.ts';
-import { BillingProviderAdapter } from '../src/shared/types.ts';
+import type { BillingProviderAdapter } from '../src/shared/types.ts';
 import { SubscriptionWebhookHandler } from '../src/webhooks/handlers/subscriptionWebhookHandler.ts';
 
 function buildNormalizedEvent() {
