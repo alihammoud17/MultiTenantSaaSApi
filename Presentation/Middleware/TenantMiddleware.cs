@@ -34,7 +34,7 @@ namespace Presentation.Middleware
                 return;
             }
 
-            Guid? tenantId = null;
+            Guid? requestTenantHint = null;
 
             // Strategy 1: Extract from subdomain (e.g., acme.yourapi.com)
             var host = context.Request.Host.Host;
@@ -45,23 +45,37 @@ namespace Presentation.Middleware
                     .FirstOrDefaultAsync(t => t.Subdomain == subdomain);
 
                 if (tenant != null)
-                    tenantId = tenant.Id;
+                    requestTenantHint = tenant.Id;
             }
 
             // Strategy 2: Extract from custom header (fallback)
-            if (tenantId == null && context.Request.Headers.TryGetValue("X-Tenant-ID", out var headerValue))
+            if (requestTenantHint == null && context.Request.Headers.TryGetValue("X-Tenant-ID", out var headerValue))
             {
                 if (Guid.TryParse(headerValue, out var parsedId))
-                    tenantId = parsedId;
+                    requestTenantHint = parsedId;
             }
 
-            // Strategy 3: Extract from JWT claim (if user is authenticated)
-            if (tenantId == null && context.User.Identity?.IsAuthenticated == true)
+            // Strategy 3: Resolve from JWT claim when user is authenticated (authoritative for authenticated requests)
+            Guid? jwtTenantId = null;
+            if (context.User.Identity?.IsAuthenticated == true)
             {
                 var claim = context.User.FindFirst("tenant_id");
                 if (claim != null && Guid.TryParse(claim.Value, out var parsedId))
-                    tenantId = parsedId;
+                    jwtTenantId = parsedId;
             }
+
+            if (jwtTenantId != null && requestTenantHint != null && jwtTenantId != requestTenantHint)
+            {
+                context.Response.StatusCode = 403;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    error = "TenantMismatch",
+                    message = "Authenticated tenant does not match request tenant context"
+                });
+                return;
+            }
+
+            var tenantId = jwtTenantId ?? requestTenantHint;
 
             if (tenantId == null)
             {

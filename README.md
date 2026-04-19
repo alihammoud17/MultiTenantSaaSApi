@@ -514,10 +514,10 @@ scripts/local/smoke.sh
 
 Documentation was reviewed for accuracy against the current implemented baseline.
 
-- `README.md` now clarifies that cross-service contract coverage includes BillingService callback-payload schema/version checks and deterministic provider-event fallback behavior.
-- `docs/V4-Implementation-Backlog.md` documents the completed April 18, 2026 P0 cross-service contract test slice and the local deterministic scope.
-- `docs/Internal-Billing-Contract.md` now clarifies callback rejection semantics for missing required fields, duplicate-event response semantics, and `providerEventId` expectations/fallback behavior used by BillingService normalization.
-- `BillingService/README.md` now documents that `npm test` includes contract-producer tests for callback payload shape/version and provider event-id fallback behavior.
+- `README.md` now reflects the P0 tenant-isolation invariant additions for cross-tenant negative-path coverage on admin, analytics, billing, and internal billing callback surfaces.
+- `docs/V4-Implementation-Backlog.md` now documents the completed April 19, 2026 P0 tenant-isolation invariant suite slice and its explicit scope.
+- `docs/Internal-Billing-Contract.md` remains accurate for callback rejection semantics and does not require contract changes in this iteration.
+- `BillingService/README.md` remains accurate because this iteration changed only .NET API middleware and integration tests.
 
 ## Additional docs
 
