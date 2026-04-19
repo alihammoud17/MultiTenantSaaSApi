@@ -195,6 +195,13 @@ The test suite includes callback-producer contract coverage (`tests/billingCallb
 - fixed contract version emission (`2026-03-18`)
 - `providerEventId` fallback to `eventId` when provider payloads do not include a provider event id
 
+The test suite also includes a fixture-driven replay slice (`tests/billingEventFixtureReplay.test.ts`) with reusable scenarios in `tests/fixtures/billingEventFixturePack.ts` that cover:
+
+- duplicate delivery replay safety (`eventId` dedup persistence)
+- out-of-order delivery sequencing behavior
+- stale timestamp event handling behavior in the current workflow
+- invalid signature rejection before workflow enqueue
+
 ## Current endpoints
 
 ### `GET /health`

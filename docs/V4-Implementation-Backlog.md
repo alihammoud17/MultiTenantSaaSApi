@@ -127,8 +127,14 @@ V4 should be considered successful when:
      - clarified required-field rejection and duplicate response semantics in `docs/Internal-Billing-Contract.md`
      - clarified BillingService `providerEventId` fallback-to-`eventId` contract expectation in `docs/Internal-Billing-Contract.md` and `BillingService/README.md`
 
-3. **Billing event fixture pack + replay tests**
-   - create fixture-driven tests covering duplicates, out-of-order sequences, stale timestamps, and invalid signatures.
+3. **Billing event fixture pack + replay tests** *(Completed April 19, 2026)*
+   - added fixture-driven replay tests in `BillingService/tests/billingEventFixtureReplay.test.ts` with scenario pack data in `BillingService/tests/fixtures/billingEventFixturePack.ts`.
+   - covered deterministic local scenarios for:
+     - duplicate delivery replay safety (`eventId` dedup in durable queue)
+     - out-of-order delivery handling (arrival-order processing with preserved normalized timestamps)
+     - stale timestamp acceptance behavior in current pre-live normalization/workflow slice
+     - invalid signature rejection before queue enqueue/processing
+   - suite remains local-only and deterministic (no live provider dependencies; adapter responses are fixture-driven).
 
 4. **Tenant isolation invariant suite**
    - add targeted negative-path integration tests that assert “no cross-tenant data access” across admin, analytics, billing, and webhook-related surfaces.
