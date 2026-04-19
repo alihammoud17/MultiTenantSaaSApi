@@ -65,8 +65,9 @@ test('ReconciliationJob classifies missing and plan-mismatch drift reasons deter
     assert.equal(result.duplicateActions, 0);
 
     for (let i = 0; i < 50; i += 1) {
+      await syncJob.runWorkerCycle();
       const snapshot = await syncJob.snapshotQueue();
-      if (snapshot.length === 3 && snapshot.every((item) => item.status !== 'processing')) {
+      if (snapshot.length === 3 && snapshot.every((item) => item.status === 'completed')) {
         break;
       }
 
@@ -75,6 +76,7 @@ test('ReconciliationJob classifies missing and plan-mismatch drift reasons deter
 
     await new Promise((resolve) => setTimeout(resolve, 25));
   } finally {
+    await new Promise((resolve) => setTimeout(resolve, 25));
     await rm(dir, { recursive: true, force: true });
   }
 });

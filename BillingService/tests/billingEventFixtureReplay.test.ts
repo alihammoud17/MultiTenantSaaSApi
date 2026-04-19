@@ -15,8 +15,11 @@ import {
 class FixtureSequenceAdapter implements BillingProviderAdapter {
   public readonly name = 'stripe' as const;
   private index = 0;
+  private readonly steps: BillingEventFixtureStep[];
 
-  public constructor(private readonly steps: BillingEventFixtureStep[]) {}
+  public constructor(steps: BillingEventFixtureStep[]) {
+    this.steps = steps;
+  }
 
   public async verifyAndNormalizeWebhook(input: {
     rawBody: string;
@@ -35,6 +38,8 @@ class FixtureSequenceAdapter implements BillingProviderAdapter {
         reason: 'Invalid provider signature.'
       };
     }
+
+    assert.ok(step.normalizedEvent, `Expected normalized event for step ${step.name}`);
 
     return {
       accepted: true,
