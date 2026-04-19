@@ -151,8 +151,13 @@ V4 should be considered successful when:
 
 ## P1 (next)
 
-1. **Entitlement matrix test harness**
-   - codify plan/add-on/override permutations and expected gate outcomes to reduce regression risk.
+1. **Entitlement matrix test harness** *(P1.1 foundation completed April 19, 2026)*
+   - added a first reusable .NET unit-test harness slice with:
+     - shared entitlement matrix case model
+     - deterministic fixture builders for plan/add-on/override permutations
+     - reusable assertion helpers for resolved value/source/allowance checks
+   - initial matrix coverage now validates boolean precedence and integer add-on merge semantics (`Increment`) with override precedence.
+   - remaining follow-up: broaden matrix dimensions (additional add-on merge modes, lifecycle-state effects, and endpoint-level entitlement gate coverage) in subsequent P1 slices.
 
 2. **Developer workflow hardening**
    - standardize local scripts for bootstrap/reset/seed/smoke/test and document expected run times and failure triage steps.
