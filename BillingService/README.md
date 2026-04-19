@@ -5,8 +5,8 @@ Node.js / TypeScript billing companion service for the multi-tenant SaaS platfor
 ## Service status
 
 - **Current repository status:** V1, V2, and V3 are complete at the platform level.
-- `BillingService` is part of that completed V3 delivery and now documents shipped billing durability/reconciliation behavior plus implemented provider-facing runtime slices.
-- This README now distinguishes implemented behavior from design-only or post-V3 roadmap items explicitly.
+- **V4 pre-deployment P0 slices are implemented through April 19, 2026**, including cross-service contract conformance and replay/idempotency fixture validation.
+- `BillingService` remains a pre-live provider-facing companion service with explicit boundaries between local-demo capability and post-deployment work.
 
 ## Responsibility boundary
 
@@ -163,6 +163,30 @@ Smoke validates service health and placeholder webhook acceptance only; it does 
 For script flags/overrides and troubleshooting, see `../docs/Local-Orchestration-Profile.md`.
 
 
+## V4 pre-deployment capability map (BillingService scope, April 19, 2026)
+
+| Capability | Status | Demoable locally today | Post-deployment remaining |
+| --- | --- | --- | --- |
+| Service runtime health/metrics/logging | Implemented | `GET /health`, `GET /metrics`, and structured correlation-aware logs. | Production exporter wiring, alerting thresholds, and on-call runbooks validated in deployed environments. |
+| Provider webhook intake boundary | Implemented (placeholder path) | `POST /webhooks/provider` acceptance via local smoke path. | Real provider signature verification and provider-specific ingestion hardening in active runtime. |
+| Durable queue + retry + dead-letter + replay dedup | Implemented | File-backed workflow state survives restarts; duplicate event handling is replay-safe by `eventId`. | Operations dashboards and replay tooling validated under production traffic. |
+| Cross-service callback payload conformance | Implemented | `tests/billingCallbackContract.test.ts` verifies emitted payload shape/version and `providerEventId` fallback behavior. | Multi-version rollout compatibility checks across deployed service versions. |
+| Fixture-driven replay behavior coverage | Implemented | `tests/billingEventFixtureReplay.test.ts` validates duplicate/out-of-order/stale/invalid-signature scenarios deterministically. | Incident-derived fixture expansion from live provider failure/latency patterns. |
+| Authenticated callback delivery to .NET runtime | Partial / pre-live | Contract payload generation is demoable through tests and local harness behavior. | End-to-end authenticated callback dispatch from live provider events in deployed environments. |
+
+### BillingService local demo scope today
+
+- deterministic local startup as part of repository orchestration scripts
+- placeholder webhook acceptance and API gateway slices (checkout, portal, invoice list)
+- durable/replay-safe workflow primitives with local file-backed state
+- contract conformance and replay safety shown via automated test suites
+
+### BillingService post-deployment scope
+
+- verified live webhook authenticity with provider signing secrets
+- fully wired authenticated callback dispatch into the .NET API in runtime paths
+- production telemetry/alerting/SLO operations maturity beyond local metrics/logging
+
 ## Code-ready local validation vs production readiness
 
 **Code-ready local validation (implemented):**
@@ -227,7 +251,7 @@ These changes should keep provider-specific logic inside `BillingService` and pr
 ## Related docs
 
 - `../README.md`
-- `../docs/V3-Implementation-Backlog.md`
+- `../docs/V4-Implementation-Backlog.md`
 - `../docs/Internal-Billing-Contract.md`
 - `../docs/Billing-Workflow-Runbook.md`
 - `../docs/V3-Observability-and-Operations-Design.md`

@@ -1,7 +1,7 @@
 # V4 P0 Cross-Service Billing Contract Test Suite Design
 
 Date: April 18, 2026
-Status: Design only (no implementation in this slice)
+Status: Implemented baseline (P0 slice completed April 18, 2026; updated April 19, 2026)
 
 ## Scope
 
@@ -12,7 +12,7 @@ Design a P0 automated contract test suite for BillingService -> .NET internal bi
 - required payload field expectations
 - explicit valid + invalid scenarios
 
-This design intentionally avoids implementing the tests in this iteration.
+The core P0 suite described in this document is now implemented in repository tests. This document remains as a design+traceability reference for what was delivered and what follow-up coverage can still be added in later slices.
 
 ## Contract surfaces to test
 
@@ -51,7 +51,7 @@ This design intentionally avoids implementing the tests in this iteration.
   - `Tests/Integration/SecurityTestHelpers.cs`
   - `Tests/Integration/InternalBillingSecurityTests.cs`
 
-## Exact files/projects to change when implementing
+## Implemented files/projects (P0 delivered)
 
 ### .NET test project (`Tests`)
 
@@ -147,3 +147,12 @@ This design intentionally avoids implementing the tests in this iteration.
 
 6. **Error contract consistency**
    - Security/validation failures currently return generic error strings; document whether error body shape is stable and testable.
+
+## Remaining follow-up matrix (post-P0 expansions)
+
+The following expansions remain candidates for later V4 slices:
+
+- broaden provider-value constraint checks and unknown-field compatibility assertions
+- add explicit negative coverage for additional malformed timestamp formats and alternate clock-skew boundaries
+- add multi-version compatibility tests once additional contract versions are introduced
+- add test fixtures sourced from production-like replay traces after deployment environments exist

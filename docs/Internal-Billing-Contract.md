@@ -124,6 +124,21 @@ Duplicate responses return:
 - `200 OK`
 - `{ "eventId": "<same-event-id>", "isDuplicate": true }`
 
+## Pre-deployment validation posture (V4 P0 baseline, April 19, 2026)
+
+### Demoable locally today
+
+- signed callback request acceptance/rejection coverage for valid and invalid signatures, required headers, and contract versions
+- required-field and event-specific validation behavior (`targetPlanId` requirements for plan-change and downgrade-scheduled events)
+- tenant/subscription mapping mismatch rejection and duplicate `eventId` idempotency behavior
+- BillingService producer conformance for contract version and `providerEventId` fallback-to-`eventId`
+
+### Still post-deployment
+
+- proof that external provider webhook authenticity is verified in active live runtime before internal callback dispatch
+- production secret rotation and incident-response validation for callback-signing workflows
+- multi-environment callback rollout/version compatibility validation under deployed service version skew
+
 ## Assumptions
 
 - The Node.js billing service already verified external provider webhook authenticity before calling the .NET API.

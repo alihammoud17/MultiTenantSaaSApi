@@ -144,8 +144,10 @@ V4 should be considered successful when:
      - internal billing webhook/callback processing (tenant/subscription mismatch rejected with no state mutation and no inbox persistence)
    - hardened tenant resolution behavior for authenticated requests by rejecting JWT tenant vs request-tenant mismatch with `TenantMismatch` and preserving JWT tenant authority.
 
-5. **V4 documentation baseline**
-   - update README + docs to include a clear “pre-deployment capability map,” what is demoable today, and what remains post-deployment.
+5. **V4 documentation baseline** *(Completed April 19, 2026)*
+   - updated `README.md`, `BillingService/README.md`, `docs/V4-Implementation-Backlog.md`, `docs/Internal-Billing-Contract.md`, and `docs/V4-CrossService-Contract-Test-Design.md` to publish a consistent pre-deployment capability map.
+   - documented explicit local-demoable behavior vs post-deployment remaining work for platform and BillingService scopes.
+   - preserved design intent while removing stale “pre-start” documentation guidance that no longer matches completed P0 slices.
 
 ## P1 (next)
 
@@ -182,26 +184,34 @@ Treat these as post-deployment tracks (not V4 blockers):
 - provider cost/performance optimization from production billing usage
 - full disaster-recovery game days against live infrastructure dependencies
 
-## 5) Docs/README updates needed before starting V4
+## 5) Documentation baseline status (updated April 19, 2026)
 
-Update these first, before implementation begins:
+The initial V4 documentation baseline is now in place.
+
+Completed baseline updates:
 
 1. `README.md`
-   - add a “V4 pre-deployment direction” section
-   - clearly split code-first maturity vs deployment maturity
-   - add a quick local “full platform smoke path” section
+   - includes a platform-level pre-deployment capability map
+   - states demoable local scope vs post-deployment scope explicitly
 
-2. `docs/V3-Implementation-Backlog.md`
-   - add a pointer to this V4 backlog as the active post-V3 execution track
+2. `BillingService/README.md`
+   - includes BillingService-specific capability map and local demo scope
+   - distinguishes implemented local behaviors from post-deployment provider/runtime work
 
 3. `docs/V4-Implementation-Backlog.md` (this file)
-   - keep backlog status and priorities current as slices are completed
+   - tracks P0 slices 1-5 as completed with concrete completion dates
 
 4. `docs/Internal-Billing-Contract.md`
-   - no immediate contract change required, but add/update only when V4 contract tests expose ambiguities
+   - retains normative callback contract details and now documents how the contract is validated locally pre-deployment vs what still requires deployment verification
 
-5. `BillingService/README.md`
-   - update only when V4 changes BillingService runtime behavior, scripts, or environment configuration
+5. `docs/V4-CrossService-Contract-Test-Design.md`
+   - updated from design-only posture to implemented baseline summary plus remaining follow-up matrix
+
+Ongoing documentation expectations for V4:
+
+- keep capability-map status current after every completed slice
+- keep demoable-local claims strictly aligned to automated tests and local scripts
+- keep post-deployment claims explicit and non-ambiguous to avoid overstating readiness
 
 ---
 
