@@ -42,7 +42,7 @@ public class AuthenticationSecurityTests : IClassFixture<ApiWebApplicationFactor
     }
 
     [Fact]
-    public async Task ValidToken_WithTenantHeaderOverride_ShouldResolveToHeaderTenantContext()
+    public async Task ValidToken_WithTenantHeaderOverride_ShouldReturnForbiddenForTenantMismatch()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"auth-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
@@ -53,9 +53,9 @@ public class AuthenticationSecurityTests : IClassFixture<ApiWebApplicationFactor
 
         var response = await client.GetAsync("/api/v1/admin/tenant");
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("id").GetGuid().Should().Be(tenantB.TenantId);
+        body.GetProperty("error").GetString().Should().Be("TenantMismatch");
     }
 
     [Fact]

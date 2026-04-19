@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Domain.Entites;
 using FluentAssertions;
+using Infrastructure.Data;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Tests.Integration;
 
@@ -16,23 +19,20 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
     }
 
     [Fact]
-    public async Task TenantAToken_WithTenantBHeader_ShouldReturnHeaderScopedData()
+    public async Task TenantScopedAdminEndpoints_ShouldRejectTokenHeaderTenantMismatch()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
-        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
-        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-admin-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-admin-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
         client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantB.TenantId.ToString());
 
         var response = await client.GetAsync("/api/v1/admin/tenant/users");
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var users = await response.Content.ReadFromJsonAsync<JsonElement>();
-        users.EnumerateArray()
-            .Select(x => x.GetProperty("email").GetString())
-            .Should()
-            .Contain(email => email!.Contains("iso-b-", StringComparison.Ordinal));
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("TenantMismatch");
     }
 
     [Fact]
@@ -86,11 +86,11 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
     }
 
     [Fact]
-    public async Task AuditLogsRemainHeaderTenantScoped_WithCrossTenantHeaderTampering()
+    public async Task AnalyticsAndAuditEndpoints_ShouldRejectTokenHeaderTenantMismatch()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
-        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-audit-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
-        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-audit-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-analytics-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-analytics-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
         await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
@@ -98,15 +98,28 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
         client.DefaultRequestHeaders.Remove("X-Tenant-ID");
         client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantB.TenantId.ToString());
 
-        var response = await client.GetAsync("/api/v1/tenant/audit-logs?action=TENANT_PLAN_CHANGED");
+        var auditResponse = await client.GetAsync("/api/v1/tenant/audit-logs?action=TENANT_PLAN_CHANGED");
+        var usageResponse = await client.GetAsync("/api/v1/tenant/analytics/usage?days=30");
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var logs = await response.Content.ReadFromJsonAsync<JsonElement>();
-        logs.EnumerateArray()
-            .Select(x => x.GetProperty("tenantId").GetGuid())
-            .Distinct()
-            .Should()
-            .OnlyContain(x => x == tenantB.TenantId);
+        auditResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        usageResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task BillingReadEndpoints_ShouldRejectTokenHeaderTenantMismatch()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-billing-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-billing-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantB.TenantId.ToString());
+
+        var statusResponse = await client.GetAsync("/api/v1/billing/status");
+        var invoicesResponse = await client.GetAsync("/api/v1/billing/invoices");
+
+        statusResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        invoicesResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -126,23 +139,44 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
     }
 
     [Fact]
-    public async Task UsageAnalyticsRemainHeaderTenantScoped_WithCrossTenantHeaderTampering()
+    public async Task InternalBillingCallback_ShouldRejectCrossTenantSubscriptionMapping_AndNotMutateAnyTenantState()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
-        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-usage-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
-        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-usage-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-webhook-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-webhook-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
-        await client.PostAsJsonAsync("/api/v1/plans/upgrade", new { planId = "plan-pro" });
+        var tenantASubscriptionId = SecurityTestHelpers.GetSubscriptionId(_factory, tenantA.TenantId);
+        var tenantBSubscriptionId = SecurityTestHelpers.GetSubscriptionId(_factory, tenantB.TenantId);
 
-        client.DefaultRequestHeaders.Remove("X-Tenant-ID");
-        client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantB.TenantId.ToString());
+        var crossTenantPayload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-iso-{Guid.NewGuid():N}",
+            eventType = "subscription.plan_changed",
+            provider = "stripe",
+            providerEventId = $"stripe-iso-{Guid.NewGuid():N}",
+            tenantId = tenantB.TenantId,
+            subscriptionId = tenantASubscriptionId,
+            targetPlanId = "plan-pro",
+            occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = (DateTime?)null,
+            correlationId = $"corr-iso-{Guid.NewGuid():N}"
+        };
 
-        var response = await client.GetAsync("/api/v1/tenant/analytics/usage?days=30");
+        var response = await SecurityTestHelpers.PostSignedBillingEventAsync(client, crossTenantPayload);
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var analytics = await response.Content.ReadFromJsonAsync<JsonElement>();
-        analytics.GetProperty("tenantId").GetGuid().Should().Be(tenantB.TenantId);
-        analytics.GetProperty("totalEvents").GetInt32().Should().BeGreaterThan(0);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var tenantASubscription = db.Subscriptions.Single(x => x.Id == tenantASubscriptionId);
+        var tenantBSubscription = db.Subscriptions.Single(x => x.Id == tenantBSubscriptionId);
+        tenantASubscription.PlanId.Should().Be("plan-free");
+        tenantASubscription.Status.Should().Be(SubscriptionStatus.Active);
+        tenantBSubscription.PlanId.Should().Be("plan-free");
+        tenantBSubscription.Status.Should().Be(SubscriptionStatus.Active);
+
+        db.BillingEventInboxes.Any(x => x.EventId == crossTenantPayload.eventId).Should().BeFalse();
     }
 }

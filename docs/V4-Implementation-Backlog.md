@@ -136,8 +136,13 @@ V4 should be considered successful when:
      - invalid signature rejection before queue enqueue/processing
    - suite remains local-only and deterministic (no live provider dependencies; adapter responses are fixture-driven).
 
-4. **Tenant isolation invariant suite**
-   - add targeted negative-path integration tests that assert “no cross-tenant data access” across admin, analytics, billing, and webhook-related surfaces.
+4. **Tenant isolation invariant suite** *(Completed April 19, 2026)*
+   - added targeted negative-path integration tests in `.NET` integration coverage (`Tests/Integration/TenantIsolationSecurityTests.cs`) to assert no cross-tenant data access across:
+     - admin management surfaces (token/header tenant mismatch and cross-tenant user-id mutation attempts)
+     - analytics + audit surfaces (cross-tenant tenant-header tampering rejection)
+     - billing read surfaces (`/api/v1/billing/status` and `/api/v1/billing/invoices`)
+     - internal billing webhook/callback processing (tenant/subscription mismatch rejected with no state mutation and no inbox persistence)
+   - hardened tenant resolution behavior for authenticated requests by rejecting JWT tenant vs request-tenant mismatch with `TenantMismatch` and preserving JWT tenant authority.
 
 5. **V4 documentation baseline**
    - update README + docs to include a clear “pre-deployment capability map,” what is demoable today, and what remains post-deployment.
