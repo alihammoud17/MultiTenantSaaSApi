@@ -157,7 +157,10 @@ V4 should be considered successful when:
      - deterministic fixture builders for plan/add-on/override permutations
      - reusable assertion helpers for resolved value/source/allowance checks
    - initial matrix coverage now validates boolean precedence and integer add-on merge semantics (`Increment`) with override precedence.
-   - remaining follow-up: broaden matrix dimensions (additional add-on merge modes, lifecycle-state effects, and endpoint-level entitlement gate coverage) in subsequent P1 slices.
+   - first regression expansion slice completed April 20, 2026:
+     - added representative endpoint-gate coverage for billing/admin/analytics entitlements (`feature.billing.*`, `feature.admin.*`, `feature.analytics.*`)
+     - validated allow + deny outcomes across plan defaults, add-on grants, explicit overrides, and subscription lifecycle statuses (`Active`, `GracePeriod`, `Canceled`)
+   - remaining follow-up: broaden matrix dimensions (additional add-on merge modes and deeper endpoint-level scenario breadth) in subsequent P1 slices.
 
 2. **Developer workflow hardening**
    - standardize local scripts for bootstrap/reset/seed/smoke/test and document expected run times and failure triage steps.
