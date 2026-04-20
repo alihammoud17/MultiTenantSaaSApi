@@ -1,6 +1,6 @@
 # Entitlements Model (V3)
 
-_Last updated: April 9, 2026 (entitlements iteration docs refresh)._
+_Last updated: April 20, 2026 (P1.1 entitlement matrix harness regression documentation refresh)._
 
 This document defines the V3 entitlements design **on top of the current plan/subscription implementation** so implementation can proceed incrementally without breaking existing plan upgrade behavior.
 
@@ -13,6 +13,7 @@ Implemented now:
 - additive entitlement persistence model (`EntitlementDefinitions`, `PlanEntitlements`, `AddOnDefinitions`, `AddOnEntitlements`, `TenantAddOnAssignments`, `TenantEntitlementOverrides`)
 - seeded entitlement keys and plan mappings for foundational quotas/features
 - application-layer entitlement evaluation/enforcement primitives used by progressive gates
+- P1.1 entitlement matrix harness coverage in `.NET` unit tests for deterministic evaluator precedence and regression safety (`Tests/UnitTests/EntitlementEvaluatorTests.cs`, `Tests/UnitTests/Entitlements/EntitlementMatrixFixtureBuilder.cs`)
 
 Still pending in later slices:
 
@@ -213,6 +214,30 @@ To minimize change risk:
 - no provider-specific entitlement decisions in this API path
 
 This ensures current tests and tenant workflows around plan upgrades stay valid while entitlements are introduced additively.
+
+## Implemented entitlement regression coverage (P1.1)
+
+The completed P1.1 iteration adds explicit matrix-driven regression coverage for entitlement evaluation behavior that is now implemented and test-backed:
+
+- boolean precedence: plan default -> add-on -> override
+- integer merge semantics for add-ons using `Increment`, plus override precedence over merged values
+- representative endpoint-gated entitlement keys for billing/admin/analytics surfaces:
+  - `feature.billing.invoices.read`
+  - `feature.billing.subscription.manage`
+  - `feature.billing.plan.upgrade`
+  - `feature.admin.users.manage.advanced`
+  - `feature.analytics.audit_logs.read`
+- allow and deny outcomes across lower-plan defaults, add-on grants, explicit override-allow, and explicit override-deny
+- representative subscription lifecycle combinations currently exercised in the evaluator matrix: `Active`, `GracePeriod`, `Canceled`, and `Expired`
+
+Boundary clarification for this slice:
+
+- matrix tests are intentionally focused on deterministic evaluator resolution and precedence stability
+- tenant isolation and authorization boundaries remain covered in integration security suites (not duplicated in this unit matrix harness)
+
+Known intentional limit of this completed slice:
+
+- `Suspended`-specific entitlement semantics are not newly asserted in this matrix and remain follow-up work
 
 ## Local setup / migration notes
 
