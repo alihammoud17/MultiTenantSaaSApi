@@ -151,7 +151,7 @@ V4 should be considered successful when:
 
 ## P1 (next)
 
-1. **Entitlement matrix test harness** *(P1.1 foundation completed April 19, 2026)*
+1. **Entitlement matrix test harness** *(P1.1 foundation + first regression expansion completed April 20, 2026)*
    - added a first reusable .NET unit-test harness slice with:
      - shared entitlement matrix case model
      - deterministic fixture builders for plan/add-on/override permutations
@@ -196,7 +196,7 @@ Treat these as post-deployment tracks (not V4 blockers):
 - provider cost/performance optimization from production billing usage
 - full disaster-recovery game days against live infrastructure dependencies
 
-## 5) Documentation baseline status (updated April 19, 2026)
+## 5) Documentation baseline status (updated April 20, 2026)
 
 The initial V4 documentation baseline is now in place.
 
@@ -218,6 +218,10 @@ Completed baseline updates:
 
 5. `docs/V4-CrossService-Contract-Test-Design.md`
    - updated from design-only posture to implemented baseline summary plus remaining follow-up matrix
+
+6. P1.1 entitlement matrix harness documentation refresh
+   - updated `README.md`, `docs/V4-Implementation-Backlog.md`, and `docs/Entitlements-Model.md` to explicitly capture implemented regression coverage for billing/admin/analytics entitlement keys
+   - documented matrix scope boundaries (evaluator precedence determinism) vs integration-suite responsibilities (tenant/auth isolation enforcement)
 
 Ongoing documentation expectations for V4:
 

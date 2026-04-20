@@ -7,7 +7,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 
 - **V1, V2, and V3 are complete** in the current repository state.
 - **V4 execution is active for pre-deployment code-first maturity** in `docs/V4-Implementation-Backlog.md`.
-- **P0 slices 1-4 and the documentation-baseline slice are implemented** as of **April 19, 2026**.
+- **P0 slices 1-4, the documentation-baseline slice, and P1.1 entitlement matrix harness regression iteration are implemented** as of **April 20, 2026**.
 - The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
 - `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
 
@@ -70,6 +70,7 @@ For detailed script behavior, environment overrides, and troubleshooting, use `d
 | Cross-service contract conformance | Implemented | .NET consumer contract tests + BillingService producer contract tests prove agreed payload/version behavior in local CI/test runs. | Ongoing version-compatibility rollout policy across deployed service versions. |
 | Billing replay/idempotency fixture validation | Implemented (pre-live fixture slice) | BillingService fixture-driven replay tests validate duplicate delivery safety, out-of-order processing behavior, stale timestamp handling behavior, and invalid-signature rejection pre-enqueue. | Production replay/forensics workflows against real provider delivery retries and incident datasets. |
 | Tenant-isolation invariant coverage | Implemented | Integration tests assert cross-tenant rejection across admin, analytics, audit, billing read, and internal billing callback surfaces. | Continuous production verification with runtime telemetry alerts for isolation regressions. |
+| Entitlement regression matrix harness (P1.1) | Implemented (foundation + first regression expansion) | .NET unit matrix tests now cover boolean/integer precedence, add-on increment merge behavior, override allow/deny precedence, endpoint-gated billing/admin/analytics entitlement keys, and representative lifecycle combinations (`Active`, `GracePeriod`, `Canceled`, `Expired`). | Broaden matrix dimensions (additional add-on merge modes and deeper endpoint combinations) in later P1 slices. |
 | Provider webhook verification + callback delivery wiring | Partial / pre-live | Placeholder webhook acceptance and scaffolded provider boundaries are locally demoable. | Real provider signature verification and fully wired provider -> BillingService -> .NET callback flow in deployed environments. |
 | Observability and operations hardening | Partial | Local health/metrics and structured logs are demoable for both services. | Deployment-proven exporters, dashboards, alerts, SLO/error-budget operation, and DR exercises. |
 
@@ -306,6 +307,7 @@ For operational procedures (startup checks, state-file hygiene, replay handling,
 
 - `docs/Billing-Workflow-Runbook.md`
 - `docs/Entitlements-Model.md`
+- `docs/V4-Entitlement-Matrix-Test-Design.md`
 - `docs/Identity-and-Security.md`
 - `docs/Usage-Analytics.md`
 - `docs/Outbound-Webhooks.md`
@@ -543,10 +545,11 @@ scripts/local/smoke.sh
 
 Documentation was reviewed for accuracy against the current implemented baseline.
 
-- `README.md` now reflects the P0 tenant-isolation invariant additions for cross-tenant negative-path coverage on admin, analytics, billing, and internal billing callback surfaces.
-- `docs/V4-Implementation-Backlog.md` now documents the completed April 19, 2026 P0 tenant-isolation invariant suite slice and its explicit scope.
-- `docs/Internal-Billing-Contract.md` remains accurate for callback rejection semantics and does not require contract changes in this iteration.
-- `BillingService/README.md` remains accurate because this iteration changed only .NET API middleware and integration tests.
+- `README.md` now reflects the completed April 20, 2026 P1.1 entitlement matrix regression iteration and its explicit implemented scope.
+- `docs/V4-Implementation-Backlog.md` now records P1.1 as foundation + first regression expansion complete, including documented boundaries and follow-up scope.
+- `docs/Entitlements-Model.md` now documents implemented matrix regression coverage for evaluator precedence, endpoint-gated entitlement keys, and representative lifecycle combinations.
+- `docs/V4-Entitlement-Matrix-Test-Design.md` was added to capture the implemented harness structure, covered scenarios, and intentional scope boundaries.
+- `docs/Internal-Billing-Contract.md` and `BillingService/README.md` remain accurate because no billing contract or BillingService runtime behavior changed in this iteration.
 
 ## Additional docs
 
@@ -556,3 +559,4 @@ Documentation was reviewed for accuracy against the current implemented baseline
 - `docs/Internal-Billing-Contract.md`
 - `docs/Billing-Workflow-Runbook.md`
 - `docs/Entitlements-Model.md`
+- `docs/V4-Entitlement-Matrix-Test-Design.md`
