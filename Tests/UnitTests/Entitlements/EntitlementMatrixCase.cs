@@ -18,7 +18,8 @@ public sealed record EntitlementMatrixCase(
     string? OverrideValue,
     string ExpectedResolvedValue,
     bool ExpectedAllowed,
-    string ExpectedResolvedFrom)
+    string ExpectedResolvedFrom,
+    SubscriptionStatus SubscriptionStatus = SubscriptionStatus.Active)
 {
     public override string ToString() => Name;
 }

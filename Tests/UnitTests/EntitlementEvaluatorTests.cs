@@ -57,6 +57,30 @@ public class EntitlementEvaluatorTests
         EntitlementMatrixAssertions.AssertMatchesExpectation(result, matrixCase);
     }
 
+    [Theory]
+    [MemberData(nameof(EntitlementMatrixFixtureBuilder.EndpointGateRegressionCases), MemberType = typeof(EntitlementMatrixFixtureBuilder))]
+    public async Task EvaluateAsync_ShouldResolveEndpointGateEntitlementsAcrossHighValueMatrixCases(EntitlementMatrixCase matrixCase)
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new ApplicationDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var tenant = SeedMatrixCase(db, matrixCase);
+        await db.SaveChangesAsync();
+
+        var sut = new EntitlementEvaluator(db, BuildHttpContextAccessor());
+        var result = await sut.EvaluateAsync(tenant.Id, matrixCase.EntitlementKey);
+
+        EntitlementMatrixAssertions.AssertMatchesExpectation(result, matrixCase);
+        result.SubscriptionStatus.Should().Be(matrixCase.SubscriptionStatus.ToString());
+    }
+
     [Fact]
     public async Task EvaluateAsync_ShouldDefaultDeny_WhenTenantSubscriptionMissing()
     {
@@ -119,7 +143,7 @@ public class EntitlementEvaluatorTests
             Id = Guid.NewGuid(),
             TenantId = tenant.Id,
             PlanId = matrixCase.PlanId,
-            Status = SubscriptionStatus.Active,
+            Status = matrixCase.SubscriptionStatus,
             CurrentPeriodStart = EntitlementMatrixFixtureBuilder.BaselineUtc,
             CurrentPeriodEnd = EntitlementMatrixFixtureBuilder.BaselineUtc.AddMonths(1),
             CreatedAt = EntitlementMatrixFixtureBuilder.BaselineUtc
