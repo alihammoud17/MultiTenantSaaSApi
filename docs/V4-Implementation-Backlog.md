@@ -160,6 +160,10 @@ V4 should be considered successful when:
    - first regression expansion slice completed April 20, 2026:
      - added representative endpoint-gate coverage for billing/admin/analytics entitlements (`feature.billing.*`, `feature.admin.*`, `feature.analytics.*`)
      - validated allow + deny outcomes across plan defaults, add-on grants, explicit overrides, and subscription lifecycle statuses (`Active`, `GracePeriod`, `Canceled`)
+   - negative-path + precedence expansion completed April 20, 2026:
+     - validated lower-plan/no-required-add-on denial, override-allow on lower defaults, and override-deny over higher plan grants.
+     - validated current evaluator behavior for non-active subscription status interactions (including `Expired`) without asserting unsupported `Suspended` semantics.
+     - documented boundary intersection expectation: tenant/authorization enforcement remains covered by integration security tests, while matrix tests continue to focus on evaluator precedence determinism.
    - remaining follow-up: broaden matrix dimensions (additional add-on merge modes and deeper endpoint-level scenario breadth) in subsequent P1 slices.
 
 2. **Developer workflow hardening**
