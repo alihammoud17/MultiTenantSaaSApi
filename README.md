@@ -258,7 +258,8 @@ The repository includes automated tests covering:
 - deeper security-focused scenarios for authentication negatives, authorization denials, tenant-isolation tampering, input validation abuse cases, and internal billing signature hardening
 - identity-hardening edge cases for verification/password-reset token replay resistance and MFA step-up purpose binding on admin-sensitive actions
 - tenant billing visibility and self-service action behavior, including tenant-scoped subscription/invoice reads, cancel/reactivate state transitions, and clean invalid-state error handling
-- entitlement matrix harness regression coverage for billing/admin/analytics endpoint-gated entitlement keys across plan, add-on, override, and representative subscription lifecycle combinations (allow + deny paths)
+- entitlement matrix harness regression coverage for billing/admin/analytics endpoint-gated entitlement keys across lower-plan/no-add-on negatives, add-on grants, override allow/deny precedence, and representative non-active subscription lifecycle combinations (allow + deny paths)
+- entitlement boundary security checks covering unauthorized access and tenant-scoped entitlement isolation on gated billing surfaces
 
 ## V3 completion summary
 
