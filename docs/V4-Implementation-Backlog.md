@@ -199,7 +199,11 @@ V4 should be considered successful when:
      - retry scheduling and subsequent success behavior for failed-then-recovered deliveries
      - terminal failure (`Exhausted`) observability fields after bounded retry attempts
      - duplicate publish suppression behavior via `SourceEventKey` replay dedupe (single event/delivery row for duplicate publish request)
-     - delivery metadata preservation across retries and recovery (`LastError`, status transitions, and stable delivery/idempotency headers)
+     - delivery metadata preservation across retries and recovery (`LastError`, status transitions, stable delivery/idempotency headers, contract-version header, and per-attempt timestamp capture)
+     - currently implemented envelope-level correlation continuity assertions (`correlationId`, `eventId`, `tenantId`) across retries
+   - explicit current observability boundary documented by tests:
+     - no dedicated outbound tracing header is currently emitted
+     - retry visibility is exposed through delivery status/timestamps/status-code/error fields (no standalone retry history table yet)
    - remaining follow-up: broaden matrix depth for additional retry-window boundaries and multi-endpoint fan-out slices in later P1 iterations.
 
 5. **Local observability quality gates**

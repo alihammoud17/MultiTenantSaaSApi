@@ -416,7 +416,7 @@ The .NET API includes a first outbound webhook infrastructure slice for tenant e
 
 - versioned envelope contract (`2026-04-13`) containing `eventId`, `tenantId`, `eventType`, `correlationId`, and `occurredAtUtc`
 - endpoint-specific HMAC-SHA256 request signing (`X-Tenant-Webhook-Signature`) with timestamp and delivery id binding
-- persisted delivery state with retry scheduling and terminal status tracking
+- persisted delivery state with retry scheduling and terminal status tracking (including attempt/status-code/error/timestamp diagnostic metadata)
 - replay/idempotency support via `SourceEventKey` dedupe at publish time and stable `X-Tenant-Webhook-Idempotency-Key` per delivery
 
 See `docs/Outbound-Webhook-Contract.md` for contract and verification details.
