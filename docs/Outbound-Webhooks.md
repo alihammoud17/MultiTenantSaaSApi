@@ -1,6 +1,6 @@
-# Outbound Webhooks (V3 Foundation)
+# Outbound Webhooks (V3 Foundation + P1.4 Verification)
 
-_Last updated: April 25, 2026_
+_Last updated: April 25, 2026 (P1.4 replay-safe verification coverage documented)_
 
 ## Scope and status
 
@@ -59,6 +59,32 @@ Current observability boundary (explicitly documented from real implementation):
 - retry-state visibility is currently persisted through delivery status + timestamps/error/status-code fields (no standalone retry-history table yet)
 
 This is intentionally a thin first slice. It establishes reusable harness primitives first, then broader matrix coverage (including additional retry-window and dedupe matrices) can be layered incrementally in follow-up P1 work.
+
+## P1.4 automated guarantees now verified
+
+The implemented automated tests (`Tests/UnitTests/OutboundWebhooks/OutboundWebhookDeliveryHarnessTests.cs`) now explicitly verify:
+
+1. **Replay-safe deduplication**
+   - duplicate publish requests that share the same `SourceEventKey` are suppressed
+   - duplicate requests do not create extra outbound event rows or delivery rows
+
+2. **Retry scheduling + deterministic recovery**
+   - a failed first dispatch (`5xx`) transitions delivery state to `RetryScheduled`
+   - the next due retry attempt can be forced deterministically and succeeds when downstream recovers
+   - recovery preserves stable delivery identity and idempotency key semantics
+
+3. **Bounded retries + terminal failure determinism**
+   - repeated transient failures increment attempt counters deterministically
+   - after the configured max-attempt bound, delivery transitions to `Exhausted`
+   - terminal delivery metadata (`AttemptCount`, `LastAttemptAtUtc`, `LastResponseStatusCode`, `LastError`, `Status`) remains inspectable for operations/debugging
+
+4. **Header and envelope continuity across retry attempts**
+   - per-delivery headers remain stable across retries (`X-Tenant-Webhook-Delivery`, `X-Tenant-Webhook-Idempotency-Key`)
+   - contract version header is asserted (`X-Tenant-Webhook-Contract-Version: 2026-04-13`)
+   - per-attempt timestamp/signature headers are present and timestamp values differ per attempt
+   - envelope continuity is asserted for currently implemented correlation fields (`correlationId`, `eventId`, `tenantId`)
+
+These guarantees are now implemented-and-verified for the P1.4 iteration and should be treated as the current contract of the outbound delivery foundation.
 
 ## Security expectations
 
