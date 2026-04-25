@@ -75,6 +75,18 @@ Test checks execute this standardized cross-service sequence:
 7. `npm run build` in `BillingService/`
 8. `npm test` in `BillingService/`
 
+### Expected execution order for local validation
+
+Use this order to keep triage deterministic:
+
+1. `scripts/local/bootstrap.sh`
+2. `scripts/local/seed.sh`
+3. `scripts/local/run.sh`
+4. `scripts/local/smoke.sh` (from a second shell while `run.sh` is active)
+5. `scripts/local/test.sh`
+
+If one step fails, fix that step before progressing to downstream checks.
+
 ## Runtime/environment overrides
 
 `run.sh` supports:
@@ -120,11 +132,89 @@ These ranges are guidance for failure triage (hardware/cache dependent):
 - full provider -> BillingService -> .NET callback pipeline hardening in deployed environments
 - deployment-verified observability/SLO/paging/DR maturity
 
-## Troubleshooting
+## Troubleshooting triage paths
 
-- If `bootstrap.sh` reports missing `/tmp/dotnet-tools/dotnet-ef`, run the manual migration command shown in the warning output.
-- If `reset.sh` cannot drop the database, verify `Presentation` user secrets and DB connectivity, then run the printed manual `dotnet ef` reset commands.
-- If `seed.sh` succeeds but scenario data is missing, that is expected in this slice: create demo tenant data via existing API flows manually.
-- If smoke fails, inspect `.local-api.log` and `.local-billing.log` for startup errors and rerun once both services report healthy startup.
-- If port conflicts occur, set `API_URL` and `BILLING_URL` to alternate ports in both `run.sh` and `smoke.sh`.
-- If `test.sh` fails in BillingService steps, rerun `npm ci` in `BillingService/` and check Node version alignment (`>=22`).
+### 1) Dependency install failure
+
+Common surfaces:
+
+- `bootstrap.sh` at `dotnet restore` or `npm ci`
+- `test.sh` at .NET restore or BillingService install/build phases
+
+Next steps:
+
+1. Re-run the failing command directly to get focused output:
+   - `dotnet restore` (repo root)
+   - `cd BillingService && npm ci`
+2. Verify local prerequisites from repo docs (.NET SDK, Node, PostgreSQL, Redis).
+3. After direct command success, rerun the wrapper script that failed.
+
+### 2) Migration/tooling failure
+
+Common surfaces:
+
+- `bootstrap.sh` migration apply stage
+- `reset.sh` drop/update stages
+- `seed.sh` update stage
+
+Next steps:
+
+1. If `/tmp/dotnet-tools/dotnet-ef` is missing, run the manual command the script prints:
+   - `dotnet ef database update --project Infrastructure --startup-project Presentation`
+   - for reset: also run `dotnet ef database drop --force --project Infrastructure --startup-project Presentation`
+2. If tool exists but command fails, validate `Presentation` DB secrets/connectivity.
+3. Re-run the same EF command manually, then rerun the local script.
+
+### 3) Service start failure
+
+Common surface:
+
+- `run.sh` where one service exits quickly or never becomes reachable
+
+Next steps:
+
+1. Inspect `.local-api.log` and `.local-billing.log`.
+2. Resolve the first startup exception in the failing service.
+3. Restart with `scripts/local/run.sh` before running smoke checks.
+
+### 4) Port/config mismatch
+
+Common surface:
+
+- `smoke.sh` checks wrong URLs/ports while services are running on different values
+
+Next steps:
+
+1. Ensure `API_URL` and `BILLING_URL` are set consistently for both `run.sh` and `smoke.sh`.
+2. If using alternate ports, export the same values in each shell session.
+3. Re-run smoke once endpoints align.
+
+### 5) Smoke-test failure
+
+Common surface:
+
+- `smoke.sh` fails API health, BillingService health, or webhook acceptance call
+
+Next steps:
+
+1. Confirm `run.sh` is still running and did not terminate.
+2. Re-check `.local-api.log` and `.local-billing.log` for readiness or startup errors.
+3. Rerun `smoke.sh` only after both `/health` endpoints are reachable.
+
+### 6) Test-suite failure
+
+Common surface:
+
+- `test.sh` step failures in .NET or BillingService checks
+
+Next steps:
+
+1. Use the printed step number to rerun the exact failing command directly.
+2. Fix the failure in that layer first (`dotnet test`, `npm run build`, or `npm test`).
+3. Re-run full `scripts/local/test.sh` to verify the entire sequence is green.
+
+## Current local workflow ambiguities (follow-up cleanup)
+
+- `seed.sh` intentionally does not automate scenario/demo tenant data; manual API-flow seeding remains required.
+- `bootstrap.sh`/`seed.sh` can continue without `/tmp/dotnet-tools/dotnet-ef`; this preserves progress but leaves migration execution partially manual.
+- `smoke.sh` validates readiness and placeholder webhook acceptance only; it does not validate provider-authentic webhook signatures or live provider-to-.NET callback E2E behavior.

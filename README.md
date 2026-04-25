@@ -460,6 +460,29 @@ Typical local runtime expectations on a warm machine (non-binding, hardware-depe
 - `smoke.sh`: under 10 seconds after both services are healthy
 - `test.sh`: ~3-10 minutes depending on test cache/warmth
 
+### Runtime and validation order (failure-triage reference)
+
+When troubleshooting, keep this exact execution order so failures are isolated to one stage:
+
+1. `scripts/local/bootstrap.sh` (dependency restore/build/install + migration apply when tool exists)
+2. `scripts/local/seed.sh` (migration/seed refresh + manual seed boundary reminder)
+3. `scripts/local/run.sh` (start API and BillingService)
+4. `scripts/local/smoke.sh` in a second shell (runtime health + placeholder webhook acceptance)
+5. `scripts/local/test.sh` (full validation sequence for .NET + BillingService)
+
+If a step fails, fix that step first and rerun it before continuing to later steps.
+
+### Local failure triage (repo-specific)
+
+| Failure type | Where it fails | Immediate next steps |
+| --- | --- | --- |
+| Dependency install failure | `bootstrap.sh` or `test.sh` during `dotnet restore` / `npm ci` | Re-run the failing command directly to surface full output (`dotnet restore` from repo root or `cd BillingService && npm ci`). Confirm SDK/runtime prerequisites from this README are installed locally and retry bootstrap/test after the direct command succeeds. |
+| Migration/tooling failure | `bootstrap.sh`, `reset.sh`, or `seed.sh` at `/tmp/dotnet-tools/dotnet-ef` steps | If the tool is missing, run the printed manual command: `dotnet ef database update --project Infrastructure --startup-project Presentation` (or reset pair from `reset.sh`). If the tool exists but fails, validate DB connection secrets in `Presentation` and retry the exact EF command shown in script output. |
+| Service start failure | `run.sh` exits quickly or one PID terminates | Inspect `.local-api.log` and `.local-billing.log` immediately. Fix the first startup error in the corresponding service, then rerun `scripts/local/run.sh` before any smoke/test step. |
+| Port/config mismatch | `run.sh` can start but `smoke.sh` health checks fail or hit wrong endpoints | Ensure `API_URL` and `BILLING_URL` values match between `run.sh` and `smoke.sh` invocations. If overriding ports, export both variables in each shell before running scripts. |
+| Smoke-test failure | `smoke.sh` fails `GET /health` or webhook POST | Confirm `run.sh` is still active, then check `.local-api.log` and `.local-billing.log` for readiness/startup exceptions. Re-run `smoke.sh` only after both services are healthy and listening on expected URLs. |
+| Test-suite failure | `test.sh` fails any numbered step | Use the step number printed by `test.sh` to rerun only the failing command directly (`dotnet test --no-build --verbosity normal`, `npm run build`, or `npm test`). Fix forward at that layer, then rerun full `scripts/local/test.sh` to ensure sequence-level pass. |
+
 Manual-only remainder (current P0 scope):
 
 - This smoke path validates service readiness and placeholder webhook acceptance only.
