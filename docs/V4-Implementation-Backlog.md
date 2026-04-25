@@ -189,8 +189,16 @@ V4 should be considered successful when:
    - kept `scripts/local/*.sh` as first-class underlying scripts and delegated directly to them (no behavior replacement or hidden orchestration).
    - refreshed `README.md` and `docs/Local-Orchestration-Profile.md` examples to show the recommended day-to-day `scripts/dev.sh` loop while preserving direct-script usage guidance.
 
-4. **Replay-safe outbound webhook verification tests**
-   - extend delivery tests for retry jitter windows, duplicate publish suppression, and terminal-failure observability fields.
+4. **Replay-safe outbound webhook verification tests** *(P1.4 harness foundation completed April 25, 2026)*
+   - added first reusable outbound delivery test harness primitives for:
+     - seeded tenant endpoint + publish request setup
+     - deterministic dispatch-attempt simulation (including retry timing by forced due-at windows)
+     - request/header capture for idempotency and signature-contract inspection
+     - persisted delivery-state inspection across pending/retry/succeeded/exhausted transitions
+   - first deterministic scenarios now validate:
+     - retry scheduling and subsequent success behavior for failed-then-recovered deliveries
+     - terminal failure (`Exhausted`) observability fields after bounded retry attempts
+   - remaining follow-up: extend into explicit jitter-window assertions and duplicate-publish suppression scenario matrices in later P1 slices.
 
 5. **Local observability quality gates**
    - add tests/assertions for required structured log fields and correlation-id propagation across critical request paths.

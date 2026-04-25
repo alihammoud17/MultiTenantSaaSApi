@@ -7,7 +7,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 
 - **V1, V2, and V3 are complete** in the current repository state.
 - **V4 execution is active for pre-deployment code-first maturity** in `docs/V4-Implementation-Backlog.md`.
-- **P0 slices 1-4, the documentation-baseline slice, P1.1 entitlement matrix harness regression iteration, and P1.2 developer workflow hardening foundation are implemented** as of **April 25, 2026**.
+- **P0 slices 1-4, the documentation-baseline slice, P1.1 entitlement matrix harness regression iteration, P1.2 developer workflow hardening foundation, P1.3 developer-loop command index, and P1.4 outbound webhook verification harness foundation are implemented** as of **April 25, 2026**.
 - The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
 - `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
 
