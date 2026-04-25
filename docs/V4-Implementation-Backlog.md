@@ -189,7 +189,7 @@ V4 should be considered successful when:
    - kept `scripts/local/*.sh` as first-class underlying scripts and delegated directly to them (no behavior replacement or hidden orchestration).
    - refreshed `README.md` and `docs/Local-Orchestration-Profile.md` examples to show the recommended day-to-day `scripts/dev.sh` loop while preserving direct-script usage guidance.
 
-4. **Replay-safe outbound webhook verification tests** *(P1.4 harness foundation completed April 25, 2026)*
+4. **Replay-safe outbound webhook verification tests** *(P1.4 completed April 25, 2026)*
    - added first reusable outbound delivery test harness primitives for:
      - seeded tenant endpoint + publish request setup
      - deterministic dispatch-attempt simulation (including retry timing by forced due-at windows)
@@ -201,6 +201,11 @@ V4 should be considered successful when:
      - duplicate publish suppression behavior via `SourceEventKey` replay dedupe (single event/delivery row for duplicate publish request)
      - delivery metadata preservation across retries and recovery (`LastError`, status transitions, stable delivery/idempotency headers, contract-version header, and per-attempt timestamp capture)
      - currently implemented envelope-level correlation continuity assertions (`correlationId`, `eventId`, `tenantId`) across retries
+   - automated guarantees now explicitly covered in deterministic tests:
+     - replay/dedup: duplicate publish requests do not create duplicate event or delivery records
+     - retry/recovery: transient failures schedule retries and recover to `Succeeded` with preserved delivery identity
+     - retry exhaustion: bounded repeated failures end in deterministic `Exhausted` state with inspectable diagnostics
+     - header/payload continuity: delivery + idempotency header continuity across attempts and envelope correlation continuity across retries
    - explicit current observability boundary documented by tests:
      - no dedicated outbound tracing header is currently emitted
      - retry visibility is exposed through delivery status/timestamps/status-code/error fields (no standalone retry history table yet)
