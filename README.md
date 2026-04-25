@@ -158,7 +158,7 @@ If a step fails, stop and fix that step before continuing. Triage in this order:
 | BillingService durable workflow scaffold | Implemented (pre-live) | Durable retry/dead-letter/reconciliation scaffolding exists, but live provider callback flow is still pending. |
 | Provider webhook verification + live provider sync | Not implemented yet | BillingService remains pre-live for verified external webhook ingestion. |
 | Entitlements model + feature gating | Implemented (progressive rollout) | Additive entitlement schema + seeded definitions/mappings are in place, with evaluator/enforcer-backed gates active for billing invoice reads, billing self-service mutations, plan upgrades, advanced admin user management, and tenant audit-log analytics access. |
-| Usage analytics + outbound webhooks | Partially implemented (analytics + outbound delivery foundation) | Tenant-scoped usage aggregation/query service and a first outbound webhook foundation (signed payloads, retries, delivery status, idempotency key headers, and replay-safe event dedupe) are implemented. |
+| Usage analytics + outbound webhooks | Partially implemented (analytics + outbound delivery foundation) | Tenant-scoped usage aggregation/query service and a first outbound webhook foundation (signed payloads, retries, delivery status, idempotency key headers, replay-safe event dedupe, and deterministic harness coverage for duplicate-publish suppression + retry recovery/terminal outcomes) are implemented. |
 
 ## Repository overview
 

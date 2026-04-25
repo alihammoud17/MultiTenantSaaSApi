@@ -46,6 +46,8 @@ Initial scenarios covered by the harness:
 
 1. failed first delivery (`500`) -> retry scheduled -> forced-due second attempt -> success transition
 2. repeated transient failures until max-attempt exhaustion with deterministic terminal state assertions
+3. duplicate publish suppression by `SourceEventKey` (no second event row or extra delivery row)
+4. delivery metadata preservation assertions across retries (stable delivery/idempotency headers, retry error state, cleared error after success, signature/timestamp headers present)
 
 This is intentionally a thin first slice. It establishes reusable harness primitives first, then broader matrix coverage (including additional retry-window and dedupe matrices) can be layered incrementally in follow-up P1 work.
 
