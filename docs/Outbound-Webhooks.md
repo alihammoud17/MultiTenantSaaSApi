@@ -41,6 +41,8 @@ Current harness capabilities:
 - retry timing simulation through explicit due-at control of persisted delivery rows
 - captured outbound request inspection for key headers (delivery id, idempotency key, signature metadata)
 - persisted delivery state inspection (`AttemptCount`, `Status`, `LastResponseStatusCode`, `LastError`, `DeliveredAtUtc`)
+- observability-oriented assertions for attempt diagnostics (`LastAttemptAtUtc`, retry scheduling windows, request capture timestamps)
+- payload-level trace continuity assertions for currently implemented envelope fields (`correlationId`, `eventId`, `tenantId`)
 
 Initial scenarios covered by the harness:
 
@@ -48,6 +50,13 @@ Initial scenarios covered by the harness:
 2. repeated transient failures until max-attempt exhaustion with deterministic terminal state assertions
 3. duplicate publish suppression by `SourceEventKey` (no second event row or extra delivery row)
 4. delivery metadata preservation assertions across retries (stable delivery/idempotency headers, retry error state, cleared error after success, signature/timestamp headers present)
+5. terminal failure and retry-state visibility assertions for currently implemented delivery metadata (`AttemptCount`, `LastAttemptAtUtc`, `LastResponseStatusCode`, `LastError`, `Status`, and `NextAttemptAtUtc`)
+
+Current observability boundary (explicitly documented from real implementation):
+
+- no dedicated outbound tracing header is emitted today (beyond delivery/idempotency/timestamp/signature headers)
+- correlation continuity is currently carried in the signed JSON envelope body (not in separate request headers)
+- retry-state visibility is currently persisted through delivery status + timestamps/error/status-code fields (no standalone retry-history table yet)
 
 This is intentionally a thin first slice. It establishes reusable harness primitives first, then broader matrix coverage (including additional retry-window and dedupe matrices) can be layered incrementally in follow-up P1 work.
 
