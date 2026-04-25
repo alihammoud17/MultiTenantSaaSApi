@@ -42,6 +42,23 @@ What this does today:
 1. reapplies EF migrations so model-managed seed data stays current
 2. prints the explicit manual boundary for scenario/demo tenant seed data
 
+### Recommended command order (standardized P1.2 workflow)
+
+Use this exact order for the most deterministic local validation loop:
+
+```bash
+# shell A
+scripts/dev.sh bootstrap
+scripts/dev.sh seed
+scripts/dev.sh run
+
+# shell B
+scripts/dev.sh smoke
+scripts/dev.sh test
+```
+
+`scripts/dev.sh reset` is optional and should be used before `seed` when you need a clean-state local reset.
+
 ### Local smoke/test path (code-ready runtime validation)
 
 Run in this order from the repository root:
@@ -68,6 +85,16 @@ Smoke currently validates only local runtime readiness for the orchestration pro
 
 For detailed script behavior, environment overrides, and troubleshooting, use `docs/Local-Orchestration-Profile.md`.
 Use `scripts/dev.sh help` to print the command index at any time.
+
+### Common failure triage (quick index)
+
+If a step fails, stop and fix that step before continuing. Triage in this order:
+
+1. **Dependency restore/install failures** (`dotnet restore`, `npm ci`) -> rerun failing command directly, then rerun wrapper.
+2. **EF tooling/migration failures** (`dotnet-ef`) -> run printed manual `dotnet ef ...` fallback commands, then rerun.
+3. **Runtime startup failures** (`scripts/dev.sh run`) -> inspect `.local-api.log` / `.local-billing.log`, fix first startup exception.
+4. **Smoke failures** -> ensure services are still running and `/health` endpoints are reachable on configured URLs.
+5. **Test failures** (`scripts/dev.sh test`) -> rerun exact failing step directly (`dotnet test`, `npm run build`, or `npm test`) and then rerun full script.
 
 ### Code-ready local validation vs production readiness
 
