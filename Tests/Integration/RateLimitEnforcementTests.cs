@@ -57,11 +57,13 @@ public class RateLimitEnforcementTests : IClassFixture<RateLimitDeniedWebApplica
 
 public sealed class RateLimitDeniedWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private readonly SqliteConnection _connection = new("DataSource=:memory:");
+    private readonly string _connectionString = $"Data Source=file:rate-limit-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
+    private readonly SqliteConnection _keepAliveConnection;
 
     public RateLimitDeniedWebApplicationFactory()
     {
-        _connection.Open();
+        _keepAliveConnection = new SqliteConnection(_connectionString);
+        _keepAliveConnection.Open();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -94,7 +96,12 @@ public sealed class RateLimitDeniedWebApplicationFactory : WebApplicationFactory
             services.RemoveAll<IRateLimitService>();
             services.RemoveAll<DbConnection>();
 
-            services.AddSingleton<DbConnection>(_connection);
+            services.AddScoped<DbConnection>(_ =>
+            {
+                var connection = new SqliteConnection(_connectionString);
+                connection.Open();
+                return connection;
+            });
             services.AddDbContext<ApplicationDbContext>((sp, options) =>
                 options.UseSqlite(sp.GetRequiredService<DbConnection>()));
 
@@ -118,7 +125,7 @@ public sealed class RateLimitDeniedWebApplicationFactory : WebApplicationFactory
         base.Dispose(disposing);
         if (disposing)
         {
-            _connection.Dispose();
+            _keepAliveConnection.Dispose();
         }
     }
 

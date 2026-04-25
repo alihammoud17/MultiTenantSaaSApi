@@ -7,18 +7,20 @@ The .NET API is the current system of record for tenant identity, authorization,
 
 - **V1, V2, and V3 are complete** in the current repository state.
 - **V4 execution is active for pre-deployment code-first maturity** in `docs/V4-Implementation-Backlog.md`.
-- **P0 slices 1-4, the documentation-baseline slice, and P1.1 entitlement matrix harness regression iteration are implemented** as of **April 20, 2026**.
+- **P0 slices 1-4, the documentation-baseline slice, P1.1 entitlement matrix harness regression iteration, and P1.2 developer workflow hardening foundation are implemented** as of **April 25, 2026**.
 - The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
 - `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
 
 ## V4 orchestration profile (local-first, pre-deployment)
 
-### Local bootstrap path (code-ready setup)
+### Local bootstrap/reset/seed path (code-ready setup)
 
 From the repository root:
 
 ```bash
 scripts/local/bootstrap.sh
+scripts/local/reset.sh   # optional clean-state reset
+scripts/local/seed.sh    # explicit seed boundary
 ```
 
 What this does today:
@@ -27,7 +29,18 @@ What this does today:
 2. applies EF Core migrations when `/tmp/dotnet-tools/dotnet-ef` is available
 3. installs BillingService dependencies with `npm ci`
 
-### Local smoke path (code-ready runtime validation)
+`reset.sh` standardizes local cleanup + DB reset behavior:
+
+1. removes `.local-api.log` / `.local-billing.log` and BillingService durable workflow state file
+2. drops the local DB with `dotnet-ef database drop --force` (when `/tmp/dotnet-tools/dotnet-ef` exists)
+3. reapplies migrations
+
+`seed.sh` standardizes seed behavior for the current V4 stage:
+
+1. reapplies EF migrations so model-managed seed data stays current
+2. prints the explicit manual boundary for scenario/demo tenant seed data
+
+### Local smoke/test path (code-ready runtime validation)
 
 Run in this order from the repository root:
 
@@ -37,6 +50,7 @@ scripts/local/run.sh
 
 # shell B
 scripts/local/smoke.sh
+scripts/local/test.sh
 ```
 
 Smoke currently validates only local runtime readiness for the orchestration profile:
@@ -44,6 +58,11 @@ Smoke currently validates only local runtime readiness for the orchestration pro
 - .NET API health endpoint responsiveness
 - BillingService health endpoint responsiveness
 - BillingService placeholder webhook endpoint acceptance
+
+`test.sh` standardizes full local verification across both services:
+
+- required .NET validation commands (`dotnet --info`, `dotnet-ef --version`, restore/build/test)
+- BillingService dependency install, build, and test execution
 
 For detailed script behavior, environment overrides, and troubleshooting, use `docs/Local-Orchestration-Profile.md`.
 
@@ -394,9 +413,11 @@ From repository root:
 
 ```bash
 scripts/local/bootstrap.sh
+scripts/local/seed.sh
 scripts/local/run.sh
 # in a second shell while run.sh is active:
 scripts/local/smoke.sh
+scripts/local/test.sh
 ```
 
 What each script does:
@@ -406,6 +427,13 @@ What each script does:
   - runs `dotnet build --no-restore`
   - applies EF migrations using `/tmp/dotnet-tools/dotnet-ef` when available
   - runs `npm ci` in `BillingService`
+- `reset.sh`
+  - removes local logs and BillingService durable workflow state file
+  - drops and recreates the local DB through `dotnet-ef` when available
+  - prints explicit manual DB reset commands when `dotnet-ef` is unavailable
+- `seed.sh`
+  - reapplies EF migrations to keep model-managed seed data current
+  - explicitly documents the remaining manual boundary for scenario/demo tenant seeding
 - `run.sh`
   - starts the API on `http://localhost:5000`
   - starts BillingService on `http://localhost:3001`
@@ -413,12 +441,24 @@ What each script does:
 - `smoke.sh`
   - verifies `GET /health` on API and BillingService
   - verifies BillingService accepts `POST /webhooks/provider`
+- `test.sh`
+  - runs the full required .NET validation sequence
+  - runs BillingService install/build/test checks
 
 Expected behavior:
 
 - `bootstrap.sh` exits non-zero if restore/build/install fail.
 - `run.sh` keeps both services running until `Ctrl+C`, then stops both.
 - `smoke.sh` exits non-zero if any health/webhook check fails.
+- `test.sh` exits non-zero if any .NET or BillingService validation command fails.
+
+Typical local runtime expectations on a warm machine (non-binding, hardware-dependent):
+
+- `bootstrap.sh`: ~2-6 minutes (restore/build/install work dominates)
+- `reset.sh`: ~30-90 seconds (tooling + DB size dependent)
+- `seed.sh`: ~10-30 seconds when migrations are already current
+- `smoke.sh`: under 10 seconds after both services are healthy
+- `test.sh`: ~3-10 minutes depending on test cache/warmth
 
 Manual-only remainder (current P0 scope):
 

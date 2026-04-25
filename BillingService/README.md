@@ -134,8 +134,11 @@ For deterministic platform orchestration from the repository root, use:
 
 ```bash
 scripts/local/bootstrap.sh
+scripts/local/reset.sh
+scripts/local/seed.sh
 scripts/local/run.sh
 scripts/local/smoke.sh
+scripts/local/test.sh
 ```
 
 `run.sh` starts both services and keeps them running until interrupted; `smoke.sh` should be run from a second shell while `run.sh` is active.
@@ -146,6 +149,9 @@ Local bootstrap path (code-ready setup):
 
 ```bash
 scripts/local/bootstrap.sh
+# optional clean-state reset:
+scripts/local/reset.sh
+scripts/local/seed.sh
 ```
 
 Local smoke path (code-ready runtime check):
@@ -156,6 +162,12 @@ scripts/local/run.sh
 
 # shell B
 scripts/local/smoke.sh
+```
+
+Local test path (cross-service validation):
+
+```bash
+scripts/local/test.sh
 ```
 
 Smoke validates service health and placeholder webhook acceptance only; it does **not** prove live provider webhook verification or authenticated callback delivery into the .NET API.
