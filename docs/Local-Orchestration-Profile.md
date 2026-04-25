@@ -6,6 +6,16 @@ This document defines the deterministic local orchestration workflow for the V4 
 
 This profile is for **code-ready local validation**. It is not a production-readiness certification.
 
+## Standardized developer workflow (P1.2)
+
+Use the top-level command index for day-to-day workflow:
+
+```bash
+scripts/dev.sh <bootstrap|reset|seed|run|smoke|test>
+```
+
+`scripts/dev.sh` remains a thin dispatcher over `scripts/local/*.sh` to keep behavior explicit and reviewable.
+
 ## Local bootstrap/reset/seed path
 
 From repository root:
@@ -86,6 +96,10 @@ Use this order to keep triage deterministic:
 3. `scripts/dev.sh run`
 4. `scripts/dev.sh smoke` (from a second shell while `run` is active)
 5. `scripts/dev.sh test`
+
+Optional clean-state branch:
+
+- Run `scripts/dev.sh reset` between `bootstrap` and `seed` when local DB/log/workflow-state cleanup is required.
 
 If one step fails, fix that step before progressing to downstream checks.
 
@@ -220,3 +234,19 @@ Next steps:
 - `seed.sh` intentionally does not automate scenario/demo tenant data; manual API-flow seeding remains required.
 - `bootstrap.sh`/`seed.sh` can continue without `/tmp/dotnet-tools/dotnet-ef`; this preserves progress but leaves migration execution partially manual.
 - `smoke.sh` validates readiness and placeholder webhook acceptance only; it does not validate provider-authentic webhook signatures or live provider-to-.NET callback E2E behavior.
+
+## Final recommended developer workflow
+
+For a normal development cycle:
+
+1. `scripts/dev.sh bootstrap`
+2. `scripts/dev.sh seed`
+3. `scripts/dev.sh run` (keep running in shell A)
+4. `scripts/dev.sh smoke` (shell B)
+5. `scripts/dev.sh test` (shell B)
+
+When environment state looks stale, insert:
+
+- `scripts/dev.sh reset` immediately before `scripts/dev.sh seed`
+
+This keeps setup, validation order, and triage deterministic without overstating production-readiness guarantees.

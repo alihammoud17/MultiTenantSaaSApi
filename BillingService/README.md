@@ -130,17 +130,18 @@ npm run dev
 
 The service starts on `http://localhost:3001` by default.
 
-For deterministic platform orchestration from the repository root, use:
+For deterministic platform orchestration from the repository root, use the standardized wrapper commands:
 
 ```bash
-scripts/local/bootstrap.sh
-scripts/local/reset.sh
-scripts/local/seed.sh
-scripts/local/run.sh
-scripts/local/smoke.sh
-scripts/local/test.sh
+scripts/dev.sh bootstrap
+scripts/dev.sh reset
+scripts/dev.sh seed
+scripts/dev.sh run
+scripts/dev.sh smoke
+scripts/dev.sh test
 ```
 
+`scripts/dev.sh` delegates to `scripts/local/*.sh` so the underlying script behavior remains explicit and directly usable.
 `run.sh` starts both services and keeps them running until interrupted; `smoke.sh` should be run from a second shell while `run.sh` is active.
 
 ### Orchestration profile quick reference
@@ -148,29 +149,41 @@ scripts/local/test.sh
 Local bootstrap path (code-ready setup):
 
 ```bash
-scripts/local/bootstrap.sh
+scripts/dev.sh bootstrap
 # optional clean-state reset:
-scripts/local/reset.sh
-scripts/local/seed.sh
+scripts/dev.sh reset
+scripts/dev.sh seed
 ```
 
 Local smoke path (code-ready runtime check):
 
 ```bash
 # shell A
-scripts/local/run.sh
+scripts/dev.sh run
 
 # shell B
-scripts/local/smoke.sh
+scripts/dev.sh smoke
 ```
 
 Local test path (cross-service validation):
 
 ```bash
-scripts/local/test.sh
+scripts/dev.sh test
 ```
 
 Smoke validates service health and placeholder webhook acceptance only; it does **not** prove live provider webhook verification or authenticated callback delivery into the .NET API.
+
+### Recommended execution order
+
+Use this command order for deterministic local validation:
+
+1. `scripts/dev.sh bootstrap`
+2. `scripts/dev.sh seed`
+3. `scripts/dev.sh run` (shell A)
+4. `scripts/dev.sh smoke` (shell B)
+5. `scripts/dev.sh test` (shell B, after smoke passes)
+
+If a failure occurs, resolve it before moving to the next step. The detailed triage matrix (dependencies, migrations/tooling, startup, ports/config, smoke, tests) is in `../docs/Local-Orchestration-Profile.md`.
 
 For script flags/overrides and troubleshooting, see `../docs/Local-Orchestration-Profile.md`.
 

@@ -174,7 +174,7 @@ V4 should be considered successful when:
      - `smoke.sh`
      - `test.sh`
    - preserved the existing two-shell orchestration flow (`run.sh` + `smoke.sh`) while adding explicit wrappers for reset/seed/test.
-   - documented expected runtime ranges and concrete failure-triage guidance in `README.md` and `docs/Local-Orchestration-Profile.md`.
+   - documented expected runtime ranges and concrete failure-triage guidance in `README.md`, `BillingService/README.md`, and `docs/Local-Orchestration-Profile.md`.
    - extended triage documentation with explicit runtime/validation order and step-by-step paths for dependency, tooling/migration, service startup, port/config alignment, smoke, and test failures.
    - made the current manual boundary explicit: scenario/demo tenant seed packs are still manual in this iteration.
 
