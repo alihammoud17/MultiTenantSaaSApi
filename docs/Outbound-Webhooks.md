@@ -1,6 +1,6 @@
 # Outbound Webhooks (V3 Foundation)
 
-_Last updated: April 13, 2026_
+_Last updated: April 25, 2026_
 
 ## Scope and status
 
@@ -29,6 +29,25 @@ Outbound webhook publication in this iteration is owned by the .NET API because 
 - persisted delivery records with retry scheduling and terminal status outcomes
 - publish-time dedupe using source-event identity (`SourceEventKey`)
 - stable per-delivery idempotency key header (`X-Tenant-Webhook-Idempotency-Key`)
+
+## P1.4 deterministic verification harness foundation
+
+The first reusable outbound verification harness slice is now in place in `.NET` unit tests (`Tests/UnitTests/OutboundWebhooks/*`).
+
+Current harness capabilities:
+
+- deterministic one-batch dispatch invocation for due deliveries (without external webhook dependencies)
+- queue-backed HTTP outcome simulation for delivery attempts (`2xx`, `5xx`, and bounded terminal failure paths)
+- retry timing simulation through explicit due-at control of persisted delivery rows
+- captured outbound request inspection for key headers (delivery id, idempotency key, signature metadata)
+- persisted delivery state inspection (`AttemptCount`, `Status`, `LastResponseStatusCode`, `LastError`, `DeliveredAtUtc`)
+
+Initial scenarios covered by the harness:
+
+1. failed first delivery (`500`) -> retry scheduled -> forced-due second attempt -> success transition
+2. repeated transient failures until max-attempt exhaustion with deterministic terminal state assertions
+
+This is intentionally a thin first slice. It establishes reusable harness primitives first, then broader matrix coverage (including additional retry-window and dedupe matrices) can be layered incrementally in follow-up P1 work.
 
 ## Security expectations
 
