@@ -178,10 +178,21 @@ V4 should be considered successful when:
    - extended triage documentation with explicit runtime/validation order and step-by-step paths for dependency, tooling/migration, service startup, port/config alignment, smoke, and test failures.
    - made the current manual boundary explicit: scenario/demo tenant seed packs are still manual in this iteration.
 
-3. **Replay-safe outbound webhook verification tests**
+3. **Top-level developer-loop command index** *(P1.3 completed April 25, 2026)*
+   - added `scripts/dev.sh` as a thin top-level command index/dispatcher for common local flows:
+     - `bootstrap`
+     - `reset`
+     - `seed`
+     - `run`
+     - `smoke`
+     - `test`
+   - kept `scripts/local/*.sh` as first-class underlying scripts and delegated directly to them (no behavior replacement or hidden orchestration).
+   - refreshed `README.md` and `docs/Local-Orchestration-Profile.md` examples to show the recommended day-to-day `scripts/dev.sh` loop while preserving direct-script usage guidance.
+
+4. **Replay-safe outbound webhook verification tests**
    - extend delivery tests for retry jitter windows, duplicate publish suppression, and terminal-failure observability fields.
 
-4. **Local observability quality gates**
+5. **Local observability quality gates**
    - add tests/assertions for required structured log fields and correlation-id propagation across critical request paths.
 
 ## P2 (later pre-deployment improvements)

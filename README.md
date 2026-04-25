@@ -18,10 +18,12 @@ The .NET API is the current system of record for tenant identity, authorization,
 From the repository root:
 
 ```bash
-scripts/local/bootstrap.sh
-scripts/local/reset.sh   # optional clean-state reset
-scripts/local/seed.sh    # explicit seed boundary
+scripts/dev.sh bootstrap
+scripts/dev.sh reset     # optional clean-state reset
+scripts/dev.sh seed      # explicit seed boundary
 ```
+
+Or run the underlying scripts directly (`scripts/local/*.sh`) when needed.
 
 What this does today:
 
@@ -46,11 +48,11 @@ Run in this order from the repository root:
 
 ```bash
 # shell A
-scripts/local/run.sh
+scripts/dev.sh run
 
 # shell B
-scripts/local/smoke.sh
-scripts/local/test.sh
+scripts/dev.sh smoke
+scripts/dev.sh test
 ```
 
 Smoke currently validates only local runtime readiness for the orchestration profile:
@@ -65,6 +67,7 @@ Smoke currently validates only local runtime readiness for the orchestration pro
 - BillingService dependency install, build, and test execution
 
 For detailed script behavior, environment overrides, and troubleshooting, use `docs/Local-Orchestration-Profile.md`.
+Use `scripts/dev.sh help` to print the command index at any time.
 
 ### Code-ready local validation vs production readiness
 
@@ -412,16 +415,20 @@ For a repeatable local V4 flow, use the repo-level scripts under `scripts/local/
 From repository root:
 
 ```bash
-scripts/local/bootstrap.sh
-scripts/local/seed.sh
-scripts/local/run.sh
+scripts/dev.sh bootstrap
+scripts/dev.sh seed
+scripts/dev.sh run
 # in a second shell while run.sh is active:
-scripts/local/smoke.sh
-scripts/local/test.sh
+scripts/dev.sh smoke
+scripts/dev.sh test
 ```
 
 What each script does:
 
+- `dev.sh`
+  - top-level command index/dispatcher for common local developer-loop flows
+  - delegates directly to `scripts/local/*.sh` without hiding behavior
+  - keeps all underlying scripts directly usable
 - `bootstrap.sh`
   - runs `dotnet restore`
   - runs `dotnet build --no-restore`
@@ -464,11 +471,11 @@ Typical local runtime expectations on a warm machine (non-binding, hardware-depe
 
 When troubleshooting, keep this exact execution order so failures are isolated to one stage:
 
-1. `scripts/local/bootstrap.sh` (dependency restore/build/install + migration apply when tool exists)
-2. `scripts/local/seed.sh` (migration/seed refresh + manual seed boundary reminder)
-3. `scripts/local/run.sh` (start API and BillingService)
-4. `scripts/local/smoke.sh` in a second shell (runtime health + placeholder webhook acceptance)
-5. `scripts/local/test.sh` (full validation sequence for .NET + BillingService)
+1. `scripts/dev.sh bootstrap` (dependency restore/build/install + migration apply when tool exists)
+2. `scripts/dev.sh seed` (migration/seed refresh + manual seed boundary reminder)
+3. `scripts/dev.sh run` (start API and BillingService)
+4. `scripts/dev.sh smoke` in a second shell (runtime health + placeholder webhook acceptance)
+5. `scripts/dev.sh test` (full validation sequence for .NET + BillingService)
 
 If a step fails, fix that step first and rerun it before continuing to later steps.
 
@@ -478,10 +485,10 @@ If a step fails, fix that step first and rerun it before continuing to later ste
 | --- | --- | --- |
 | Dependency install failure | `bootstrap.sh` or `test.sh` during `dotnet restore` / `npm ci` | Re-run the failing command directly to surface full output (`dotnet restore` from repo root or `cd BillingService && npm ci`). Confirm SDK/runtime prerequisites from this README are installed locally and retry bootstrap/test after the direct command succeeds. |
 | Migration/tooling failure | `bootstrap.sh`, `reset.sh`, or `seed.sh` at `/tmp/dotnet-tools/dotnet-ef` steps | If the tool is missing, run the printed manual command: `dotnet ef database update --project Infrastructure --startup-project Presentation` (or reset pair from `reset.sh`). If the tool exists but fails, validate DB connection secrets in `Presentation` and retry the exact EF command shown in script output. |
-| Service start failure | `run.sh` exits quickly or one PID terminates | Inspect `.local-api.log` and `.local-billing.log` immediately. Fix the first startup error in the corresponding service, then rerun `scripts/local/run.sh` before any smoke/test step. |
+| Service start failure | `run.sh` exits quickly or one PID terminates | Inspect `.local-api.log` and `.local-billing.log` immediately. Fix the first startup error in the corresponding service, then rerun `scripts/dev.sh run` before any smoke/test step. |
 | Port/config mismatch | `run.sh` can start but `smoke.sh` health checks fail or hit wrong endpoints | Ensure `API_URL` and `BILLING_URL` values match between `run.sh` and `smoke.sh` invocations. If overriding ports, export both variables in each shell before running scripts. |
 | Smoke-test failure | `smoke.sh` fails `GET /health` or webhook POST | Confirm `run.sh` is still active, then check `.local-api.log` and `.local-billing.log` for readiness/startup exceptions. Re-run `smoke.sh` only after both services are healthy and listening on expected URLs. |
-| Test-suite failure | `test.sh` fails any numbered step | Use the step number printed by `test.sh` to rerun only the failing command directly (`dotnet test --no-build --verbosity normal`, `npm run build`, or `npm test`). Fix forward at that layer, then rerun full `scripts/local/test.sh` to ensure sequence-level pass. |
+| Test-suite failure | `test.sh` fails any numbered step | Use the step number printed by `test.sh` to rerun only the failing command directly (`dotnet test --no-build --verbosity normal`, `npm run build`, or `npm test`). Fix forward at that layer, then rerun full `scripts/dev.sh test` to ensure sequence-level pass. |
 
 Manual-only remainder (current P0 scope):
 
@@ -599,9 +606,9 @@ npm test
 Or run the deterministic local profile sequence:
 
 ```bash
-scripts/local/bootstrap.sh
-scripts/local/run.sh
-scripts/local/smoke.sh
+scripts/dev.sh bootstrap
+scripts/dev.sh run
+scripts/dev.sh smoke
 ```
 
 ## Documentation status for this completed iteration

@@ -11,12 +11,14 @@ This profile is for **code-ready local validation**. It is not a production-read
 From repository root:
 
 ```bash
-scripts/local/bootstrap.sh
+scripts/dev.sh bootstrap
 # optional clean-state reset:
-scripts/local/reset.sh
+scripts/dev.sh reset
 # explicit seed step:
-scripts/local/seed.sh
+scripts/dev.sh seed
 ```
+
+`scripts/dev.sh` is a thin top-level dispatcher for common flows. It delegates to `scripts/local/*.sh` so behavior remains explicit and the underlying scripts remain directly usable.
 
 Bootstrap performs:
 
@@ -48,14 +50,14 @@ Run services in one shell and smoke in another shell.
 Shell A:
 
 ```bash
-scripts/local/run.sh
+scripts/dev.sh run
 ```
 
 Shell B:
 
 ```bash
-scripts/local/smoke.sh
-scripts/local/test.sh
+scripts/dev.sh smoke
+scripts/dev.sh test
 ```
 
 Smoke checks currently assert:
@@ -79,11 +81,11 @@ Test checks execute this standardized cross-service sequence:
 
 Use this order to keep triage deterministic:
 
-1. `scripts/local/bootstrap.sh`
-2. `scripts/local/seed.sh`
-3. `scripts/local/run.sh`
-4. `scripts/local/smoke.sh` (from a second shell while `run.sh` is active)
-5. `scripts/local/test.sh`
+1. `scripts/dev.sh bootstrap`
+2. `scripts/dev.sh seed`
+3. `scripts/dev.sh run`
+4. `scripts/dev.sh smoke` (from a second shell while `run` is active)
+5. `scripts/dev.sh test`
 
 If one step fails, fix that step before progressing to downstream checks.
 
@@ -175,7 +177,7 @@ Next steps:
 
 1. Inspect `.local-api.log` and `.local-billing.log`.
 2. Resolve the first startup exception in the failing service.
-3. Restart with `scripts/local/run.sh` before running smoke checks.
+3. Restart with `scripts/dev.sh run` before running smoke checks.
 
 ### 4) Port/config mismatch
 
@@ -211,7 +213,7 @@ Next steps:
 
 1. Use the printed step number to rerun the exact failing command directly.
 2. Fix the failure in that layer first (`dotnet test`, `npm run build`, or `npm test`).
-3. Re-run full `scripts/local/test.sh` to verify the entire sequence is green.
+3. Re-run full `scripts/dev.sh test` to verify the entire sequence is green.
 
 ## Current local workflow ambiguities (follow-up cleanup)
 
