@@ -7,8 +7,10 @@ namespace Tests.UnitTests.OutboundWebhooks;
 public class OutboundWebhookDeliveryHarnessTests
 {
     [Fact]
-    public async Task Harness_ShouldSupportRetrySimulationAndResultInspection()
+    public async Task Harness_ShouldSuppressDuplicatePublish_AndEventuallyDeliverAfterTransientFailure()
     {
+        const string sourceEventKey = "source-replay-safe-evt-1";
+
         await using var harness = await OutboundWebhookDeliveryHarness.CreateAsync(
             OutboundWebhookDeliveryHarness.WebhookDispatchOutcome.Failure(HttpStatusCode.InternalServerError),
             OutboundWebhookDeliveryHarness.WebhookDispatchOutcome.Success(HttpStatusCode.OK));
@@ -16,18 +18,25 @@ public class OutboundWebhookDeliveryHarnessTests
         var seeded = await harness.SeedTenantEndpointAsync();
         var publishRequest = new OutboundWebhookPublishRequestBuilder()
             .ForTenant(seeded.TenantId)
+            .WithSourceEventKey(sourceEventKey)
             .Build();
 
         await harness.PublishAsync(publishRequest);
+        await harness.PublishAsync(publishRequest);
+
+        (await harness.GetEventCountAsync(seeded.TenantId)).Should().Be(1, "source-event dedupe should suppress duplicate publish attempts");
+        (await harness.GetDeliveryCountAsync(seeded.TenantId)).Should().Be(1, "duplicate source-event publish should not enqueue additional deliveries");
 
         var firstAttemptStartedAtUtc = DateTime.UtcNow;
         await harness.DispatchDueDeliveriesOnceAsync();
         var firstAttemptFinishedAtUtc = DateTime.UtcNow;
 
-        var firstDeliveryState = await harness.GetSingleDeliveryAsync(seeded.TenantId);
+        var firstDeliveryState = await harness.GetSingleDeliveryBySourceEventKeyAsync(sourceEventKey);
         firstDeliveryState.Status.Should().Be(OutboundWebhookDeliveryStatus.RetryScheduled);
         firstDeliveryState.AttemptCount.Should().Be(1);
         firstDeliveryState.LastResponseStatusCode.Should().Be((int)HttpStatusCode.InternalServerError);
+        firstDeliveryState.LastError.Should().Be("HTTP 500");
+        firstDeliveryState.DeliveredAtUtc.Should().BeNull();
 
         var expectedRetryDelay = TimeSpan.FromSeconds(10);
         firstDeliveryState.NextAttemptAtUtc.Should().BeOnOrAfter(firstAttemptStartedAtUtc + expectedRetryDelay - TimeSpan.FromSeconds(1));
@@ -40,6 +49,7 @@ public class OutboundWebhookDeliveryHarnessTests
         finalDeliveryState.Status.Should().Be(OutboundWebhookDeliveryStatus.Succeeded);
         finalDeliveryState.AttemptCount.Should().Be(2);
         finalDeliveryState.LastResponseStatusCode.Should().Be((int)HttpStatusCode.OK);
+        finalDeliveryState.LastError.Should().BeNull();
         finalDeliveryState.DeliveredAtUtc.Should().NotBeNull();
 
         harness.CapturedRequests.Should().HaveCount(2);
@@ -49,6 +59,8 @@ public class OutboundWebhookDeliveryHarnessTests
         harness.CapturedRequests[0].Headers["X-Tenant-Webhook-Delivery"]
             .Should()
             .Be(harness.CapturedRequests[1].Headers["X-Tenant-Webhook-Delivery"]);
+        harness.CapturedRequests[0].Headers.Should().ContainKey("X-Tenant-Webhook-Timestamp");
+        harness.CapturedRequests[0].Headers.Should().ContainKey("X-Tenant-Webhook-Signature");
     }
 
     [Fact]

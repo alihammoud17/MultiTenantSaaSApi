@@ -119,6 +119,37 @@ internal sealed class OutboundWebhookDeliveryHarness : IAsyncDisposable
             .SingleAsync();
     }
 
+    public async Task<OutboundWebhookDelivery> GetSingleDeliveryBySourceEventKeyAsync(string sourceEventKey)
+    {
+        await using var scope = _serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await (from delivery in dbContext.OutboundWebhookDeliveries
+                      join evt in dbContext.OutboundWebhookEvents on delivery.EventId equals evt.Id
+                      where evt.SourceEventKey == sourceEventKey
+                      select delivery)
+            .SingleAsync();
+    }
+
+    public async Task<int> GetEventCountAsync(Guid tenantId)
+    {
+        await using var scope = _serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await dbContext.OutboundWebhookEvents.CountAsync(x => x.TenantId == tenantId);
+    }
+
+    public async Task<int> GetDeliveryCountAsync(Guid tenantId)
+    {
+        await using var scope = _serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await (from delivery in dbContext.OutboundWebhookDeliveries
+                      join evt in dbContext.OutboundWebhookEvents on delivery.EventId equals evt.Id
+                      where evt.TenantId == tenantId
+                      select delivery.Id)
+            .CountAsync();
+    }
+
     public async Task ForceDeliveryDueAsync(Guid deliveryId, DateTime dueAtUtc)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();

@@ -198,7 +198,9 @@ V4 should be considered successful when:
    - first deterministic scenarios now validate:
      - retry scheduling and subsequent success behavior for failed-then-recovered deliveries
      - terminal failure (`Exhausted`) observability fields after bounded retry attempts
-   - remaining follow-up: extend into explicit jitter-window assertions and duplicate-publish suppression scenario matrices in later P1 slices.
+     - duplicate publish suppression behavior via `SourceEventKey` replay dedupe (single event/delivery row for duplicate publish request)
+     - delivery metadata preservation across retries and recovery (`LastError`, status transitions, and stable delivery/idempotency headers)
+   - remaining follow-up: broaden matrix depth for additional retry-window boundaries and multi-endpoint fan-out slices in later P1 iterations.
 
 5. **Local observability quality gates**
    - add tests/assertions for required structured log fields and correlation-id propagation across critical request paths.
