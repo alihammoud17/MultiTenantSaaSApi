@@ -149,7 +149,7 @@ V4 should be considered successful when:
    - documented explicit local-demoable behavior vs post-deployment remaining work for platform and BillingService scopes.
    - preserved design intent while removing stale “pre-start” documentation guidance that no longer matches completed P0 slices.
 
-## P1 (next)
+## P1 (active)
 
 1. **Entitlement matrix test harness** *(P1.1 foundation + first regression expansion completed April 20, 2026)*
    - added a first reusable .NET unit-test harness slice with:
@@ -166,8 +166,16 @@ V4 should be considered successful when:
      - documented boundary intersection expectation: tenant/authorization enforcement remains covered by integration security tests, while matrix tests continue to focus on evaluator precedence determinism.
    - remaining follow-up: broaden matrix dimensions (additional add-on merge modes and deeper endpoint-level scenario breadth) in subsequent P1 slices.
 
-2. **Developer workflow hardening**
-   - standardize local scripts for bootstrap/reset/seed/smoke/test and document expected run times and failure triage steps.
+2. **Developer workflow hardening foundation** *(P1.2 completed April 25, 2026)*
+   - standardized local script set under `scripts/local/` for:
+     - `bootstrap.sh`
+     - `reset.sh`
+     - `seed.sh`
+     - `smoke.sh`
+     - `test.sh`
+   - preserved the existing two-shell orchestration flow (`run.sh` + `smoke.sh`) while adding explicit wrappers for reset/seed/test.
+   - documented expected runtime ranges and concrete failure-triage guidance in `README.md` and `docs/Local-Orchestration-Profile.md`.
+   - made the current manual boundary explicit: scenario/demo tenant seed packs are still manual in this iteration.
 
 3. **Replay-safe outbound webhook verification tests**
    - extend delivery tests for retry jitter windows, duplicate publish suppression, and terminal-failure observability fields.
