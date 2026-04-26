@@ -91,14 +91,45 @@ public sealed class OutboundWebhookDeliveryDispatcher : BackgroundService
                     item.delivery.Status = OutboundWebhookDeliveryStatus.Succeeded;
                     item.delivery.DeliveredAtUtc = now;
                     item.delivery.LastError = null;
+                    _logger.LogInformation(
+                        "Outbound webhook delivery succeeded. DeliveryId: {DeliveryId}, EventId: {EventId}, TenantId: {TenantId}, CorrelationId: {CorrelationId}, AttemptCount: {AttemptCount}, HttpStatusCode: {HttpStatusCode}, Status: {Status}",
+                        item.delivery.Id,
+                        item.evt.EventId,
+                        item.evt.TenantId,
+                        item.evt.CorrelationId,
+                        item.delivery.AttemptCount,
+                        item.delivery.LastResponseStatusCode,
+                        item.delivery.Status);
                     continue;
                 }
 
                 ScheduleRetry(item.delivery, $"HTTP {(int)response.StatusCode}");
+                _logger.LogWarning(
+                    "Outbound webhook delivery scheduled for retry. DeliveryId: {DeliveryId}, EventId: {EventId}, TenantId: {TenantId}, CorrelationId: {CorrelationId}, AttemptCount: {AttemptCount}, HttpStatusCode: {HttpStatusCode}, NextAttemptAtUtc: {NextAttemptAtUtc}, Status: {Status}, ErrorCategory: {ErrorCategory}",
+                    item.delivery.Id,
+                    item.evt.EventId,
+                    item.evt.TenantId,
+                    item.evt.CorrelationId,
+                    item.delivery.AttemptCount,
+                    item.delivery.LastResponseStatusCode,
+                    item.delivery.NextAttemptAtUtc,
+                    item.delivery.Status,
+                    "http_non_success");
             }
             catch (Exception ex)
             {
                 ScheduleRetry(item.delivery, ex.Message);
+                _logger.LogWarning(
+                    ex,
+                    "Outbound webhook delivery failed due to transport exception. DeliveryId: {DeliveryId}, EventId: {EventId}, TenantId: {TenantId}, CorrelationId: {CorrelationId}, AttemptCount: {AttemptCount}, NextAttemptAtUtc: {NextAttemptAtUtc}, Status: {Status}, ErrorCategory: {ErrorCategory}",
+                    item.delivery.Id,
+                    item.evt.EventId,
+                    item.evt.TenantId,
+                    item.evt.CorrelationId,
+                    item.delivery.AttemptCount,
+                    item.delivery.NextAttemptAtUtc,
+                    item.delivery.Status,
+                    "transport_exception");
             }
         }
 

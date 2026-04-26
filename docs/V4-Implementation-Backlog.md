@@ -229,6 +229,18 @@ V4 should be considered successful when:
    - expanded local smoke gate (`scripts/local/smoke.sh`) to fail fast when either service `/metrics` endpoint is unreachable, non-JSON, or returns invalid JSON.
    - kept assertions intentionally narrow to avoid brittle coupling to incidental counter values while still verifying local reachability and payload stability for current repo usage.
 
+7. **Correlation + structured-field quality gates (main P1.5 slice completed April 26, 2026)**
+   - added deterministic tests that enforce representative correlation continuity and safe structured diagnostic fields across critical local debugging flows:
+     - .NET internal billing callback path now has explicit correlation-header continuity assertions (`X-Correlation-ID`) and callback-correlation persistence checks (`BillingEventInbox.CorrelationId`).
+     - .NET outbound webhook retry/exhaustion harness coverage now acts as a structured diagnostics gate for persisted delivery state (`AttemptCount`, `LastAttemptAtUtc`, `NextAttemptAtUtc`, `LastResponseStatusCode`, `LastError`, status transitions) plus envelope-level correlation/event/tenant continuity across retries.
+     - BillingService request observability tests now enforce safe structured field presence on request lifecycle logs (`http.request.started` / `http.request.completed`) and webhook correlation echo behavior.
+     - BillingService workflow processing tests now enforce dead-letter diagnostic field presence (`eventId`, `correlationId`, `tenantId`, `status`, `attempts`, `message`, `timestamp`) without asserting sensitive/raw payload material.
+   - smallest safe observability fixes included:
+     - BillingService workflow and enqueue/duplicate logs now include `correlationId` and explicit transition `status` fields where missing.
+     - .NET billing callback duplicate-path log now includes callback `CorrelationId`.
+     - .NET outbound webhook dispatcher now emits structured success/retry/transport-failure diagnostic logs with correlation-safe identifiers and transition context.
+   - remaining follow-up: expand this representative gate set to additional sensitive request/error paths and introduce broader forbidden-field regression checks for logs/state.
+
 ## P2 (later pre-deployment improvements)
 
 1. **Reference demo tenant packs**

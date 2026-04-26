@@ -251,6 +251,12 @@ The test suite also includes a fixture-driven replay slice (`tests/billingEventF
 - stale timestamp event handling behavior in the current workflow
 - invalid signature rejection before workflow enqueue
 
+Observability quality-gate coverage now also includes `tests/observabilityQualityGates.test.ts`, which enforces:
+
+- correlation-id continuity for representative webhook request handling
+- required safe structured fields on request lifecycle logs (`http.request.started` / `http.request.completed`)
+- required safe structured fields on workflow dead-letter diagnostics (`eventId`, `correlationId`, `tenantId`, `status`, `attempts`, `message`, `timestamp`)
+
 ## Current endpoints
 
 ### `GET /health`
