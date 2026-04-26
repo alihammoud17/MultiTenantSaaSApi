@@ -40,6 +40,13 @@ test('GET /health returns billing service status payload', async () => {
   assert.equal(response.body.provider, 'placeholder');
   assert.equal(response.body.checks.self, 'ok');
   assert.equal(response.body.metrics.service, 'billing-service');
+  assert.equal(typeof response.body.correlationId, 'string');
+  assert.equal(typeof response.body.metrics.activeRequests, 'number');
+
+  const serialized = JSON.stringify(response.body).toLowerCase();
+  assert.equal(serialized.includes('secret'), false);
+  assert.equal(serialized.includes('password'), false);
+  assert.equal(serialized.includes('token'), false);
 });
 
 test('GET /metrics returns request counters', async () => {
@@ -47,8 +54,17 @@ test('GET /metrics returns request counters', async () => {
 
   assert.equal(response.status, 200);
   assert.equal(response.body.service, 'billing-service');
+  assert.equal(typeof response.body.generatedAtUtc, 'string');
+  assert.equal(typeof response.body.traceId, 'string');
   assert.equal(typeof response.body.metrics.activeRequests, 'number');
+  assert.equal(typeof response.body.metrics.requestsByRoute, 'object');
+  assert.equal(typeof response.body.metrics.requestsByStatus, 'object');
   assert.equal(typeof response.body.correlationId, 'string');
+
+  const serialized = JSON.stringify(response.body).toLowerCase();
+  assert.equal(serialized.includes('secret'), false);
+  assert.equal(serialized.includes('password'), false);
+  assert.equal(serialized.includes('token'), false);
 });
 
 test('POST /webhooks/provider returns placeholder response', async () => {

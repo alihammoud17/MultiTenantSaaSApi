@@ -222,6 +222,13 @@ V4 should be considered successful when:
    - contract explicitly forbids logging/asserting raw auth secrets/tokens and uncontrolled full payload dumps.
    - contract records current implementation gaps (log-schema quality-gate tests not yet implemented; BillingService trace-id derivation boundary).
 
+6. **Health/metrics stability checks (first P1.5 slice completed April 26, 2026)**
+   - added deterministic automated health/metrics stability checks for both services:
+     - .NET API: `GET /health` and `GET /metrics` integration assertions for HTTP 200, JSON content type, required top-level shape, and basic sensitive-field absence checks
+     - BillingService: `GET /health` and `GET /metrics` tests assert required shape/availability fields and basic sensitive-field absence checks
+   - expanded local smoke gate (`scripts/local/smoke.sh`) to fail fast when either service `/metrics` endpoint is unreachable, non-JSON, or returns invalid JSON.
+   - kept assertions intentionally narrow to avoid brittle coupling to incidental counter values while still verifying local reachability and payload stability for current repo usage.
+
 ## P2 (later pre-deployment improvements)
 
 1. **Reference demo tenant packs**

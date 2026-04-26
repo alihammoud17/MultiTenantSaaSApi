@@ -63,6 +63,56 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Health_ShouldReturnStableShape_WithoutSensitiveFields()
+    {
+        using var client = CreateClient();
+
+        var response = await client.GetAsync("/health");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.TryGetProperty("status", out _).Should().BeTrue();
+        body.TryGetProperty("service", out _).Should().BeTrue();
+        body.TryGetProperty("correlationId", out _).Should().BeTrue();
+        body.TryGetProperty("totalDuration", out _).Should().BeTrue();
+        body.TryGetProperty("checks", out _).Should().BeTrue();
+
+        var serialized = body.GetRawText().ToLowerInvariant();
+        serialized.Should().NotContain("connectionstring");
+        serialized.Should().NotContain("password");
+        serialized.Should().NotContain("secret");
+        serialized.Should().NotContain("token");
+    }
+
+    [Fact]
+    public async Task Metrics_ShouldReturnStableShape_WithoutSensitiveFields()
+    {
+        using var client = CreateClient();
+
+        var response = await client.GetAsync("/metrics");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.TryGetProperty("correlationId", out _).Should().BeTrue();
+        body.TryGetProperty("generatedAtUtc", out _).Should().BeTrue();
+        body.TryGetProperty("metrics", out var metrics).Should().BeTrue();
+        metrics.TryGetProperty("service", out _).Should().BeTrue();
+        metrics.TryGetProperty("activeRequests", out _).Should().BeTrue();
+        metrics.TryGetProperty("requestsByRoute", out _).Should().BeTrue();
+        metrics.TryGetProperty("requestsByStatus", out _).Should().BeTrue();
+
+        var serialized = body.GetRawText().ToLowerInvariant();
+        serialized.Should().NotContain("connectionstring");
+        serialized.Should().NotContain("password");
+        serialized.Should().NotContain("secret");
+        serialized.Should().NotContain("token");
+    }
+
+    [Fact]
     public async Task Register_ShouldCreateTenantAndReturnToken()
     {
         using var client = CreateClient();

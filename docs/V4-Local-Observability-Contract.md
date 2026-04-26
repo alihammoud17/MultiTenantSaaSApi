@@ -133,11 +133,20 @@ The following must never be logged, persisted as diagnostic metadata, or asserte
 
 ---
 
-## 7) Practical verification checklist for future tests (definition only)
+## 7) Practical verification checklist and current automated coverage
 
-When P1.5 tests are implemented later, they should validate at least:
+The first deterministic automated coverage slice for this checklist is now implemented (April 26, 2026) across:
+- `.NET` integration tests for `GET /health` and `GET /metrics`
+- BillingService tests for `GET /health` and `GET /metrics`
+- local smoke gate checks for `/health` + `/metrics` JSON reachability on both services
+
+Automated checks currently validate at least:
 - `/health` + `/metrics` endpoint availability and JSON shape in both services.
-- correlation-id echo/continuity across request->response for both services.
+- required top-level observability fields remain present for current repo usage.
+- bounded sensitive-data absence checks in health/metrics payloads (`secret`/`password`/`token` classes are not expected content).
+
+Still pending in later slices:
+- correlation-id echo/continuity assertions for every path on both services.
 - presence of required safe fields on request completion/error logs.
-- absence of forbidden sensitive fields in logs and persisted diagnostic state.
-- trace continuity assertions limited to currently implemented behavior only.
+- absence checks for forbidden sensitive fields in log outputs and persisted diagnostic state.
+- trace continuity assertions beyond currently implemented request-local behavior.
