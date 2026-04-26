@@ -14,6 +14,14 @@ function parseLogLine(line: unknown): Record<string, unknown> {
   return JSON.parse(line);
 }
 
+function assertNoUnsafeDiagnostics(value: unknown): void {
+  const serialized = JSON.stringify(value).toLowerCase();
+  assert.equal(serialized.includes('bearer ey'), false);
+  assert.equal(serialized.includes('sk_live_'), false);
+  assert.equal(serialized.includes('callback-secret-'), false);
+  assert.equal(serialized.includes('tok_'), false);
+}
+
 function makeWorkflowItem(overrides: Partial<WorkflowItem> = {}): WorkflowItem {
   const event: InternalSubscriptionEvent = {
     eventId: 'evt_workflow_quality_gate',
@@ -212,4 +220,67 @@ test('workflow retry/dead-letter logs enforce required safe structured fields', 
   assert.equal(deadLettered.message, 'downstream_outage');
   assert.equal(typeof deadLettered.attempts, 'number');
   assert.equal(typeof deadLettered.timestamp, 'string');
+});
+
+test('workflow retry-scheduled diagnostics preserve safe context and sanitize sensitive values on transient failures', async () => {
+  const warnings: string[] = [];
+  const errors: string[] = [];
+  const queue = new SingleItemQueue(makeWorkflowItem({ eventId: 'evt_transient_quality_gate' }));
+
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  console.warn = (line?: unknown) => {
+    warnings.push(String(line ?? ''));
+  };
+  console.error = (line?: unknown) => {
+    errors.push(String(line ?? ''));
+  };
+
+  try {
+    let retryDecisions = 0;
+    const retryPolicy: RetryPolicy = {
+      next() {
+        retryDecisions += 1;
+        if (retryDecisions === 1) {
+          return {
+            shouldRetry: true,
+            retryAtUtc: '2026-04-01T00:00:10.000Z'
+          };
+        }
+
+        return {
+          shouldRetry: false
+        };
+      }
+    };
+
+    const worker = new WorkflowWorker(queue, {
+      async process() {
+        throw new Error('temporary outage authorization=Bearer eyJhbGciOiJIUzI1NiJ9 callback-secret=callback-secret-123 token=tok_abc');
+      }
+    }, retryPolicy, 10_000);
+
+    await worker.processUntilEmpty();
+  } finally {
+    console.warn = originalWarn;
+    console.error = originalError;
+  }
+
+  assert.equal(errors.length, 1);
+  assert.equal(warnings.length, 1);
+
+  const retryScheduled = parseLogLine(warnings[0]);
+  assert.equal(retryScheduled.event, 'workflow-worker.retry-scheduled');
+  assert.equal(retryScheduled.eventId, 'evt_transient_quality_gate');
+  assert.equal(retryScheduled.correlationId, 'corr_workflow_quality_gate');
+  assert.equal(retryScheduled.status, 'retry_scheduled');
+  assert.equal(retryScheduled.retryAtUtc, '2026-04-01T00:00:10.000Z');
+  assert.equal(typeof retryScheduled.attempts, 'number');
+  assert.equal(typeof retryScheduled.timestamp, 'string');
+  assertNoUnsafeDiagnostics(retryScheduled);
+
+  const snapshot = await queue.snapshot();
+  assert.equal(snapshot[0].status, 'dead_letter');
+  assert.equal(typeof snapshot[0].lastError, 'string');
+  assertNoUnsafeDiagnostics(snapshot[0].lastError);
 });

@@ -237,8 +237,13 @@ V4 should be considered successful when:
      - BillingService workflow processing tests now enforce dead-letter diagnostic field presence (`eventId`, `correlationId`, `tenantId`, `status`, `attempts`, `message`, `timestamp`) without asserting sensitive/raw payload material.
    - smallest safe observability fixes included:
      - BillingService workflow and enqueue/duplicate logs now include `correlationId` and explicit transition `status` fields where missing.
+     - BillingService failure/rejection diagnostic messages are now sanitized before logging/persistence/response shaping to prevent token/secret/header leakage while retaining actionable failure context.
      - .NET billing callback duplicate-path log now includes callback `CorrelationId`.
      - .NET outbound webhook dispatcher now emits structured success/retry/transport-failure diagnostic logs with correlation-safe identifiers and transition context.
+   - targeted failure-path quality-gate tests now also cover representative negative paths where observability commonly regresses:
+     - transient workflow failure with retry scheduling diagnostics + sensitive-value absence assertions
+     - terminal retry-exhaustion dead-letter diagnostics + persisted-state sensitive-value absence assertions
+     - webhook invalid-signature/malformed rejection reason sanitization assertions
    - remaining follow-up: expand this representative gate set to additional sensitive request/error paths and introduce broader forbidden-field regression checks for logs/state.
 
 ## P2 (later pre-deployment improvements)

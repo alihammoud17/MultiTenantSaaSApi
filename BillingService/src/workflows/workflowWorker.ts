@@ -1,4 +1,5 @@
 import { logger } from '../observability/logger.ts';
+import { sanitizeDiagnosticText } from '../observability/safeDiagnostics.ts';
 import type { InternalSubscriptionEvent } from '../shared/types.ts';
 import type { RetryPolicy } from './retryPolicy.ts';
 import type { WorkflowItem, WorkflowQueue } from './workflowQueue.ts';
@@ -77,7 +78,8 @@ export class WorkflowWorker {
         subscriptionId: item.event.subscriptionId
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown processing failure';
+      const rawMessage = error instanceof Error ? error.message : 'Unknown processing failure';
+      const message = sanitizeDiagnosticText(rawMessage);
       const decision = this.retryPolicy.next(item.attempts, new Date());
 
       if (!decision.shouldRetry || !decision.retryAtUtc) {

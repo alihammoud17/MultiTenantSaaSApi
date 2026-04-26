@@ -256,6 +256,7 @@ Observability quality-gate coverage now also includes `tests/observabilityQualit
 - correlation-id continuity for representative webhook request handling
 - required safe structured fields on request lifecycle logs (`http.request.started` / `http.request.completed`)
 - required safe structured fields on workflow dead-letter diagnostics (`eventId`, `correlationId`, `tenantId`, `status`, `attempts`, `message`, `timestamp`)
+- negative-path diagnostics + sanitization guarantees for transient retry scheduling, terminal dead-letter/retry exhaustion, and webhook rejection reasons (preserved failure context with sensitive token/secret/header value absence)
 
 ## Current endpoints
 
