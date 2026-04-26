@@ -289,6 +289,7 @@ Implemented callback capabilities:
 - `X-Correlation-ID` request/response propagation.
 - Per-request `ActivitySource` instrumentation (`multi-tenant-saas-api`) for future tracing exporters.
 - Database connectivity health check.
+- Local observability guarantees for V4 are now explicitly captured in `docs/V4-Local-Observability-Contract.md` (endpoint availability, structured safe fields, correlation/trace continuity boundaries, failure diagnosability expectations, and forbidden sensitive-data logging/assertion rules).
 
 ### Automated testing coverage
 

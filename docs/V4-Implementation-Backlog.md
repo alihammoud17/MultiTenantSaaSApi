@@ -211,8 +211,16 @@ V4 should be considered successful when:
      - retry visibility is exposed through delivery status/timestamps/status-code/error fields (no standalone retry history table yet)
    - remaining follow-up: broaden matrix depth for additional retry-window boundaries and multi-endpoint fan-out slices in later P1 iterations.
 
-5. **Local observability quality gates**
-   - add tests/assertions for required structured log fields and correlation-id propagation across critical request paths.
+5. **Local observability contract definition (P1.5 completed April 26, 2026)**
+   - added `docs/V4-Local-Observability-Contract.md` defining the current-stage local minimum observability guarantees without inventing unimplemented features.
+   - contract now concretely defines:
+     - `/health` and `/metrics` local availability expectations for both services
+     - required structured diagnostic fields on current critical request/workflow paths
+     - correlation continuity guarantees and current trace continuity boundary (only where implemented)
+     - local failure-state diagnosability expectations
+     - explicit safe-field requirements and explicit forbidden sensitive-data classes
+   - contract explicitly forbids logging/asserting raw auth secrets/tokens and uncontrolled full payload dumps.
+   - contract records current implementation gaps (log-schema quality-gate tests not yet implemented; BillingService trace-id derivation boundary).
 
 ## P2 (later pre-deployment improvements)
 
