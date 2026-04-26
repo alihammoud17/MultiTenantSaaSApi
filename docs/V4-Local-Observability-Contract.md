@@ -1,6 +1,6 @@
 # V4 Local Observability Contract (P1.5)
 
-_Last updated: April 26, 2026_
+_Last updated: April 26, 2026 (P1.5 finalization pass)_
 
 ## 1) Scope and intent
 
@@ -151,3 +151,17 @@ Still pending in later slices:
 - broader required safe-field assertions for additional log events beyond the representative covered paths.
 - deeper absence checks for forbidden sensitive fields in log outputs and persisted diagnostic state.
 - trace continuity assertions beyond currently implemented request-local behavior.
+
+---
+
+## 8) P1.5 completion decision and follow-up boundary
+
+P1.5 local observability quality gates are considered **complete** for this V4 scope because:
+- deterministic local endpoint availability gates (`/health`, `/metrics`) are implemented and verified in both services.
+- representative correlation + structured diagnostic field gates are implemented and verified on high-value flows.
+- sensitive-data minimization rules are explicit and enforced by targeted automated checks on representative negative paths.
+
+Remaining follow-up is explicitly **not** part of P1.5 completion:
+- broaden quality-gate coverage from representative-path assertions to repository-wide log/schema/forbidden-field regression coverage (P2+).
+- adopt full distributed trace-context propagation and production exporter/backend wiring.
+- operationalize production dashboards, alert routing, SLOs/error budgets, and on-call runbooks in deployed environments.

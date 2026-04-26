@@ -246,6 +246,15 @@ V4 should be considered successful when:
      - webhook invalid-signature/malformed rejection reason sanitization assertions
    - remaining follow-up: expand this representative gate set to additional sensitive request/error paths and introduce broader forbidden-field regression checks for logs/state.
 
+8. **P1.5 finalization + verification pass (completed April 26, 2026)**
+   - re-validated the required .NET command set (`dotnet --info`, `dotnet-ef --version`, `dotnet restore`, `dotnet build --no-restore`, `dotnet test --no-build --verbosity normal`) during the P1.5 closeout pass.
+   - re-validated BillingService test execution with `npm test`; current environment policy blocked fresh dependency restore via `npm ci` (403), so `npm run build` could not be re-run in this environment because `tsc` was unavailable without install.
+   - documentation is now aligned to explicitly separate:
+     - locally enforced observability guarantees now covered by automated gates
+     - partially implemented observability surfaces that still need broader coverage
+     - production telemetry/exporter/dashboard/alert work that remains post-P1.5 scope
+   - **P1.5 completion decision:** complete for V4 local-quality-gate scope, with remaining follow-up tracked for P2+ and post-deployment tracks.
+
 ## P2 (later pre-deployment improvements)
 
 1. **Reference demo tenant packs**

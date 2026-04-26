@@ -258,6 +258,18 @@ Observability quality-gate coverage now also includes `tests/observabilityQualit
 - required safe structured fields on workflow dead-letter diagnostics (`eventId`, `correlationId`, `tenantId`, `status`, `attempts`, `message`, `timestamp`)
 - negative-path diagnostics + sanitization guarantees for transient retry scheduling, terminal dead-letter/retry exhaustion, and webhook rejection reasons (preserved failure context with sensitive token/secret/header value absence)
 
+P1.5 local observability quality-gate status (April 26, 2026):
+
+- **Locally enforced now**
+  - `/health` and `/metrics` JSON availability is guarded by smoke/test coverage.
+  - representative request/workflow observability logs require correlation-safe structured fields.
+  - webhook rejection and retry/dead-letter diagnostics are required to remain actionable while sanitizing sensitive values.
+- **Partially implemented surfaces**
+  - log-schema and forbidden-field coverage is representative for high-value paths; it is not yet a repository-wide schema gate over every BillingService log event.
+  - trace continuity remains local/correlation-derived and is not yet full distributed `traceparent` propagation.
+- **Future production telemetry (out of scope in P1.5)**
+  - exporter wiring, environment telemetry backends, dashboard/alert thresholds, and on-call calibration remain post-P1.5 work.
+
 ## Current endpoints
 
 ### `GET /health`

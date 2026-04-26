@@ -1,7 +1,9 @@
-# V3 Observability and Operations Slice Design (Design-Only)
+# V3 Observability and Operations Slice Design (Design Reference for Future Production Telemetry)
 
 Date: April 12, 2026  
-Status: Planned (not implemented yet)
+Status: Design reference only as of April 26, 2026 (local P1.5 quality gates implemented separately; production telemetry rollout still not implemented)
+
+> Context update (April 26, 2026): local observability quality gates are now implemented and verified under V4 P1.5. This document remains a forward-looking production telemetry design reference (collector/exporter/dashboard/alert/SLO work), not a statement that those production capabilities are currently implemented.
 
 This document defines a lightweight, production-useful observability and operations slice that builds on the **current** foundation already in the repository:
 
