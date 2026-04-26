@@ -754,6 +754,54 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task InternalBillingCallback_ShouldPreserveRequestCorrelationHeader_AndPersistCallbackCorrelationId()
+    {
+        using var client = CreateClient();
+        const string requestCorrelationId = "corr-internal-callback-quality-gate";
+        client.DefaultRequestHeaders.Add("X-Correlation-ID", requestCorrelationId);
+
+        var auth = await RegisterTenant(client, $"billing-corr-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        Guid subscriptionId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            subscriptionId = db.Subscriptions.Single(x => x.TenantId == auth.TenantId).Id;
+        }
+
+        var payloadCorrelationId = $"corr-payload-{Guid.NewGuid():N}";
+        var payload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "subscription.renewed",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = (string?)null,
+            occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = DateTime.UtcNow.AddDays(30),
+            correlationId = payloadCorrelationId
+        };
+
+        var response = await PostSignedBillingEventAsync(client, payload);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.GetValues("X-Correlation-ID").Single().Should().Be(requestCorrelationId);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("eventId").GetString().Should().Be(payload.eventId);
+        body.GetProperty("tenantId").GetGuid().Should().Be(auth.TenantId);
+        body.GetProperty("subscriptionId").GetGuid().Should().Be(subscriptionId);
+        body.GetProperty("appliedStatus").GetString().Should().Be("Active");
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var inbox = verifyDb.BillingEventInboxes.Single(x => x.EventId == payload.eventId);
+        inbox.CorrelationId.Should().Be(payloadCorrelationId);
+    }
+
+    [Fact]
     public async Task InternalBillingCallback_ShouldRejectCrossTenantSubscriptionMapping()
     {
         using var client = CreateClient();

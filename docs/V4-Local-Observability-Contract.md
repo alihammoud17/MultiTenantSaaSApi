@@ -119,8 +119,9 @@ The following must never be logged, persisted as diagnostic metadata, or asserte
 
 ## 6) Known implementation gaps / ambiguities revealed by this contract
 
-1. **No repository-wide automated local quality gate yet for structured log schema**
-   - V4 backlog item exists for adding assertions around required log fields/correlation propagation, but this gate is not yet implemented.
+1. **Structured-field quality gates are now partial, not repository-wide**
+   - Deterministic tests now cover representative high-value paths (BillingService request lifecycle logs, BillingService workflow dead-letter diagnostics, .NET internal billing callback correlation continuity, and .NET outbound webhook retry-state diagnostics).
+   - Remaining work is to broaden this into a repository-wide schema gate for all sensitive flows.
 
 2. **BillingService trace id is correlation-derived, not distributed trace-context based**
    - Current `traceId` continuity is local/request-scoped and deterministic, but not equivalent to full traceparent propagation.
@@ -135,7 +136,7 @@ The following must never be logged, persisted as diagnostic metadata, or asserte
 
 ## 7) Practical verification checklist and current automated coverage
 
-The first deterministic automated coverage slice for this checklist is now implemented (April 26, 2026) across:
+The first deterministic automated coverage slices for this checklist are implemented (April 26, 2026) across:
 - `.NET` integration tests for `GET /health` and `GET /metrics`
 - BillingService tests for `GET /health` and `GET /metrics`
 - local smoke gate checks for `/health` + `/metrics` JSON reachability on both services
@@ -147,6 +148,6 @@ Automated checks currently validate at least:
 
 Still pending in later slices:
 - correlation-id echo/continuity assertions for every path on both services.
-- presence of required safe fields on request completion/error logs.
-- absence checks for forbidden sensitive fields in log outputs and persisted diagnostic state.
+- broader required safe-field assertions for additional log events beyond the representative covered paths.
+- deeper absence checks for forbidden sensitive fields in log outputs and persisted diagnostic state.
 - trace continuity assertions beyond currently implemented request-local behavior.

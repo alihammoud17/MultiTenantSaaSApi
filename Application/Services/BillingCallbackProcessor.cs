@@ -36,10 +36,11 @@ public sealed class BillingCallbackProcessor : IBillingCallbackProcessor
         if (existingEvent is not null)
         {
             _logger.LogInformation(
-                "Billing callback ignored as duplicate. EventId: {EventId}, TenantId: {TenantId}, SubscriptionId: {SubscriptionId}",
+                "Billing callback ignored as duplicate. EventId: {EventId}, TenantId: {TenantId}, SubscriptionId: {SubscriptionId}, CorrelationId: {CorrelationId}",
                 request.EventId,
                 request.TenantId,
-                request.SubscriptionId);
+                request.SubscriptionId,
+                request.CorrelationId);
 
             var duplicateStatus = await _dbContext.Subscriptions
                 .Where(x => x.Id == request.SubscriptionId && x.TenantId == request.TenantId)
