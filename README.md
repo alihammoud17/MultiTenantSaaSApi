@@ -75,7 +75,9 @@ scripts/dev.sh test
 Smoke currently validates only local runtime readiness for the orchestration profile:
 
 - .NET API health endpoint responsiveness
+- .NET API metrics endpoint JSON availability
 - BillingService health endpoint responsiveness
+- BillingService metrics endpoint JSON availability
 - BillingService placeholder webhook endpoint acceptance
 
 `test.sh` standardizes full local verification across both services:
@@ -93,7 +95,7 @@ If a step fails, stop and fix that step before continuing. Triage in this order:
 1. **Dependency restore/install failures** (`dotnet restore`, `npm ci`) -> rerun failing command directly, then rerun wrapper.
 2. **EF tooling/migration failures** (`dotnet-ef`) -> run printed manual `dotnet ef ...` fallback commands, then rerun.
 3. **Runtime startup failures** (`scripts/dev.sh run`) -> inspect `.local-api.log` / `.local-billing.log`, fix first startup exception.
-4. **Smoke failures** -> ensure services are still running and `/health` endpoints are reachable on configured URLs.
+4. **Smoke failures** -> ensure services are still running and `/health` + `/metrics` endpoints are reachable on configured URLs.
 5. **Test failures** (`scripts/dev.sh test`) -> rerun exact failing step directly (`dotnet test`, `npm run build`, or `npm test`) and then rerun full script.
 
 ### Code-ready local validation vs production readiness
@@ -102,7 +104,7 @@ If a step fails, stop and fix that step before continuing. Triage in this order:
 
 - deterministic bootstrap and two-shell run/smoke workflow
 - repeatable local service startup with captured logs
-- basic smoke assertions over API/BillingService health and placeholder webhook acceptance
+- basic smoke assertions over API/BillingService health + metrics and placeholder webhook acceptance
 
 **Production readiness (not claimed in this iteration):**
 
@@ -484,6 +486,7 @@ What each script does:
   - writes logs to `.local-api.log` and `.local-billing.log`
 - `smoke.sh`
   - verifies `GET /health` on API and BillingService
+  - verifies `GET /metrics` returns JSON on API and BillingService
   - verifies BillingService accepts `POST /webhooks/provider`
 - `test.sh`
   - runs the full required .NET validation sequence

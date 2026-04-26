@@ -171,7 +171,7 @@ Local test path (cross-service validation):
 scripts/dev.sh test
 ```
 
-Smoke validates service health and placeholder webhook acceptance only; it does **not** prove live provider webhook verification or authenticated callback delivery into the .NET API.
+Smoke validates service health + metrics endpoint availability and placeholder webhook acceptance only; it does **not** prove live provider webhook verification or authenticated callback delivery into the .NET API.
 
 ### Recommended execution order
 
@@ -217,7 +217,7 @@ For script flags/overrides and troubleshooting, see `../docs/Local-Orchestration
 **Code-ready local validation (implemented):**
 
 - deterministic bootstrap/run/smoke workflow via `scripts/local/`
-- local BillingService runtime validation via `/health`, `/metrics`, and placeholder webhook acceptance smoke checks
+- local BillingService runtime validation via `/health`, `/metrics`, and placeholder webhook acceptance smoke checks (including explicit JSON checks for both health and metrics)
 - repeatable local log capture through `.local-api.log` and `.local-billing.log` defaults
 
 **Production readiness (not claimed yet):**
