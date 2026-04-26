@@ -7,7 +7,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 
 - **V1, V2, and V3 are complete** in the current repository state.
 - **V4 execution is active for pre-deployment code-first maturity** in `docs/V4-Implementation-Backlog.md`.
-- **P0 slices 1-4, the documentation-baseline slice, P1.1 entitlement matrix harness regression iteration, P1.2 developer workflow hardening foundation, P1.3 developer-loop command index, and P1.4 replay-safe outbound webhook verification iteration are implemented** as of **April 25, 2026**.
+- **P0 slices 1-4, the documentation-baseline slice, P1.1 entitlement matrix harness regression iteration, P1.2 developer workflow hardening foundation, P1.3 developer-loop command index, P1.4 replay-safe outbound webhook verification iteration, and P1.5 local observability quality gates are implemented** as of **April 26, 2026**.
 - The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
 - `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
 
@@ -294,6 +294,12 @@ Implemented callback capabilities:
 - Local observability guarantees for V4 are now explicitly captured in `docs/V4-Local-Observability-Contract.md` (endpoint availability, structured safe fields, correlation/trace continuity boundaries, failure diagnosability expectations, and forbidden sensitive-data logging/assertion rules).
 - Deterministic P1.5 quality-gate tests now enforce representative correlation continuity and safe structured diagnostic fields across internal billing callback processing, outbound webhook retry state, BillingService request lifecycle logging, and BillingService workflow dead-letter diagnostics.
 - P1.5 failure-path observability tests now also gate negative-path diagnostics/sanitization across transient retry scheduling, terminal dead-letter/retry exhaustion state, and webhook rejection reasons so failures stay diagnosable without exposing auth/header/token/secret values.
+
+P1.5 observability quality-gate status (April 26, 2026):
+
+- **Locally enforced now**: deterministic `/health` + `/metrics` JSON reachability gates, representative correlation continuity checks, representative structured diagnostic field gates, and sensitive-data minimization checks across covered failure paths.
+- **Partially implemented surfaces**: structured-field and forbidden-field coverage is representative on high-value paths, not yet exhaustive across every request/error path in both services.
+- **Future production telemetry (out of scope in P1.5)**: OTEL exporters, dashboard/alert rollout, SLO/error-budget governance, and deployed runbook/paging validation.
 
 ### Automated testing coverage
 
