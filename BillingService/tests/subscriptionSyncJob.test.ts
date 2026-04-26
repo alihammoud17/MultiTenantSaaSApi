@@ -111,6 +111,36 @@ test('SubscriptionSyncJob dead-letters an event once retry budget is exhausted',
   });
 });
 
+test('SubscriptionSyncJob retry exhaustion keeps diagnosable dead-letter state while sanitizing sensitive error values', async () => {
+  await withTempDir(async (dir) => {
+    const publisher: BillingCallbackPublisher = {
+      async publish() {
+        throw new Error('persistent callback outage authorization=Bearer eyJhbGciOiJIUzI1NiJ9 api_key=sk_live_unsafe callback-secret=callback-secret-unsafe');
+      }
+    };
+
+    const job = new SubscriptionSyncJob(publisher, {
+      storagePath: join(dir, 'state.json'),
+      maxAttempts: 2,
+      initialBackoffMs: 1,
+      maxBackoffMs: 2_000
+    });
+
+    await job.enqueue(makeEvent({ eventId: 'evt_dead_letter_sanitized' }));
+    await waitForStatus(job, 'evt_dead_letter_sanitized', 'dead_letter');
+
+    const snapshot = await job.snapshotQueue();
+    assert.equal(snapshot[0].status, 'dead_letter');
+    assert.equal(snapshot[0].attempts, 2);
+    assert.ok(snapshot[0].lastError?.includes('persistent callback outage'));
+    assert.ok(snapshot[0].deadLetterReason?.includes('persistent callback outage'));
+    assert.equal((snapshot[0].lastError ?? '').toLowerCase().includes('sk_live_'), false);
+    assert.equal((snapshot[0].lastError ?? '').toLowerCase().includes('callback-secret-unsafe'), false);
+    assert.equal((snapshot[0].deadLetterReason ?? '').toLowerCase().includes('sk_live_'), false);
+    assert.equal((snapshot[0].deadLetterReason ?? '').toLowerCase().includes('callback-secret-unsafe'), false);
+  });
+});
+
 test('SubscriptionSyncJob keeps dedup/replay protection across process restarts', async () => {
   await withTempDir(async (dir) => {
     const statePath = join(dir, 'state.json');

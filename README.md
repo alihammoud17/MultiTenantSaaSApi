@@ -293,6 +293,7 @@ Implemented callback capabilities:
 - Database connectivity health check.
 - Local observability guarantees for V4 are now explicitly captured in `docs/V4-Local-Observability-Contract.md` (endpoint availability, structured safe fields, correlation/trace continuity boundaries, failure diagnosability expectations, and forbidden sensitive-data logging/assertion rules).
 - Deterministic P1.5 quality-gate tests now enforce representative correlation continuity and safe structured diagnostic fields across internal billing callback processing, outbound webhook retry state, BillingService request lifecycle logging, and BillingService workflow dead-letter diagnostics.
+- P1.5 failure-path observability tests now also gate negative-path diagnostics/sanitization across transient retry scheduling, terminal dead-letter/retry exhaustion state, and webhook rejection reasons so failures stay diagnosable without exposing auth/header/token/secret values.
 
 ### Automated testing coverage
 
