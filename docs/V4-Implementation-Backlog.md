@@ -255,6 +255,12 @@ V4 should be considered successful when:
      - production telemetry/exporter/dashboard/alert work that remains post-P1.5 scope
    - **P1.5 completion decision:** complete for V4 local-quality-gate scope, with remaining follow-up tracked for P2+ and post-deployment tracks.
 
+9. **AuthController application-layer boundary design (completed April 26, 2026, design-only)**
+   - produced the pre-implementation boundary design for moving `AuthController` register/login/refresh orchestration behind application service interfaces without moving HTTP concerns into the application layer.
+   - defined smallest-safe proposed `IAuthOrchestrationService` method surface, controller/service/infrastructure responsibility split, and typed result mapping strategy to preserve current response contracts where practical.
+   - documented exact first-change file sequence and phased migration strategy to incrementally remove direct `ApplicationDbContext` dependency from targeted auth flows while preserving tenant, audit, refresh-token, MFA, and identity-lifecycle integrations.
+   - implementation intentionally deferred to a follow-up thin vertical slice.
+
 ## P2 (later pre-deployment improvements)
 
 1. **Reference demo tenant packs**
