@@ -1,12 +1,9 @@
 ﻿using Domain.Authorization;
 using Domain.DTOs;
-using Domain.Entites;
 using Domain.Interfaces;
-using Domain.Responses;
-using Infrastructure.Data;
+using Domain.Outputs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
@@ -16,169 +13,60 @@ namespace Presentation.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly ApplicationDbContext _dbContext;
-        private readonly IJwtService _jwtService;
-        private readonly ILogger<AuthController> _logger;
+        private readonly IAuthOrchestrationService _authOrchestrationService;
         private readonly IAuditService _auditService;
         private readonly IRefreshTokenService _refreshTokenService;
         private readonly ITenantContext _tenantContext;
         private readonly IIdentityLifecycleService _identityLifecycleService;
-        private readonly IMfaService _mfaService;
 
         public AuthController(
-            ApplicationDbContext dbContext,
-            IJwtService jwtService,
-            ILogger<AuthController> logger,
+            IAuthOrchestrationService authOrchestrationService,
             IAuditService auditService,
             IRefreshTokenService refreshTokenService,
             ITenantContext tenantContext,
-            IIdentityLifecycleService identityLifecycleService,
-            IMfaService mfaService)
+            IIdentityLifecycleService identityLifecycleService)
         {
-            _dbContext = dbContext;
-            _jwtService = jwtService;
-            _logger = logger;
+            _authOrchestrationService = authOrchestrationService;
             _auditService = auditService;
             _refreshTokenService = refreshTokenService;
             _tenantContext = tenantContext;
             _identityLifecycleService = identityLifecycleService;
-            _mfaService = mfaService;
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register(RegisterTenantRequest request)
+        public async Task<IActionResult> Register(RegisterTenantRequest request, CancellationToken cancellationToken)
         {
-            if (await _dbContext.Tenants.AnyAsync(t => t.Subdomain == request.Subdomain))
-                return BadRequest(new { error = "Subdomain already taken" });
+            var result = await _authOrchestrationService.RegisterAsync(
+                request,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                cancellationToken);
 
-            if (await _dbContext.Users.AnyAsync(u => u.Email == request.AdminEmail))
-                return BadRequest(new { error = "Email already registered" });
-
-            using var transaction = await _dbContext.Database.BeginTransactionAsync();
-
-            try
+            return result.Error switch
             {
-                var tenant = new Tenant
-                {
-                    Id = Guid.NewGuid(),
-                    Name = request.CompanyName,
-                    Subdomain = request.Subdomain,
-                    Status = TenantStatus.Active,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                await _dbContext.Tenants.AddAsync(tenant);
-
-                var user = new User
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenant.Id,
-                    Email = request.AdminEmail,
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.AdminPassword),
-                    EmailVerifiedAt = DateTime.UtcNow,
-                    Role = "ADMIN",
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                await _dbContext.Users.AddAsync(user);
-
-                var subscription = new Subscription
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenant.Id,
-                    PlanId = "plan-free",
-                    Status = SubscriptionStatus.Active,
-                    CurrentPeriodStart = DateTime.UtcNow,
-                    CurrentPeriodEnd = DateTime.UtcNow.AddMonths(1),
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                await _dbContext.Subscriptions.AddAsync(subscription);
-
-                await _dbContext.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                var token = _jwtService.GenerateToken(user, tenant);
-
-                _logger.LogInformation("New tenant registered: {TenantId}", tenant.Id);
-                _tenantContext.SetTenantId(tenant.Id);
-                await _auditService.LogAsync("TENANT_REGISTERED", nameof(Tenant), tenant.Id.ToString(), new
-                {
-                    tenant.Name,
-                    tenant.Subdomain,
-                    AdminUserId = user.Id
-                });
-
-                var refreshTokenResult = await _refreshTokenService.IssueTokenAsync(
-                    tenant.Id,
-                    user.Id,
-                    DateTime.UtcNow.AddDays(7),
-                    HttpContext.Connection.RemoteIpAddress?.ToString());
-
-                return Ok(new AuthResponse(
-                    token,
-                    refreshTokenResult.Token,
-                    tenant.Id,
-                    user.Id,
-                    user.Email,
-                    DateTime.UtcNow.AddMinutes(60),
-                    refreshTokenResult.ExpiresAt
-                ));
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                _logger.LogError(ex, "Failed to register tenant");
-                return StatusCode(500, new { error = "Registration failed" });
-            }
+                AuthFlowError.SubdomainAlreadyTaken => BadRequest(new { error = "Subdomain already taken" }),
+                AuthFlowError.EmailAlreadyRegistered => BadRequest(new { error = "Email already registered" }),
+                AuthFlowError.None when result.Response is not null => Ok(result.Response),
+                _ => StatusCode(500, new { error = "Registration failed" })
+            };
         }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginRequest request)
+        public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
         {
-            var user = await _dbContext.Users
-                .Include(u => u.Tenant)
-                .FirstOrDefaultAsync(u => u.Email == request.Email);
+            var result = await _authOrchestrationService.LoginAsync(
+                request,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                cancellationToken);
 
-            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-                return Unauthorized(new { error = "Invalid credentials" });
-
-            if (!user.EmailVerifiedAt.HasValue)
-                return Unauthorized(new { error = "Email is not verified" });
-
-            if (user.Tenant.Status != TenantStatus.Active)
-                return StatusCode(403, new { error = "Tenant account is suspended" });
-
-            if (user.MfaEnabled)
-                return Unauthorized(new { error = "MFA challenge required", requiresMfa = true });
-
-            user.LastLoginAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
-
-            _tenantContext.SetTenantId(user.TenantId);
-            await _auditService.LogAsync("USER_LOGGED_IN", nameof(User), user.Id.ToString(), new
+            return result.Error switch
             {
-                user.Email,
-                user.Role
-            });
-
-            var token = _jwtService.GenerateToken(user, user.Tenant);
-            var refreshTokenResult = await _refreshTokenService.IssueTokenAsync(
-                user.TenantId,
-                user.Id,
-                DateTime.UtcNow.AddDays(7),
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-
-            return Ok(new AuthResponse(
-                token,
-                refreshTokenResult.Token,
-                user.TenantId,
-                user.Id,
-                user.Email,
-                DateTime.UtcNow.AddMinutes(60),
-                refreshTokenResult.ExpiresAt
-            ));
+                AuthFlowError.InvalidCredentials => Unauthorized(new { error = "Invalid credentials" }),
+                AuthFlowError.EmailNotVerified => Unauthorized(new { error = "Email is not verified" }),
+                AuthFlowError.TenantSuspended => StatusCode(403, new { error = "Tenant account is suspended" }),
+                AuthFlowError.MfaChallengeRequired => Unauthorized(new { error = "MFA challenge required", requiresMfa = true }),
+                AuthFlowError.None when result.Response is not null => Ok(result.Response),
+                _ => Unauthorized(new { error = "Invalid credentials" })
+            };
         }
 
         [HttpPost("refresh")]
@@ -190,45 +78,19 @@ namespace Presentation.Controllers
             if (string.IsNullOrWhiteSpace(request.RefreshToken))
                 return BadRequest(new { error = "RefreshToken is required" });
 
-            _tenantContext.SetTenantId(request.TenantId);
-
-            var activeToken = await _refreshTokenService.GetActiveTokenAsync(request.TenantId, request.RefreshToken, cancellationToken);
-            if (activeToken == null)
-                return Unauthorized(new { error = "Invalid or expired refresh token" });
-
-            var user = await _dbContext.Users
-                .Include(u => u.Tenant)
-                .FirstOrDefaultAsync(u => u.Id == activeToken.UserId && u.TenantId == request.TenantId, cancellationToken);
-
-            if (user == null || user.Tenant.Status != TenantStatus.Active)
-                return Unauthorized(new { error = "Invalid refresh token context" });
-
-            var rotated = await _refreshTokenService.RotateTokenAsync(
+            var result = await _authOrchestrationService.RefreshAsync(
                 request.TenantId,
                 request.RefreshToken,
-                DateTime.UtcNow.AddDays(7),
                 HttpContext.Connection.RemoteIpAddress?.ToString(),
                 cancellationToken);
 
-            if (rotated == null)
-                return Unauthorized(new { error = "Invalid or expired refresh token" });
-
-            var accessToken = _jwtService.GenerateToken(user, user.Tenant);
-
-            await _auditService.LogAsync("USER_TOKEN_REFRESHED", nameof(User), user.Id.ToString(), new
+            return result.Error switch
             {
-                user.Email
-            });
-
-            return Ok(new AuthResponse(
-                accessToken,
-                rotated.Token,
-                user.TenantId,
-                user.Id,
-                user.Email,
-                DateTime.UtcNow.AddMinutes(60),
-                rotated.ExpiresAt
-            ));
+                AuthFlowError.InvalidRefreshTokenContext => Unauthorized(new { error = "Invalid refresh token context" }),
+                AuthFlowError.InvalidOrExpiredRefreshToken => Unauthorized(new { error = "Invalid or expired refresh token" }),
+                AuthFlowError.None when result.Response is not null => Ok(result.Response),
+                _ => Unauthorized(new { error = "Invalid or expired refresh token" })
+            };
         }
 
         [HttpPost("logout")]
@@ -291,7 +153,7 @@ namespace Presentation.Controllers
                 string.IsNullOrWhiteSpace(request.Reason) ? "REVOKE_ALL" : request.Reason,
                 cancellationToken: cancellationToken);
 
-            await _auditService.LogAsync("USER_SESSIONS_REVOKED_ALL", nameof(User), effectiveUserId.ToString(), new
+            await _auditService.LogAsync("USER_SESSIONS_REVOKED_ALL", "User", effectiveUserId.ToString(), new
             {
                 TenantId = request.TenantId,
                 RevokedCount = revokedCount,
@@ -334,7 +196,7 @@ namespace Presentation.Controllers
                     request.ExpiresInHours,
                     cancellationToken);
 
-                await _auditService.LogAsync("USER_INVITE_CREATED", nameof(User), actorUserId.ToString(), new
+                await _auditService.LogAsync("USER_INVITE_CREATED", "User", actorUserId.ToString(), new
                 {
                     request.Email,
                     request.Role,
@@ -365,7 +227,7 @@ namespace Presentation.Controllers
             if (!userId.HasValue)
                 return BadRequest(new { error = "Invalid or expired invite token" });
 
-            await _auditService.LogAsync("USER_INVITE_ACCEPTED", nameof(User), userId.Value.ToString(), new
+            await _auditService.LogAsync("USER_INVITE_ACCEPTED", "User", userId.Value.ToString(), new
             {
                 request.TenantId
             });
@@ -452,35 +314,20 @@ namespace Presentation.Controllers
             if (tenantId == Guid.Empty || userId == Guid.Empty)
                 return Unauthorized(new { error = "Invalid authenticated context" });
 
-            var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Id == userId, cancellationToken);
-            if (user == null)
-                return Unauthorized(new { error = "Invalid authenticated context" });
-            if (user.MfaEnabled)
-                return BadRequest(new { error = "MFA is already enabled" });
-
-            var (secret, provisioningUri) = _mfaService.GenerateEnrollmentSecret("MultiTenantSaaSApi", user.Email);
-            var enrollmentToken = _mfaService.GenerateOpaqueToken();
-
-            _dbContext.UserMfaEnrollmentChallenges.Add(new UserMfaEnrollmentChallenge
+            var result = await _authOrchestrationService.InitiateMfaEnrollmentAsync(tenantId, userId, cancellationToken);
+            return result.Error switch
             {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                UserId = userId,
-                EnrollmentTokenHash = _mfaService.HashToken(enrollmentToken),
-                Secret = secret,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(10),
-                CreatedAt = DateTime.UtcNow
-            });
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            return Ok(new
-            {
-                enrollmentToken,
-                secret,
-                provisioningUri,
-                expiresAt = DateTime.UtcNow.AddMinutes(10)
-            });
+                AuthFlowError.InvalidAuthenticatedContext => Unauthorized(new { error = "Invalid authenticated context" }),
+                AuthFlowError.MfaAlreadyEnabled => BadRequest(new { error = "MFA is already enabled" }),
+                AuthFlowError.None => Ok(new
+                {
+                    enrollmentToken = result.EnrollmentToken,
+                    secret = result.Secret,
+                    provisioningUri = result.ProvisioningUri,
+                    expiresAt = result.ExpiresAt
+                }),
+                _ => StatusCode(500, new { error = "MFA enrollment initiation failed" })
+            };
         }
 
         [HttpPost("mfa/enroll/verify")]
@@ -497,32 +344,21 @@ namespace Presentation.Controllers
             if (tenantId == Guid.Empty || userId == Guid.Empty)
                 return Unauthorized(new { error = "Invalid authenticated context" });
 
-            var tokenHash = _mfaService.HashToken(request.EnrollmentToken.Trim());
-            var challenge = await _dbContext.UserMfaEnrollmentChallenges
-                .FirstOrDefaultAsync(c =>
-                    c.TenantId == tenantId &&
-                    c.UserId == userId &&
-                    c.EnrollmentTokenHash == tokenHash &&
-                    c.ConsumedAt == null, cancellationToken);
+            var result = await _authOrchestrationService.CompleteMfaEnrollmentAsync(
+                tenantId,
+                userId,
+                request.EnrollmentToken,
+                request.Code,
+                cancellationToken);
 
-            if (challenge == null || challenge.ExpiresAt <= DateTime.UtcNow)
-                return BadRequest(new { error = "Invalid or expired enrollment challenge" });
-
-            if (!_mfaService.VerifyCode(challenge.Secret, request.Code))
-                return BadRequest(new { error = "Invalid MFA code" });
-
-            var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Id == userId, cancellationToken);
-            if (user == null)
-                return Unauthorized(new { error = "Invalid authenticated context" });
-
-            user.MfaEnabled = true;
-            user.MfaSecret = challenge.Secret;
-            user.MfaEnabledAt = DateTime.UtcNow;
-            challenge.ConsumedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            await _auditService.LogAsync("USER_MFA_ENROLLED", nameof(User), userId.ToString(), new { tenantId });
-            return Ok(new { message = "MFA enrollment complete." });
+            return result.Error switch
+            {
+                AuthFlowError.InvalidAuthenticatedContext => Unauthorized(new { error = "Invalid authenticated context" }),
+                AuthFlowError.InvalidOrExpiredEnrollmentChallenge => BadRequest(new { error = "Invalid or expired enrollment challenge" }),
+                AuthFlowError.InvalidMfaCode => BadRequest(new { error = "Invalid MFA code" }),
+                AuthFlowError.None => Ok(new { message = "MFA enrollment complete." }),
+                _ => StatusCode(500, new { error = "MFA enrollment failed" })
+            };
         }
 
         [HttpPost("mfa/step-up")]
@@ -537,32 +373,21 @@ namespace Presentation.Controllers
             if (tenantId == Guid.Empty || userId == Guid.Empty)
                 return Unauthorized(new { error = "Invalid authenticated context" });
 
-            var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Id == userId, cancellationToken);
-            if (user == null)
-                return Unauthorized(new { error = "Invalid authenticated context" });
-            if (!user.MfaEnabled || string.IsNullOrWhiteSpace(user.MfaSecret))
-                return BadRequest(new { error = "MFA is not enrolled for this account" });
+            var result = await _authOrchestrationService.StepUpAuthenticationAsync(
+                tenantId,
+                userId,
+                request.Code,
+                request.Purpose,
+                cancellationToken);
 
-            if (!_mfaService.VerifyCode(user.MfaSecret, request.Code))
-                return Unauthorized(new { error = "Invalid MFA code" });
-
-            var purpose = string.IsNullOrWhiteSpace(request.Purpose) ? "admin_sensitive" : request.Purpose.Trim().ToLowerInvariant();
-            var stepUpToken = _mfaService.GenerateOpaqueToken();
-            _dbContext.UserStepUpSessions.Add(new UserStepUpSession
+            return result.Error switch
             {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                UserId = userId,
-                Purpose = purpose,
-                SessionTokenHash = _mfaService.HashToken(stepUpToken),
-                ExpiresAt = DateTime.UtcNow.AddMinutes(10),
-                CreatedAt = DateTime.UtcNow
-            });
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            await _auditService.LogAsync("USER_MFA_STEP_UP_VERIFIED", nameof(User), userId.ToString(), new { tenantId, purpose });
-            return Ok(new { stepUpToken, purpose, expiresAt = DateTime.UtcNow.AddMinutes(10) });
+                AuthFlowError.InvalidAuthenticatedContext => Unauthorized(new { error = "Invalid authenticated context" }),
+                AuthFlowError.MfaNotEnrolled => BadRequest(new { error = "MFA is not enrolled for this account" }),
+                AuthFlowError.InvalidMfaCode => Unauthorized(new { error = "Invalid MFA code" }),
+                AuthFlowError.None => Ok(new { stepUpToken = result.StepUpToken, purpose = result.Purpose, expiresAt = result.ExpiresAt }),
+                _ => StatusCode(500, new { error = "Step-up authentication failed" })
+            };
         }
 
         private async Task<IActionResult> RevokeRefreshTokenInternal(
@@ -593,7 +418,7 @@ namespace Presentation.Controllers
             if (!revoked)
                 return Unauthorized(new { error = "Invalid or expired refresh token" });
 
-            await _auditService.LogAsync(auditAction, nameof(User), activeToken.UserId.ToString(), new
+            await _auditService.LogAsync(auditAction, "User", activeToken.UserId.ToString(), new
             {
                 TenantId = request.TenantId,
                 Reason = string.IsNullOrWhiteSpace(request.Reason) ? defaultReason : request.Reason
@@ -634,27 +459,17 @@ namespace Presentation.Controllers
             if (tenantId == Guid.Empty || userId == Guid.Empty)
                 return null;
 
-            var user = await _dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Id == userId, cancellationToken);
-            if (user == null)
-                return null;
-            if (!user.MfaEnabled)
-                return null;
-
             var stepUpToken = Request.Headers["X-Step-Up-Token"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(stepUpToken))
-                return StatusCode(403, new { error = "Step-up authentication required" });
+            var validation = await _authOrchestrationService.ValidateStepUpAsync(tenantId, userId, purpose, stepUpToken, cancellationToken);
+            if (validation.IsValid)
+                return null;
 
-            var tokenHash = _mfaService.HashToken(stepUpToken.Trim());
-            var session = await _dbContext.UserStepUpSessions.FirstOrDefaultAsync(s =>
-                s.TenantId == tenantId &&
-                s.UserId == userId &&
-                s.Purpose == purpose &&
-                s.SessionTokenHash == tokenHash, cancellationToken);
-
-            if (session == null || session.ExpiresAt <= DateTime.UtcNow)
-                return StatusCode(403, new { error = "Invalid or expired step-up token" });
-
-            return null;
+            return validation.Error switch
+            {
+                AuthFlowError.StepUpRequired => StatusCode(403, new { error = "Step-up authentication required" }),
+                AuthFlowError.InvalidOrExpiredStepUpToken => StatusCode(403, new { error = "Invalid or expired step-up token" }),
+                _ => null
+            };
         }
     }
 }

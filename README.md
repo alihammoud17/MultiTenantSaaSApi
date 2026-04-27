@@ -9,6 +9,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 - **V4 execution is active for pre-deployment code-first maturity** in `docs/V4-Implementation-Backlog.md`.
 - **P0 slices 1-4, the documentation-baseline slice, P1.1 entitlement matrix harness regression iteration, P1.2 developer workflow hardening foundation, P1.3 developer-loop command index, P1.4 replay-safe outbound webhook verification iteration, and P1.5 local observability quality gates are implemented** as of **April 26, 2026**.
 - **AuthController application-layer boundary design for register/login/refresh orchestration extraction is documented (design-only, no implementation yet)** in `docs/V4-AuthController-Application-Boundary-Design.md` as of **April 26, 2026**.
+- **AuthController cleanup slice 1 is implemented** as of **April 27, 2026**: `AuthController` no longer injects `ApplicationDbContext`; register/login/refresh and MFA/step-up data access orchestration now runs through `IAuthOrchestrationService`.
 - The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
 - `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
 
