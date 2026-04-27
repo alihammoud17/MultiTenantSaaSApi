@@ -30,6 +30,7 @@ builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddHttpContextAccessor();
 // JWT Service
 builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IAuthOrchestrationService, AuthOrchestrationService>();
 
 // Refresh Token Service
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();

@@ -258,8 +258,11 @@ V4 should be considered successful when:
 9. **AuthController application-layer boundary design (completed April 26, 2026, design-only)**
    - produced the pre-implementation boundary design for moving `AuthController` register/login/refresh orchestration behind application service interfaces without moving HTTP concerns into the application layer.
    - defined smallest-safe proposed `IAuthOrchestrationService` method surface, controller/service/infrastructure responsibility split, and typed result mapping strategy to preserve current response contracts where practical.
-   - documented exact first-change file sequence and phased migration strategy to incrementally remove direct `ApplicationDbContext` dependency from targeted auth flows while preserving tenant, audit, refresh-token, MFA, and identity-lifecycle integrations.
-   - implementation intentionally deferred to a follow-up thin vertical slice.
+
+10. **AuthController application-layer cleanup slice 1 (completed April 27, 2026)**
+   - implemented `IAuthOrchestrationService` + `AuthOrchestrationService` and removed direct `ApplicationDbContext` injection/usage from `Presentation/Controllers/AuthController.cs`.
+   - moved register/login/refresh EF reads/writes, registration transaction boundary, and MFA/step-up persistence/validation queries into the application layer while preserving endpoint route contracts and existing error-message behavior as closely as possible.
+   - preserved existing tenant-context assignment, refresh-token rotation/revocation flow compatibility, audit event names, and MFA/step-up behavior while keeping controller code focused on request validation, claim/header extraction, and HTTP response mapping.
 
 ## P2 (later pre-deployment improvements)
 
