@@ -264,6 +264,15 @@ V4 should be considered successful when:
    - moved register/login/refresh EF reads/writes, registration transaction boundary, and MFA/step-up persistence/validation queries into the application layer while preserving endpoint route contracts and existing error-message behavior as closely as possible.
    - preserved existing tenant-context assignment, refresh-token rotation/revocation flow compatibility, audit event names, and MFA/step-up behavior while keeping controller code focused on request validation, claim/header extraction, and HTTP response mapping.
 
+11. **AuthController application-boundary regression tests (completed April 27, 2026)**
+   - added deterministic boundary-focused unit tests in `.NET` (`Tests/UnitTests/AuthControllerBoundaryTests.cs`) to guard outward contract stability for refactored auth flows now delegated to `IAuthOrchestrationService`.
+   - protected register/login/refresh contract mapping behavior without coupling tests to controller internals or direct `DbContext` access.
+   - explicit assertions now cover:
+     - register conflict mapping (`SubdomainAlreadyTaken` -> `400` + existing error payload)
+     - login MFA/suspension mapping (`MfaChallengeRequired`, `TenantSuspended` -> existing `401/403` payload shapes)
+     - refresh validation short-circuit behavior (`TenantId`/`RefreshToken` required checks) and refresh-context unauthorized mapping (`InvalidRefreshTokenContext`)
+     - request IP propagation to orchestration service for register/login/refresh calls
+
 ## P2 (later pre-deployment improvements)
 
 1. **Reference demo tenant packs**
@@ -325,3 +334,4 @@ Ongoing documentation expectations for V4:
 - claiming production-readiness based solely on local tests
 - introducing live-ops obligations that cannot be validated locally
 - coupling roadmap success to unavailable infrastructure
+
