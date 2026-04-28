@@ -279,6 +279,15 @@ V4 should be considered successful when:
    - inserted `UseRateLimiter()` in the request pipeline (after routing) without changing the existing tenant/plan Redis-backed middleware throttling model.
    - completed the follow-up endpoint attachment slice by applying `[EnableRateLimiting(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints)]` explicitly to the highest-risk unauthenticated auth routes: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `POST /api/v1/auth/refresh`.
 
+13. **Auth brute-force endpoint-level rate-limit integration coverage** *(Completed April 28, 2026)*
+   - added focused deterministic integration coverage in `.NET` for endpoint-level brute-force protection on unauthenticated auth surfaces (`Tests/Integration/AuthBruteForceRateLimitTests.cs`).
+   - asserts that:
+     - repeated `POST /api/v1/auth/login` attempts are allowed with normal `401` behavior until policy budget exhaustion, then return `429`
+     - repeated `POST /api/v1/auth/register` attempts are allowed with normal `200` behavior until policy budget exhaustion, then return `429`
+     - shared endpoint policy budget exhaustion is enforced across protected unauthenticated auth endpoints (exhaust via login, verify refresh rejects with `429`)
+   - slice intentionally avoids token/secret logging assertions and keeps coverage scoped to brute-force/rate-limit behavior rather than duplicating broader auth lifecycle tests.
+
+
 ## P2 (later pre-deployment improvements)
 
 1. **Reference demo tenant packs**
