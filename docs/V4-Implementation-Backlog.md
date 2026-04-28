@@ -277,7 +277,7 @@ V4 should be considered successful when:
    - registered ASP.NET Core built-in rate limiting in `Presentation/Program.cs` with a named auth policy (`UnauthenticatedAuthEndpoints`) backed by a fixed-window limiter keyed by client IP.
    - configured conservative abuse behavior for the auth policy (`PermitLimit = 10` per minute, `QueueLimit = 0`) to avoid queue-backed burst smoothing on unauthenticated auth traffic.
    - inserted `UseRateLimiter()` in the request pipeline (after routing) without changing the existing tenant/plan Redis-backed middleware throttling model.
-   - intentionally stopped at policy registration + middleware insertion so endpoint-level policy attachment remains a separate thin slice.
+   - completed the follow-up endpoint attachment slice by applying `[EnableRateLimiting(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints)]` explicitly to the highest-risk unauthenticated auth routes: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `POST /api/v1/auth/refresh`.
 
 ## P2 (later pre-deployment improvements)
 
