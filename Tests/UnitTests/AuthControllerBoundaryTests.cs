@@ -6,12 +6,29 @@ using Domain.Responses;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Presentation.Controllers;
+using Presentation.RateLimiting;
+using System.Reflection;
 
 namespace Tests.UnitTests;
 
 public class AuthControllerBoundaryTests
 {
+    [Theory]
+    [InlineData(nameof(AuthController.Register))]
+    [InlineData(nameof(AuthController.Login))]
+    [InlineData(nameof(AuthController.Refresh))]
+    public void HighRiskUnauthenticatedEndpoints_ShouldUseAuthBruteForceRateLimitPolicy(string methodName)
+    {
+        var method = typeof(AuthController).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+        method.Should().NotBeNull();
+
+        var attribute = method!.GetCustomAttribute<EnableRateLimitingAttribute>();
+        attribute.Should().NotBeNull();
+        attribute!.PolicyName.Should().Be(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints);
+    }
+
     [Fact]
     public async Task Register_ShouldMapSubdomainConflict_ToExistingBadRequestContract()
     {

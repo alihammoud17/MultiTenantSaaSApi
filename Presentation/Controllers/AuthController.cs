@@ -4,6 +4,8 @@ using Domain.Interfaces;
 using Domain.Outputs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Presentation.RateLimiting;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
@@ -34,6 +36,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("register")]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints)]
         public async Task<IActionResult> Register(RegisterTenantRequest request, CancellationToken cancellationToken)
         {
             var result = await _authOrchestrationService.RegisterAsync(
@@ -51,6 +54,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("login")]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints)]
         public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
         {
             var result = await _authOrchestrationService.LoginAsync(
@@ -70,6 +74,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("refresh")]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints)]
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
         {
             if (request.TenantId == Guid.Empty)

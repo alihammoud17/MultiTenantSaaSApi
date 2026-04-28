@@ -96,6 +96,12 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints, httpContext =>
     {
+        var hostEnvironment = httpContext.RequestServices.GetRequiredService<IHostEnvironment>();
+        if (hostEnvironment.IsEnvironment("Testing"))
+        {
+            return RateLimitPartition.GetNoLimiter("testing-auth-rate-limit-bypass");
+        }
+
         var remoteIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
         return RateLimitPartition.GetFixedWindowLimiter(
