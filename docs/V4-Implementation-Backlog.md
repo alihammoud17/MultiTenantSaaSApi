@@ -273,6 +273,12 @@ V4 should be considered successful when:
      - refresh validation short-circuit behavior (`TenantId`/`RefreshToken` required checks) and refresh-context unauthorized mapping (`InvalidRefreshTokenContext`)
      - request IP propagation to orchestration service for register/login/refresh calls
 
+12. **Auth brute-force protection foundation (completed April 28, 2026)**
+   - registered ASP.NET Core built-in rate limiting in `Presentation/Program.cs` with a named auth policy (`UnauthenticatedAuthEndpoints`) backed by a fixed-window limiter keyed by client IP.
+   - configured conservative abuse behavior for the auth policy (`PermitLimit = 10` per minute, `QueueLimit = 0`) to avoid queue-backed burst smoothing on unauthenticated auth traffic.
+   - inserted `UseRateLimiter()` in the request pipeline (after routing) without changing the existing tenant/plan Redis-backed middleware throttling model.
+   - intentionally stopped at policy registration + middleware insertion so endpoint-level policy attachment remains a separate thin slice.
+
 ## P2 (later pre-deployment improvements)
 
 1. **Reference demo tenant packs**
@@ -334,4 +340,3 @@ Ongoing documentation expectations for V4:
 - claiming production-readiness based solely on local tests
 - introducing live-ops obligations that cannot be validated locally
 - coupling roadmap success to unavailable infrastructure
-

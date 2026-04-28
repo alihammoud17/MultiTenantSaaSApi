@@ -197,6 +197,7 @@ This repository currently contains:
 
 - JWT Bearer authentication for API access.
 - Login and tenant registration endpoints.
+- ASP.NET Core built-in rate-limiting foundation is registered for unauthenticated auth endpoints via the named `UnauthenticatedAuthEndpoints` fixed-window policy (endpoint attachment is intentionally a follow-up slice).
 - Identity lifecycle foundation endpoints for invite issuance/acceptance, verification requests/completions, and password-reset requests/completions.
 - Refresh token issuance on register/login.
 - Refresh token rotation on `POST /api/v1/auth/refresh`.
