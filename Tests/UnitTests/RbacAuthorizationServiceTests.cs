@@ -1,6 +1,6 @@
 using Application.Services;
 using Domain.Authorization;
-using Domain.Entites;
+using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;

@@ -2,7 +2,7 @@ using System.Net;
 using System.Reflection;
 using Application.Services;
 using Domain.DTOs;
-using Domain.Entites;
+using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Data;
 using Microsoft.Data.Sqlite;

@@ -1,4 +1,4 @@
-namespace Domain.Entites;
+namespace Domain.Entities;
 
 public sealed class OutboundWebhookEvent
 {

@@ -19,8 +19,8 @@ This backlog translates the current repository state into a V2 delivery plan wit
 - Add secure session continuation so clients can renew access tokens without re-login, and allow server-side session revocation (logout/all-sessions controls later).
 
 **Affected files/projects**
-- `Domain/Entites/User.cs` (session linkage fields if needed).
-- New entities in `Domain/Entites/` (e.g., `RefreshToken`, optional `RevokedToken`).
+- `Domain/Entities/User.cs` (session linkage fields if needed).
+- New entities in `Domain/Entities/` (e.g., `RefreshToken`, optional `RevokedToken`).
 - `Infrastructure/Data/ApplicationDbContext.cs` (DbSet, mapping/indexes, relationships).
 - `Application/Services/JwtService.cs` and `Domain/Interfaces/IJwtService.cs` (access+refresh issuance and refresh validation).
 - `Presentation/Controllers/AuthController.cs` (refresh/logout endpoints).
@@ -69,8 +69,8 @@ This backlog translates the current repository state into a V2 delivery plan wit
 - Replace string-only role checks with explicit tenant-scoped role/permission model suitable for admin and future feature authorization.
 
 **Affected files/projects**
-- `Domain/Entites/User.cs` (remove hard dependency on free-form role string over time; keep compatibility field during transition).
-- New entities in `Domain/Entites/` (e.g., `Role`, `Permission`, `UserRole`, `RolePermission`).
+- `Domain/Entities/User.cs` (remove hard dependency on free-form role string over time; keep compatibility field during transition).
+- New entities in `Domain/Entities/` (e.g., `Role`, `Permission`, `UserRole`, `RolePermission`).
 - `Infrastructure/Data/ApplicationDbContext.cs` (model config + seed baseline roles/permissions).
 - `Presentation/Program.cs` (authorization policies).
 - `Presentation/Controllers/*` (policy-based `[Authorize(Policy=...)]` updates where needed).
@@ -165,7 +165,7 @@ This backlog translates the current repository state into a V2 delivery plan wit
 - Connect subscription lifecycle to external billing provider while keeping plan enforcement authoritative in core .NET API.
 
 **Affected files/projects**
-- `Domain/Entites/Subscription.cs` and new billing entities (customer/subscription mapping, invoice/event logs).
+- `Domain/Entities/Subscription.cs` and new billing entities (customer/subscription mapping, invoice/event logs).
 - `Infrastructure/Data/ApplicationDbContext.cs` for mapping and indexes.
 - `Application/Services/` billing abstraction (`IBillingGateway`, `BillingService`).
 - `Presentation/Controllers/PlansController.cs` (upgrade flow evolves from immediate switch to billing-backed transition).

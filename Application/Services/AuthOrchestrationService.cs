@@ -1,5 +1,5 @@
 using Domain.DTOs;
-using Domain.Entites;
+using Domain.Entities;
 using Domain.Interfaces;
 using Domain.Outputs;
 using Domain.Responses;

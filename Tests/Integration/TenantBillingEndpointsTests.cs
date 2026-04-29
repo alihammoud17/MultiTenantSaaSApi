@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Domain.Authorization;
-using Domain.Entites;
+using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;

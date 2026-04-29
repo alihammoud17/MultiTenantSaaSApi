@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.Json;
-using Domain.Entites;
+using Domain.Entities;
 using FluentAssertions;
 
 namespace Tests.UnitTests.OutboundWebhooks;
