@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Domain.Authorization;
-using Domain.Entites;
+using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;

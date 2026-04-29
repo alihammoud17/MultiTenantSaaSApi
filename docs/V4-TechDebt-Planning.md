@@ -12,7 +12,7 @@
 | 3) Missing CORS configuration in `Program.cs` | P0 | Small (1 slice) | None |
 | 2) Per-request DB query redundancy between tenant resolution and rate-limiting | P1 | Medium (2 slices) | 4 (recommended, not required) |
 | 5) Entitlement evaluator query batching | P1 | Medium (2 slices) | 4 (recommended, not required) |
-| 1) `Domain/Entites` typo rename to `Domain/Entities` | P2 | Medium-Large (2-3 slices) | 4 (recommended), 2 and 5 should be stable first |
+| 1) `Domain/Entities` typo rename to `Domain/Entities` | P2 | Medium-Large (2-3 slices) | 4 (recommended), 2 and 5 should be stable first |
 | 6) Outbound webhook endpoint management surface and signing secret rotation | P0 (security) / P2 (scope size) | Large (3-4 slices) | 4 (recommended), after 2/5 for cleaner service-layer reuse |
 
 ---
@@ -150,16 +150,16 @@ Can run independently but should be sequenced near item 2 because both reduce re
 
 ---
 
-## 1) `Domain/Entites` Typo Rename to `Domain/Entities`
+## 1) `Domain/Entities` Typo Rename to `Domain/Entities`
 
 ### Problem and why it matters
-The domain folder name typo (`Entites`) hurts developer experience, search/discovery consistency, and long-term maintainability. However, it is mechanically broad and high-churn because many `using` references and project includes likely depend on the current path.
+The domain folder name typo (`Entities`) hurts developer experience, search/discovery consistency, and long-term maintainability. However, it is mechanically broad and high-churn because many `using` references and project includes likely depend on the current path.
 
 ### Smallest safe thin vertical slice
-Execute rename as a pure structural move with no behavioral code changes: move files from `Domain/Entites` to `Domain/Entities`, update namespace/usings/project file references as required, and run full build/test validation. Avoid piggybacking unrelated refactors.
+Execute rename as a pure structural move with no behavioral code changes: move files from `Domain/Entities` to `Domain/Entities`, update namespace/usings/project file references as required, and run full build/test validation. Avoid piggybacking unrelated refactors.
 
 ### Files likely to be created or modified
-- Entire `Domain/Entites/*` set moved to `Domain/Entities/*`
+- Entire `Domain/Entities/*` set moved to `Domain/Entities/*`
 - Referencing files across `Application/`, `Infrastructure/`, `Presentation/`, and `Tests/`
 - `Domain/Domain.csproj` and/or solution/project include metadata if path-based includes are explicit
 - Docs mentioning paths (if any)
@@ -195,7 +195,7 @@ First slice: add a tenant-scoped read/list + rotate-secret action for existing e
 - Likely new/expanded controller under `Presentation/Controllers/` for tenant webhook endpoint management
 - Service-layer logic in `Application/Services/` (endpoint management + rotation orchestration)
 - Domain DTOs/contracts in `Domain/DTOs/` and interfaces in `Domain/Interfaces/`
-- Persistence model/config updates for secret versioning metadata in `Domain/Entites` + `Infrastructure/Data` mappings/migrations (if required)
+- Persistence model/config updates for secret versioning metadata in `Domain/Entities` + `Infrastructure/Data` mappings/migrations (if required)
 - Existing outbound signer/publisher components if key-resolution behavior changes
 - `docs/Outbound-Webhooks.md`, `docs/Outbound-Webhook-Contract.md`, `README.md`, `docs/V4-Implementation-Backlog.md`
 
@@ -227,7 +227,7 @@ High security value, but scope is larger. Recommended after item 4 (tests) and a
 3. **Item 2 — Tenant/rate-limit per-request query redundancy**: Reduces repeated DB work on hot request path while preserving tenant-safety semantics.
 4. **Item 5 — Entitlement evaluator query batching**: Further request-path efficiency improvement with strict semantic-regression protection.
 5. **Item 6 — Outbound webhook management + secret rotation**: High security value but larger blast radius; safer after test and request-path foundations are strengthened.
-6. **Item 1 — `Entites` -> `Entities` rename**: Important DX cleanup, but defer to reduce merge churn and avoid blocking higher risk-reduction/security slices.
+6. **Item 1 — `Entities` -> `Entities` rename**: Important DX cleanup, but defer to reduce merge churn and avoid blocking higher risk-reduction/security slices.
 
 ## First Recommended Slice to Execute
 

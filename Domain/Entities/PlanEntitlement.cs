@@ -1,24 +1,24 @@
 using System;
 
-namespace Domain.Entites;
+namespace Domain.Entities;
 
-public class AddOnEntitlement
+public class PlanEntitlement
 {
-    public string AddOnId { get; set; } = string.Empty;
+    public string PlanId { get; set; } = string.Empty;
     public string EntitlementKey { get; set; } = string.Empty;
-    public AddOnEntitlementValueMode ValueMode { get; set; } = AddOnEntitlementValueMode.Set;
     public string Value { get; set; } = string.Empty;
+    public EntitlementSourceType Source { get; set; } = EntitlementSourceType.PlanDefault;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
-    public AddOnDefinition AddOn { get; set; } = null!;
+    public Plan Plan { get; set; } = null!;
     public EntitlementDefinition EntitlementDefinition { get; set; } = null!;
 }
 
-public enum AddOnEntitlementValueMode
+public enum EntitlementSourceType
 {
-    Set,
-    Increment,
-    Max,
-    Min
+    PlanDefault,
+    AddOn,
+    Override,
+    Default
 }

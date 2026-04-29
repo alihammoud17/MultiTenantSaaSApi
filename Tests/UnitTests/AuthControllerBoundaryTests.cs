@@ -238,7 +238,7 @@ public class AuthControllerBoundaryTests
         public Task<RefreshTokenIssueResult> IssueTokenAsync(Guid tenantId, Guid userId, DateTime expiresAtUtc, string? createdByIp = null, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task<Domain.Entites.RefreshToken?> GetActiveTokenAsync(Guid tenantId, string token, CancellationToken cancellationToken = default)
+        public Task<Domain.Entities.RefreshToken?> GetActiveTokenAsync(Guid tenantId, string token, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
         public Task<bool> RevokeTokenAsync(Guid tenantId, string token, string? revokedByIp = null, string? reason = null, CancellationToken cancellationToken = default)
