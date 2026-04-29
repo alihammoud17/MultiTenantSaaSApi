@@ -299,6 +299,10 @@ V4 should be considered successful when:
 3. **Pre-deployment release checklist automation**
    - CI-level checks that enforce required docs, migration validity, and minimum scenario coverage before merge.
 
+4. **Auth brute-force hardening follow-ups (post-slice)**
+   - validate production reverse-proxy/header forwarding configuration so auth brute-force partitioning uses trustworthy client IP data.
+   - evaluate whether selected public identity endpoints (verification/password-reset request paths) should adopt dedicated request-level abuse controls aligned with UX and anti-enumeration requirements.
+
 ## 4) Items to postpone until after first deployment
 
 Treat these as post-deployment tracks (not V4 blockers):
