@@ -1,6 +1,6 @@
-# Identity and Security (V3 hardening iteration)
+# Identity and Security (V3 hardening + V4 auth brute-force slice)
 
-This document captures the current identity-hardening baseline in the .NET API as of **April 10, 2026**, plus remaining follow-up items for later V3 slices.
+This document captures the current identity-hardening baseline in the .NET API as of **April 28, 2026**, plus follow-up items for later slices.
 
 ## Scope and ownership
 
@@ -34,6 +34,26 @@ Implemented MFA and sensitive-action hardening:
 - enrolled users can obtain short-lived step-up sessions for a specific purpose
 - admin-sensitive endpoints require step-up when the acting user has MFA enabled
 - step-up purpose binding is enforced to prevent token reuse across unrelated sensitive actions
+
+### Request-level brute-force protection on auth endpoints
+
+Implemented request-level brute-force protection for high-risk unauthenticated auth routes:
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+
+Current behavior:
+
+- uses ASP.NET Core built-in rate limiting policy `UnauthenticatedAuthEndpoints`
+- fixed-window budget keyed by client IP (`10` requests/minute, `0` queue)
+- returns `429 Too Many Requests` after budget exhaustion
+- covered by deterministic integration tests for repeated login/register attempts and cross-endpoint budget exhaustion (`login -> refresh`)
+
+Boundary clarification:
+
+- this request-level auth brute-force control is intentionally separate from plan-based authenticated throttling
+- plan throttling still applies via the existing tenant/plan model after authenticated tenant context is established
 
 ### Tests and coverage focus
 
@@ -81,6 +101,8 @@ Do not hardcode these values; use environment variables or user-secrets configur
 - encrypt MFA secrets at rest
 - add recovery-code issuance/rotation and revocation paths
 - add anti-automation controls around public verification/reset endpoints
+- evaluate trusted reverse-proxy forwarding strategy for client IP partition accuracy in production deployments
+- evaluate optional per-identifier heuristics (for example account/subdomain dimension) to complement IP-based partitioning without exposing credential-enumeration signals
 - add scheduled retention/cleanup for invite, verification, reset, enrollment, and step-up records
 - connect identity notifications to a live provider with secure secret management
 

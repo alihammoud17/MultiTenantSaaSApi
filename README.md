@@ -197,7 +197,8 @@ This repository currently contains:
 
 - JWT Bearer authentication for API access.
 - Login and tenant registration endpoints.
-- ASP.NET Core built-in rate-limiting policy `UnauthenticatedAuthEndpoints` is attached explicitly to `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `POST /api/v1/auth/refresh` for high-risk unauthenticated brute-force protection.
+- Request-level brute-force protection for unauthenticated auth traffic is enforced by ASP.NET Core policy `UnauthenticatedAuthEndpoints` on `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `POST /api/v1/auth/refresh`.
+- This auth-endpoint protection is separate from the existing plan-based authenticated throttling model (tenant/plan Redis-backed middleware), so login/registration abuse controls do not depend on an authenticated tenant context.
 - Integration coverage now verifies deterministic brute-force protection behavior for unauthenticated auth endpoints: allowed requests continue normal endpoint behavior until the configured permit budget is exhausted, then `429 Too Many Requests` is enforced for repeated register/login attempts and cross-endpoint budget exhaustion (login -> refresh).
 - Identity lifecycle foundation endpoints for invite issuance/acceptance, verification requests/completions, and password-reset requests/completions.
 - Refresh token issuance on register/login.
