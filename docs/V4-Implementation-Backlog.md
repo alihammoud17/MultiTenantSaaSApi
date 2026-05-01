@@ -369,3 +369,8 @@ Ongoing documentation expectations for V4:
 8. **Identity lifecycle unit-test coverage expansion** *(Completed May 1, 2026)*
    - added dedicated behavior-focused unit tests for `IdentityLifecycleService` covering invite normalization/notification, tenant-safe invite acceptance, verification replay safety, and password-reset replay safety.
    - tests are deterministic and assert behavior/state outcomes without coupling to irrelevant implementation details.
+
+9. **MFA service unit-test coverage expansion** *(Completed May 1, 2026)*
+   - added dedicated deterministic unit tests for `MfaService` covering enrollment secret/provisioning URI behavior, valid-code acceptance across configured drift window, invalid input rejection, invalid base32 secret error behavior, opaque token shape, and deterministic SHA-256 token hashing behavior.
+   - preserved current behavior exactly, including current invalid-base32 `FormatException` surfacing in `VerifyCode`.
+   - tests intentionally avoid logging or asserting raw sensitive-secret output beyond format/shape guarantees required for security confidence.
