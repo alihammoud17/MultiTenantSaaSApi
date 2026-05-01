@@ -385,3 +385,9 @@ Ongoing documentation expectations for V4:
    - added dedicated deterministic unit tests for `MfaService` covering enrollment secret/provisioning URI behavior, valid-code acceptance across configured drift window, invalid input rejection, invalid base32 secret error behavior, opaque token shape, and deterministic SHA-256 token hashing behavior.
    - preserved current behavior exactly, including current invalid-base32 `FormatException` surfacing in `VerifyCode`.
    - tests intentionally avoid logging or asserting raw sensitive-secret output beyond format/shape guarantees required for security confidence.
+
+10. **Tenant-safe outbound webhook endpoint management API** *(Completed May 1, 2026)*
+   - added authenticated tenant-scoped management endpoints for outbound webhook endpoint create/list/update/delete and explicit enable/disable state control.
+   - enforced existing RBAC policy (`billing.manage`) plus tenant-context scoping on every management action.
+   - added explicit initial signing-secret rotation initiation endpoint that issues/stores `NextSigningSecret` + issuance timestamp while preserving current delivery signing behavior on the active secret.
+   - added integration security coverage for member-authorization denial and cross-tenant endpoint-id mutation denial, plus unit coverage for pending-secret rotation behavior.

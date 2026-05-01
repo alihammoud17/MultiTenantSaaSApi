@@ -439,7 +439,7 @@ The .NET API includes a first outbound webhook infrastructure slice for tenant e
 - endpoint-specific HMAC-SHA256 request signing (`X-Tenant-Webhook-Signature`) with timestamp and delivery id binding
 - persisted delivery state with retry scheduling and terminal status tracking (including attempt/status-code/error/timestamp diagnostic metadata)
 - replay/idempotency support via `SourceEventKey` dedupe at publish time and stable `X-Tenant-Webhook-Idempotency-Key` per delivery
-- endpoint-management foundation for tenant-scoped endpoint records is now in place at the domain/application/persistence layers (internal-only for now): creation service wiring, initial signing-secret issuance timestamp, and pre-provisioned `NextSigningSecret` fields to support safe rotation in a follow-up slice without changing current delivery behavior
+- tenant-safe endpoint management API is now available for `create/list/update/delete`, explicit enable/disable, and explicit signing-secret rotation initiation (`next` secret issuance) without changing current delivery signing semantics
 
 Automated verification coverage now explicitly includes:
 
