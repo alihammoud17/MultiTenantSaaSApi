@@ -11,6 +11,7 @@ The .NET API is the current system of record for tenant identity, authorization,
 - **AuthController application-layer boundary design for register/login/refresh orchestration extraction is documented (design-only, no implementation yet)** in `docs/V4-AuthController-Application-Boundary-Design.md` as of **April 26, 2026**.
 - **AuthController cleanup slice 1 is implemented** as of **April 27, 2026**: `AuthController` no longer injects `ApplicationDbContext`; register/login/refresh and MFA/step-up data access orchestration now runs through `IAuthOrchestrationService`.
 - **AuthController cleanup slice 2 is implemented** as of **April 27, 2026**: deterministic boundary-focused automated tests now protect register/login/refresh controller contract mapping against the new `IAuthOrchestrationService` boundary, including refresh request-validation short-circuits and MFA challenge response-shape compatibility.
+- **Entitlement evaluator query-batching slice is implemented** as of **May 1, 2026**: evaluator data access now batches subscription, plan-entitlement, and active override reads into one snapshot query per evaluation while preserving existing entitlement resolution semantics and contracts.
 - The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
 - `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
 

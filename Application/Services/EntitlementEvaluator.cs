@@ -24,11 +24,28 @@ public class EntitlementEvaluator : IEntitlementEvaluator
         var evaluatedAtUtc = DateTime.UtcNow;
         var correlationId = _httpContextAccessor.HttpContext?.TraceIdentifier;
 
-        var subscription = await _dbContext.Subscriptions
+        var subscriptionSnapshot = await _dbContext.Subscriptions
             .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => new
+            {
+                x.Status,
+                x.PlanId,
+                PlanValue = _dbContext.PlanEntitlements
+                    .Where(pe => pe.PlanId == x.PlanId && pe.EntitlementKey == entitlementKey)
+                    .Select(pe => pe.Value)
+                    .SingleOrDefault(),
+                OverrideValue = _dbContext.TenantEntitlementOverrides
+                    .Where(o => o.TenantId == tenantId && o.EntitlementKey == entitlementKey)
+                    .Where(o => o.EffectiveFromUtc <= evaluatedAtUtc)
+                    .Where(o => o.EffectiveToUtc == null || o.EffectiveToUtc > evaluatedAtUtc)
+                    .OrderByDescending(o => o.EffectiveFromUtc)
+                    .Select(o => o.Value)
+                    .FirstOrDefault()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
 
-        if (subscription is null)
+        if (subscriptionSnapshot is null)
         {
             return new EntitlementEvaluationResult(
                 tenantId,
@@ -48,15 +65,9 @@ public class EntitlementEvaluator : IEntitlementEvaluator
         string? resolvedValue = definition?.DefaultValue;
         var resolvedFrom = definition?.DefaultValue is null ? "DefaultDeny" : "Default";
 
-        var planValue = await _dbContext.PlanEntitlements
-            .AsNoTracking()
-            .Where(x => x.PlanId == subscription.PlanId && x.EntitlementKey == entitlementKey)
-            .Select(x => x.Value)
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (!string.IsNullOrWhiteSpace(planValue))
+        if (!string.IsNullOrWhiteSpace(subscriptionSnapshot.PlanValue))
         {
-            resolvedValue = planValue;
+            resolvedValue = subscriptionSnapshot.PlanValue;
             resolvedFrom = "Plan";
         }
 
@@ -83,18 +94,9 @@ public class EntitlementEvaluator : IEntitlementEvaluator
             resolvedFrom = "AddOn";
         }
 
-        var overrideValue = await _dbContext.TenantEntitlementOverrides
-            .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.EntitlementKey == entitlementKey)
-            .Where(x => x.EffectiveFromUtc <= evaluatedAtUtc)
-            .Where(x => x.EffectiveToUtc == null || x.EffectiveToUtc > evaluatedAtUtc)
-            .OrderByDescending(x => x.EffectiveFromUtc)
-            .Select(x => x.Value)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (!string.IsNullOrWhiteSpace(overrideValue))
+        if (!string.IsNullOrWhiteSpace(subscriptionSnapshot.OverrideValue))
         {
-            resolvedValue = overrideValue;
+            resolvedValue = subscriptionSnapshot.OverrideValue;
             resolvedFrom = "Override";
         }
 
@@ -106,7 +108,7 @@ public class EntitlementEvaluator : IEntitlementEvaluator
             resolvedValue,
             isAllowed,
             resolvedFrom,
-            subscription.Status.ToString(),
+            subscriptionSnapshot.Status.ToString(),
             evaluatedAtUtc,
             correlationId);
     }
