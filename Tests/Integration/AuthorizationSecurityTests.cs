@@ -186,4 +186,25 @@ public class AuthorizationSecurityTests : IClassFixture<ApiWebApplicationFactory
         var forbidden = await client.GetAsync("/api/v1/tenant/analytics/usage");
         forbidden.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
+
+    [Fact]
+    public async Task MemberCannotManageWebhookEndpoints_ShouldReturn403()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"authz-wh-admin-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
+        var memberToken = await SecurityTestHelpers.CreateMemberAndLoginAsync(client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
+        var create = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new
+        {
+            name = "member-blocked",
+            callbackUrl = "https://example.com/webhooks/member",
+            subscribedEventTypes = "*"
+        });
+        var list = await client.GetAsync("/api/v1/tenant/webhook-endpoints");
+
+        create.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        list.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 }

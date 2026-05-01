@@ -179,4 +179,36 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
 
         db.BillingEventInboxes.Any(x => x.EventId == crossTenantPayload.eventId).Should().BeFalse();
     }
+
+    [Fact]
+    public async Task WebhookEndpointManagement_ShouldEnforceTenantIsolation()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-wh-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-wh-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantB.Token);
+        var createResponse = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new
+        {
+            name = "billing",
+            callbackUrl = "https://example.com/webhooks/tenant-b",
+            subscribedEventTypes = "*"
+        });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var endpointId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("endpoint").GetProperty("id").GetGuid();
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
+        var updateResponse = await client.PutAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}", new
+        {
+            name = "hijack",
+            callbackUrl = "https://example.com/hijack",
+            subscribedEventTypes = "*"
+        });
+        var rotateResponse = await client.PostAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}/rotate-secret", null);
+        var deleteResponse = await client.DeleteAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}");
+
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        rotateResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
 }
