@@ -84,30 +84,27 @@ Independent. Can ship early after tests to reduce frontend integration friction.
 
 ---
 
-## 2) Per-request DB Query Redundancy Across Tenant Resolution and Rate-Limiting
+## 2) Per-request DB Query Redundancy Across Tenant Resolution and Rate-Limiting *(Implemented May 1, 2026)*
 
 ### Problem and why it matters
 Current request flow resolves tenant in `TenantMiddleware`, then `RateLimitService` re-queries subscription/plan data per request. This duplicates database work, increases latency, and adds avoidable load on high-traffic tenant-authenticated paths. It also creates multiple places where tenant context interpretation can diverge over time.
 
-### Smallest safe thin vertical slice
-Add a scoped per-request tenant access context (or equivalent request cache) populated once after tenant validation, then consumed by rate-limiting for plan limit lookup in the same request. Limit first slice to read-only reuse and retain existing fallback query behavior for safety.
+### Implemented slice summary
+Added scoped request-level reuse for tenant access data: `RateLimitMiddleware` now preloads the tenant plan API-call limit into `IRequestTenantAccessContext`, and `RateLimitService` consumes that scoped value before falling back to the existing subscription+plan query path when preload is unavailable.
 
-### Files likely to be created or modified
-- `Presentation/Middleware/TenantMiddleware.cs`
-- `Presentation/Middleware/RateLimitMiddleware.cs` (if context handoff needed)
+### Files updated in this slice
+- `Presentation/Middleware/RateLimitMiddleware.cs`
 - `Application/Services/RateLimitService.cs`
-- Possible new interface/model in `Domain/Interfaces/` and implementation in `Infrastructure/` or `Application/`
-- DI registrations in `Presentation/Program.cs`
+- scoped request access context interface/model + DI wiring used by middleware/service handoff
 
-### Test coverage expectations
-- Integration assertions that tenant mismatch and suspended-tenant behavior remain unchanged
-- Rate-limit behavior parity tests (same limits/headers/429 shape)
-- Potential instrumentation/assertion that redundant tenant/subscription queries are reduced for single request flow
+### Validation/status
+- Rate-limit behavior parity is preserved by keeping fallback query semantics when scoped preload is unavailable.
+- Tenant middleware ownership and rejection behavior remain unchanged.
+- `README.md` and `docs/V4-Implementation-Backlog.md` now document the request-scoped reuse pattern.
 
-### Migration, documentation, or runbook requirements
-- No migration expected
-- Update `docs/V4-Implementation-Backlog.md` for performance/safety note
-- Optional README note only if developer-visible behavior/config changes
+### Migration/documentation status
+- No migration required.
+- Documentation updated in `docs/V4-Implementation-Backlog.md` and `README.md`.
 
 ### Dependencies or ordering constraints
 Best after item 4 test gap closure. Should precede larger endpoint-surface additions (item 6) so new surfaces can reuse stable per-request context patterns.
@@ -220,14 +217,14 @@ High security value, but scope is larger. Recommended after item 4 (tests) and a
 
 ---
 
-## Recommended Execution Order (Not Started)
+## Recommended Execution Order (Updated May 1, 2026)
 
 1. **Item 4 — Missing unit tests (`IdentityLifecycleService`, `MfaService`)**: Highest immediate risk reduction for security-sensitive logic with low effort.
 2. **Item 3 — CORS configuration**: Small, high-practicality hardening slice that unblocks browser clients and keeps policy explicit.
-3. **Item 2 — Tenant/rate-limit per-request query redundancy**: Reduces repeated DB work on hot request path while preserving tenant-safety semantics.
-4. **Item 5 — Entitlement evaluator query batching**: Further request-path efficiency improvement with strict semantic-regression protection.
-5. **Item 6 — Outbound webhook management + secret rotation**: High security value but larger blast radius; safer after test and request-path foundations are strengthened.
-6. **Item 1 — domain typo rename (completed)**: DX cleanup delivered as a mechanical rename; keep future slices free of folder/name churn piggybacks.
+3. **Item 5 — Entitlement evaluator query batching**: Next request-path efficiency improvement with strict semantic-regression protection.
+4. **Item 6 — Outbound webhook management + secret rotation**: High security value but larger blast radius; safer after test and request-path foundations are strengthened.
+5. **Item 1 — domain typo rename (completed)**: DX cleanup delivered as a mechanical rename; keep future slices free of folder/name churn piggybacks.
+6. **Item 2 — Tenant/rate-limit per-request query redundancy (completed May 1, 2026)**: Scoped preload + fallback query reuse now in place.
 
 ## First Recommended Slice to Execute
 
