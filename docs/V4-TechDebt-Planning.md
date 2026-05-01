@@ -51,36 +51,37 @@ No hard dependency. Recommended first because it reduces risk for all subsequent
 
 ---
 
-## 3) Missing CORS Configuration in `Program.cs`
+## 3) CORS Baseline Explicit in `Program.cs` *(Implemented May 1, 2026)*
 
-### Problem and why it matters
-The API host currently lacks explicit CORS policy registration/middleware wiring. In local pre-deployment usage this can block browser-based clients, and in later environments it can create ad hoc/proxy workarounds that bypass explicit security intent. CORS must be explicit, environment-configurable, and non-breaking for current API contracts.
+### Problem and why it mattered
+The API host previously lacked explicit CORS registration/middleware wiring. That made browser integration behavior less deterministic for local pre-deployment validation.
 
-### Smallest safe thin vertical slice
-Introduce a minimal named CORS policy sourced from configuration (`AllowedOrigins` style list), register with `AddCors`, and apply with `UseCors` at the correct pipeline position. Start with least-permissive defaults and preserve existing headers/body response shapes.
+### Implemented slice summary
+The API now registers and applies a named CORS policy: `InitialExplicitCorsPolicy`. The current effective policy is explicit and intentionally permissive for V4 local/pre-deployment iteration:
+- `AllowAnyOrigin`
+- `AllowAnyHeader`
+- `AllowAnyMethod`
 
-### Files likely to be created or modified
+### Files updated in this slice
 - `Presentation/Program.cs`
-- `Presentation/appsettings*.json` (or existing configuration files holding API settings)
-- `README.md` (configuration key documentation)
+- `README.md`
 - `docs/V4-Implementation-Backlog.md`
 
-### Test coverage expectations
-- Integration coverage for expected preflight behavior on representative endpoint(s)
-- Negative test for disallowed origin behavior
-- No changes to existing auth/tenant error response shapes
+### Validation/status
+- Named policy wiring is explicit in code and middleware order.
+- No response-shape/auth/tenant behavior changes were introduced by this slice.
+- Policy tightening for browser clients is deferred to a follow-up hardening slice before production deployment.
 
-### Migration, documentation, or runbook requirements
-- No migration
-- Document new config keys and local defaults in `README.md`
-- If smoke should verify CORS in-browser assumptions, update runbook text only (no broad smoke redesign)
+### Migration/documentation status
+- No migration required.
+- Documentation updated in `README.md` and `docs/V4-Implementation-Backlog.md`.
 
 ### Dependencies or ordering constraints
-Independent. Can ship early after tests to reduce frontend integration friction.
+Completed as an independent low-blast-radius baseline.
 
 ### Risks and assumptions
-- **Risk:** overly broad wildcard setup can weaken security posture.
-- **Assumption:** existing clients can provide explicit origins, allowing a constrained policy.
+- **Risk:** wildcard allowances are not appropriate for production browser exposure.
+- **Assumption:** this permissive baseline is temporary and will be tightened with explicit browser-client origin/header/method constraints in a later slice.
 
 ---
 
