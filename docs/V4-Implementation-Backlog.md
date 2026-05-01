@@ -172,6 +172,10 @@ V4 should be considered successful when:
      - validated current evaluator behavior for non-active subscription status interactions (including `Expired`) without asserting unsupported `Suspended` semantics.
      - documented boundary intersection expectation: tenant/authorization enforcement remains covered by integration security tests, while matrix tests continue to focus on evaluator precedence determinism.
    - remaining follow-up: broaden matrix dimensions (additional add-on merge modes and deeper endpoint-level scenario breadth) in subsequent P1 slices.
+   - incremental evaluator query-batching slice completed May 1, 2026:
+     - reduced per-evaluation sequential data access by batching subscription, plan entitlement lookup, and active override lookup into a single EF query projection.
+     - preserved evaluator inputs/outputs and business precedence semantics (default -> plan -> add-on -> override).
+     - kept endpoint/API contracts unchanged and avoided broad service/repository churn.
 
 2. **Developer workflow hardening foundation** *(P1.2 completed April 25, 2026)*
    - standardized local script set under `scripts/local/` for:
