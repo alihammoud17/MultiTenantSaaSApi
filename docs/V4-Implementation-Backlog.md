@@ -294,6 +294,11 @@ V4 should be considered successful when:
      - shared endpoint policy budget exhaustion is enforced across protected unauthenticated auth endpoints (exhaust via login, verify refresh rejects with `429`)
    - slice intentionally avoids token/secret logging assertions and keeps coverage scoped to brute-force/rate-limit behavior rather than duplicating broader auth lifecycle tests.
 
+14. **Initial explicit CORS policy baseline** *(Completed May 1, 2026)*
+   - registered a named CORS policy in `Presentation/Program.cs` (`InitialExplicitCorsPolicy`) so cross-origin behavior is explicit in code rather than implicit defaults.
+   - applied the named policy in the middleware pipeline after routing via `UseCors(...)` with no unrelated security middleware changes.
+   - current effective policy is intentionally permissive for local/pre-deployment iteration (`AllowAnyOrigin`, `AllowAnyHeader`, `AllowAnyMethod`) and documented as a starting baseline to tighten prior to production.
+
 
 ## P2 (later pre-deployment improvements)
 
