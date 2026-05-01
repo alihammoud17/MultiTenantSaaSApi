@@ -1,6 +1,6 @@
 # Entitlements Model (V3)
 
-_Last updated: April 20, 2026 (P1.1 entitlement matrix harness regression documentation refresh)._
+_Last updated: May 1, 2026 (entitlement evaluator query-batching finalization regression safeguards)._
 
 This document defines the V3 entitlements design **on top of the current plan/subscription implementation** so implementation can proceed incrementally without breaking existing plan upgrade behavior.
 
@@ -14,6 +14,9 @@ Implemented now:
 - seeded entitlement keys and plan mappings for foundational quotas/features
 - application-layer entitlement evaluation/enforcement primitives used by progressive gates
 - P1.1 entitlement matrix harness coverage in `.NET` unit tests for deterministic evaluator precedence and regression safety (`Tests/UnitTests/EntitlementEvaluatorTests.cs`, `Tests/UnitTests/Entitlements/EntitlementMatrixFixtureBuilder.cs`)
+- explicit evaluator regression checks for:
+  - plan/add-on/override precedence stability when all sources are present
+  - default-deny behavior when definition and source values are both absent
 
 Still pending in later slices:
 
