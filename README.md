@@ -613,6 +613,15 @@ dotnet run --project Presentation
 
 Swagger UI is enabled in Development.
 
+### Current CORS baseline (initial explicit policy)
+
+- The API now registers and applies a named ASP.NET Core CORS policy: `InitialExplicitCorsPolicy`.
+- Effective behavior is intentionally explicit and permissive as a V4 starting point:
+  - allows any origin
+  - allows any header
+  - allows any HTTP method
+- This baseline is intended for local/pre-deployment iteration and should be tightened before production deployment by replacing wildcard allowances with explicit origin/header/method rules.
+
 ### Run BillingService (durable workflow iteration scaffold)
 
 From repository root:
