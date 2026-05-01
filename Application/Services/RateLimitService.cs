@@ -13,29 +13,38 @@ namespace Application.Services
     {
         private readonly IConnectionMultiplexer _redis;
         private readonly ApplicationDbContext _dbContext;
+        private readonly IRequestTenantAccessContext _requestTenantAccessContext;
         private readonly ILogger<RateLimitService> _logger;
 
         public RateLimitService(
             IConnectionMultiplexer redis,
             ApplicationDbContext dbContext,
+            IRequestTenantAccessContext requestTenantAccessContext,
             ILogger<RateLimitService> logger)
         {
             _redis = redis;
             _dbContext = dbContext;
+            _requestTenantAccessContext = requestTenantAccessContext;
             _logger = logger;
         }
 
         public async Task<RateLimitResult> CheckRateLimitAsync(Guid tenantId)
         {
-            // Get tenant's subscription and plan
-            var subscription = await _dbContext.Subscriptions
-                .Include(s => s.Plan)
-                .FirstOrDefaultAsync(s => s.TenantId == tenantId);
+            var limit = _requestTenantAccessContext.ApiCallsPerMonthLimit;
+            if (limit == null)
+            {
+                // Fallback query path for requests where no per-request rate-limit context was preloaded.
+                var subscription = await _dbContext.Subscriptions
+                    .Include(s => s.Plan)
+                    .FirstOrDefaultAsync(s => s.TenantId == tenantId);
 
-            if (subscription == null)
-                throw new InvalidOperationException("Tenant has no subscription");
+                if (subscription == null)
+                    throw new InvalidOperationException("Tenant has no subscription");
 
-            var limit = subscription.Plan.ApiCallsPerMonth;
+                limit = subscription.Plan.ApiCallsPerMonth;
+                _requestTenantAccessContext.SetApiCallsPerMonthLimit(limit.Value);
+            }
+
             var now = DateTime.UtcNow;
             var resetDate = new DateTime(now.Year, now.Month, 1).AddMonths(1);
 
@@ -49,9 +58,9 @@ namespace Application.Services
                 var currentUsage = (int)(await db.StringGetAsync(key));
 
                 // Check if limit exceeded
-                if (currentUsage >= limit)
+                if (currentUsage >= limit.Value)
                 {
-                    return new RateLimitResult(false, limit, 0, resetDate);
+                    return new RateLimitResult(false, limit.Value, 0, resetDate);
                 }
 
                 // Increment usage
@@ -67,8 +76,8 @@ namespace Application.Services
                     await db.KeyExpireAsync(key, endOfNextMonth);
                 }
 
-                var remaining = limit - currentUsage - 1;
-                return new RateLimitResult(true, limit, remaining, resetDate);
+                var remaining = limit.Value - currentUsage - 1;
+                return new RateLimitResult(true, limit.Value, remaining, resetDate);
             }
             catch (RedisConnectionException ex)
             {
@@ -83,7 +92,7 @@ namespace Application.Services
                 _logger.LogWarning(ex, "Redis socket error. Skipping rate limit checks for tenant {TenantId}", tenantId);
             }
 
-            return new RateLimitResult(true, limit, limit, resetDate);
+            return new RateLimitResult(true, limit.Value, limit.Value, resetDate);
         }
     }
 }

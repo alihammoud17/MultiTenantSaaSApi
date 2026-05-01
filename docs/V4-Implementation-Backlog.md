@@ -111,6 +111,7 @@ V4 should be considered successful when:
    - added a scoped `IRequestTenantResolutionCache` abstraction and scoped implementation to hold the validated active tenant for the current request only
    - populated the cache in `TenantMiddleware` after tenant safety checks complete
    - avoided broad middleware refactors and preserved existing tenant mismatch/not-found/suspended rejection behavior
+   - added a focused follow-on slice to preload tenant plan API-call limits into a scoped `IRequestTenantAccessContext` in `RateLimitMiddleware` and consume that context in `RateLimitService`, reducing per-request duplicate subscription/plan reads while preserving fallback query behavior
 
 
 1. **Local deterministic orchestration profile** *(Completed April 15, 2026)*
