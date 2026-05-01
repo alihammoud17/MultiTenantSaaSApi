@@ -11,7 +11,7 @@
 | 4) Identity lifecycle + MFA unit-test gap (completed May 1, 2026) | Completed | Delivered | None |
 | 3) Missing CORS configuration in `Program.cs` | P0 | Small (1 slice) | None |
 | 2) Per-request DB query redundancy between tenant resolution and rate-limiting | P1 | Medium (2 slices) | 4 (recommended, not required) |
-| 5) Entitlement evaluator query batching | P1 | Medium (2 slices) | 4 (recommended, not required) |
+| 5) Entitlement evaluator query batching (completed May 1, 2026) | Completed | Delivered | 4 (recommended, not required) |
 | 1) Domain folder typo rename (completed) | P2 | Medium-Large (2-3 slices) | 4 (recommended), 2 and 5 should be stable first |
 | 6) Outbound webhook endpoint management surface and signing secret rotation | P0 (security) / P2 (scope size) | Large (3-4 slices) | 4 (recommended), after 2/5 for cleaner service-layer reuse |
 
@@ -107,35 +107,31 @@ Best after item 4 test gap closure. Should precede larger endpoint-surface addit
 
 ---
 
-## 5) Entitlement Evaluator Query Batching
+## 5) Entitlement Evaluator Query Batching *(Completed May 1, 2026)*
 
-### Problem and why it matters
-`EntitlementEvaluator` currently executes multiple sequential queries (subscription, definition, plan entitlement, add-on contributions, overrides) for each evaluation call. This can amplify query count under endpoint-gating and increase latency, especially when multiple entitlements are checked in one request lifecycle.
+### Implemented slice summary
+- `EntitlementEvaluator` now reads subscription status + plan entitlement + active override via one subscription projection query for each entitlement evaluation call, reducing sequential evaluator reads while keeping output semantics unchanged.
+- Existing add-on contribution merge flow and `resolvedFrom` attribution order remain unchanged (`Default`/`DefaultDeny` -> `Plan` -> `AddOn` -> `Override`).
 
-### Smallest safe thin vertical slice
-Batch evaluator reads into fewer queries for the single-entitlement path first (without changing evaluator outputs). Preserve precedence order (default -> plan -> add-on merge -> override) and existing status/source semantics.
-
-### Files likely to be created or modified
+### Files updated in this slice
 - `Application/Services/EntitlementEvaluator.cs`
 - `Tests/UnitTests/EntitlementEvaluatorTests.cs`
-- Potential new internal projection models/helpers near evaluator
+- `docs/V4-Implementation-Backlog.md`
+- `README.md`
 
-### Test coverage expectations
-- Regression suite must continue asserting precedence and lifecycle-state semantics
-- Add coverage to verify no behavioral changes for null/default/override edge cases
-- Optional targeted performance-oriented test (query count guard) if test infrastructure supports it safely
+### Regression protection added in this finalization step
+- Added explicit precedence regression test covering plan + add-on + override composition to ensure override remains final winner when all three sources are present.
+- Added explicit default-deny regression test for missing definition and missing source values to prevent semantic drift toward implicit allow.
+- Existing matrix cases continue to protect representative endpoint-gated billing/admin/analytics entitlement keys and lifecycle combinations.
 
-### Migration, documentation, or runbook requirements
-- No migration expected
-- Update `docs/V4-Implementation-Backlog.md` with scope and invariants preserved
-- No runbook changes expected
+### Remaining performance work (intentionally out of scope)
+- Multi-entitlement evaluation batching (evaluate N keys with shared tenant/subscription snapshot in one call path).
+- Optional query-count instrumentation/assertions in tests when a stable provider-backed query-capture harness is available.
+- Potential request-scope memoization for repeated same-key evaluations within one request, provided tenant safety and lifecycle freshness semantics are preserved.
 
-### Dependencies or ordering constraints
-Can run independently but should be sequenced near item 2 because both reduce request-path DB pressure and may share context patterns.
-
-### Risks and assumptions
-- **Risk:** batching refactor may accidentally alter precedence or `resolvedFrom` attribution.
-- **Assumption:** current unit matrix coverage is strong enough to detect semantic drift once expanded.
+### Migration/documentation status
+- No migration required.
+- No runbook changes required for this slice.
 
 ---
 

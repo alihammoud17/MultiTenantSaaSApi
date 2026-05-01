@@ -113,6 +113,178 @@ public class EntitlementEvaluatorTests
         result.SubscriptionStatus.Should().Be("MissingSubscription");
     }
 
+    [Fact]
+    public async Task EvaluateAsync_ShouldPreservePlanAddOnOverridePrecedence_ForBooleanEntitlements()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new ApplicationDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var tenant = new Tenant
+        {
+            Id = Guid.NewGuid(),
+            Name = "Precedence Tenant",
+            Subdomain = $"precedence-{Guid.NewGuid():N}",
+            CreatedAt = EntitlementMatrixFixtureBuilder.BaselineUtc,
+            UpdatedAt = EntitlementMatrixFixtureBuilder.BaselineUtc
+        };
+        db.Tenants.Add(tenant);
+
+        const string entitlementKey = "matrix.feature.precedence.boolean";
+        const string planId = "matrix-plan-precedence";
+
+        db.Plans.Add(new Plan
+        {
+            Id = planId,
+            Name = "Precedence Plan",
+            MonthlyPrice = 0m,
+            ApiCallsPerMonth = 1000,
+            MaxUsers = 5,
+            IsActive = true,
+            DisplayOrder = 1
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            PlanId = planId,
+            Status = SubscriptionStatus.Active,
+            CurrentPeriodStart = EntitlementMatrixFixtureBuilder.BaselineUtc,
+            CurrentPeriodEnd = EntitlementMatrixFixtureBuilder.BaselineUtc.AddMonths(1),
+            CreatedAt = EntitlementMatrixFixtureBuilder.BaselineUtc
+        });
+        db.EntitlementDefinitions.Add(new EntitlementDefinition
+        {
+            Key = entitlementKey,
+            DisplayName = entitlementKey,
+            ValueType = EntitlementValueType.Boolean,
+            Category = EntitlementCategory.Feature,
+            DefaultValue = "false",
+            IsActive = true,
+            CreatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc,
+            UpdatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc
+        });
+        db.PlanEntitlements.Add(new PlanEntitlement
+        {
+            PlanId = planId,
+            EntitlementKey = entitlementKey,
+            Value = "true",
+            Source = EntitlementSourceType.PlanDefault,
+            CreatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc,
+            UpdatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc
+        });
+
+        db.AddOnDefinitions.Add(new AddOnDefinition
+        {
+            Id = "addon.precedence.boolean",
+            DisplayName = "Precedence Add-on",
+            IsActive = true,
+            CreatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc,
+            UpdatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc
+        });
+        db.AddOnEntitlements.Add(new AddOnEntitlement
+        {
+            AddOnId = "addon.precedence.boolean",
+            EntitlementKey = entitlementKey,
+            ValueMode = AddOnEntitlementValueMode.Set,
+            Value = "false",
+            CreatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc,
+            UpdatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc
+        });
+        db.TenantAddOnAssignments.Add(new TenantAddOnAssignment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            AddOnId = "addon.precedence.boolean",
+            Status = TenantAddOnAssignmentStatus.Active,
+            EffectiveFromUtc = EntitlementMatrixFixtureBuilder.BaselineUtc.AddMinutes(-5),
+            EffectiveToUtc = null,
+            CreatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc,
+            UpdatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc
+        });
+
+        db.TenantEntitlementOverrides.Add(new TenantEntitlementOverride
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            EntitlementKey = entitlementKey,
+            Value = "true",
+            Reason = "Precedence regression assertion",
+            Source = TenantEntitlementOverrideSource.SupportGrant,
+            EffectiveFromUtc = EntitlementMatrixFixtureBuilder.BaselineUtc.AddMinutes(-1),
+            CreatedUtc = EntitlementMatrixFixtureBuilder.BaselineUtc
+        });
+        await db.SaveChangesAsync();
+
+        var sut = new EntitlementEvaluator(db, BuildHttpContextAccessor());
+        var result = await sut.EvaluateAsync(tenant.Id, entitlementKey);
+
+        result.Value.Should().Be("true");
+        result.IsAllowed.Should().BeTrue();
+        result.ResolvedFrom.Should().Be("Override");
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_ShouldDefaultDeny_WhenDefinitionAndSourceValuesAreMissing()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new ApplicationDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var tenant = new Tenant
+        {
+            Id = Guid.NewGuid(),
+            Name = "No Definition Tenant",
+            Subdomain = $"nodef-{Guid.NewGuid():N}",
+            CreatedAt = EntitlementMatrixFixtureBuilder.BaselineUtc,
+            UpdatedAt = EntitlementMatrixFixtureBuilder.BaselineUtc
+        };
+        db.Tenants.Add(tenant);
+
+        const string planId = "matrix-plan-nodef";
+        const string entitlementKey = "matrix.feature.defaultdeny.nodef";
+        db.Plans.Add(new Plan
+        {
+            Id = planId,
+            Name = "No Definition Plan",
+            MonthlyPrice = 0m,
+            ApiCallsPerMonth = 1000,
+            MaxUsers = 5,
+            IsActive = true,
+            DisplayOrder = 1
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            PlanId = planId,
+            Status = SubscriptionStatus.Active,
+            CurrentPeriodStart = EntitlementMatrixFixtureBuilder.BaselineUtc,
+            CurrentPeriodEnd = EntitlementMatrixFixtureBuilder.BaselineUtc.AddMonths(1),
+            CreatedAt = EntitlementMatrixFixtureBuilder.BaselineUtc
+        });
+        await db.SaveChangesAsync();
+
+        var sut = new EntitlementEvaluator(db, BuildHttpContextAccessor());
+        var result = await sut.EvaluateAsync(tenant.Id, entitlementKey);
+
+        result.Value.Should().BeNull();
+        result.IsAllowed.Should().BeFalse();
+        result.ResolvedFrom.Should().Be("DefaultDeny");
+    }
+
     private static Tenant SeedMatrixCase(ApplicationDbContext db, EntitlementMatrixCase matrixCase)
     {
         var tenant = new Tenant
