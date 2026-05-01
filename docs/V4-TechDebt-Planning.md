@@ -13,7 +13,7 @@
 | 2) Per-request DB query redundancy between tenant resolution and rate-limiting | P1 | Medium (2 slices) | 4 (recommended, not required) |
 | 5) Entitlement evaluator query batching (completed May 1, 2026) | Completed | Delivered | 4 (recommended, not required) |
 | 1) Domain folder typo rename (completed) | P2 | Medium-Large (2-3 slices) | 4 (recommended), 2 and 5 should be stable first |
-| 6) Outbound webhook endpoint management surface and signing secret rotation | P0 (security) / P2 (scope size) | Large (3-4 slices) | 4 (recommended), after 2/5 for cleaner service-layer reuse |
+| 6) Outbound webhook endpoint management surface and signing secret rotation (completed May 1, 2026) | Completed | Delivered (phase-1 management + pending-rotation issuance) | 4, 2, and 5 completed first |
 
 ---
 
@@ -168,40 +168,27 @@ Should be delayed until higher risk-reduction items are complete to avoid merge 
 
 ---
 
-## 6) Outbound Webhook Endpoint Management Surface + Signing Secret Rotation
+## 6) Outbound Webhook Endpoint Management Surface + Signing Secret Rotation *(Completed May 1, 2026)*
 
-### Problem and why it matters
-Outbound webhook delivery exists, but management capabilities for endpoint lifecycle and signing-secret rotation are not yet a complete tenant-safe operational surface. Without explicit management APIs/workflows, secret hygiene, compromise response, and endpoint governance are weaker than desired for pre-deployment maturity.
+### Implemented in this finalized slice
+- Tenant-safe management API now supports create/list/update/delete and explicit enable/disable actions for outbound webhook endpoints.
+- Explicit signing-secret rotation initiation endpoint now issues/stores `NextSigningSecret` and `NextSigningSecretIssuedAtUtc` while preserving current active signing behavior on `SigningSecret`.
+- Integration coverage now includes unauthenticated denial, member-role authorization denial, and cross-tenant mutation denial paths.
+- Unit coverage includes pending-secret rotation behavior to prevent semantic drift.
 
-### Smallest safe thin vertical slice
-First slice: add a tenant-scoped read/list + rotate-secret action for existing endpoint records only (no broad CRUD expansion initially). Require authenticated tenant context and RBAC permission checks; rotate by generating a new secret version, storing only hashed/secured representation per existing conventions, and preserving delivery contract compatibility.
+### Migration + data model status
+- Delivered via additive schema migration: `Infrastructure/Migrations/20260501090000_AddWebhookEndpointManagementFoundation.cs`.
+- No breaking changes to existing outbound delivery envelope/signature contracts.
 
-### Files likely to be created or modified
-- Likely new/expanded controller under `Presentation/Controllers/` for tenant webhook endpoint management
-- Service-layer logic in `Application/Services/` (endpoint management + rotation orchestration)
-- Domain DTOs/contracts in `Domain/DTOs/` and interfaces in `Domain/Interfaces/`
-- Persistence model/config updates for secret versioning metadata in `Domain/Entities` + `Infrastructure/Data` mappings/migrations (if required)
-- Existing outbound signer/publisher components if key-resolution behavior changes
-- `docs/Outbound-Webhooks.md`, `docs/Outbound-Webhook-Contract.md`, `README.md`, `docs/V4-Implementation-Backlog.md`
+### Operational documentation status
+- `docs/Outbound-Webhooks.md` now reflects implemented endpoint-management + pending-rotation behavior.
+- New runbook added: `docs/Outbound-Webhook-Endpoint-Management-Runbook.md`.
 
-### Test coverage expectations
-- **Tenant isolation (explicit):** tenant A cannot read, rotate, disable, or otherwise mutate tenant B webhook endpoints under any identifier tampering path
-- Authorization tests for sensitive management actions
-- Rotation behavior tests: old-secret invalidation policy, new-secret effectiveness, replay/idempotency expectations unchanged
-- Negative-path tests for invalid rotation requests and audit/observability assertions
-
-### Migration, documentation, or runbook requirements
-- Migration likely if storing secret version, rotated-at timestamps, or status flags
-- Update operational docs/runbooks for rotation process, rollback/recovery guidance, and safe logging requirements
-- Document any new env/config keys; never log raw secrets
-
-### Dependencies or ordering constraints
-High security value, but scope is larger. Recommended after item 4 (tests) and after query-efficiency items 2/5 if shared context/query improvements are desired before expanding surface area.
-
-### Risks and assumptions
-- **Risk:** secret rotation can break deliveries if signer resolution/versioning is inconsistent.
-- **Risk:** management endpoints create new cross-tenant attack surface if scoping/authorization is incomplete.
-- **Assumption:** current outbound model can be extended additively without breaking existing delivery contract/response shapes.
+### Remaining follow-up (future phase)
+- secret promotion/finalization flow (`NextSigningSecret` -> active signing material)
+- rollback/overlap policy for staged cutovers
+- operator automation for periodic rotation and incident-driven rotations
+- richer tenant-facing replay/diagnostic workflows
 
 ---
 

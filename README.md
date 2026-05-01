@@ -441,6 +441,7 @@ The .NET API includes a first outbound webhook infrastructure slice for tenant e
 - persisted delivery state with retry scheduling and terminal status tracking (including attempt/status-code/error/timestamp diagnostic metadata)
 - replay/idempotency support via `SourceEventKey` dedupe at publish time and stable `X-Tenant-Webhook-Idempotency-Key` per delivery
 - tenant-safe endpoint management API is now available for `create/list/update/delete`, explicit enable/disable, and explicit signing-secret rotation initiation (`next` secret issuance) without changing current delivery signing semantics
+- endpoint-management and secret-rotation-init operational notes are documented in `docs/Outbound-Webhook-Endpoint-Management-Runbook.md`
 
 Automated verification coverage now explicitly includes:
 
