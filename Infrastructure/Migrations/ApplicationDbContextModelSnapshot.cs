@@ -1069,10 +1069,20 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
+                    b.Property<string>("NextSigningSecret")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("NextSigningSecretIssuedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("SigningSecret")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("SigningSecretIssuedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("SubscribedEventTypes")
                         .IsRequired()

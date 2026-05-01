@@ -201,6 +201,7 @@ namespace Infrastructure.Data
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(120);
                 entity.Property(e => e.CallbackUrl).IsRequired().HasMaxLength(500);
                 entity.Property(e => e.SigningSecret).IsRequired().HasMaxLength(256);
+                entity.Property(e => e.NextSigningSecret).HasMaxLength(256);
                 entity.Property(e => e.SubscribedEventTypes).IsRequired().HasMaxLength(500);
             });
 

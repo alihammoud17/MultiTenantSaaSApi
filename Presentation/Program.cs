@@ -43,6 +43,8 @@ builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 builder.Services.AddScoped<IIdentityLifecycleService, IdentityLifecycleService>();
 builder.Services.AddScoped<IIdentityNotificationService, IdentityNotificationService>();
 builder.Services.AddScoped<IMfaService, MfaService>();
+builder.Services.AddScoped<IWebhookEndpointSecretIssuer, WebhookEndpointSecretIssuer>();
+builder.Services.AddScoped<IWebhookEndpointManagementService, WebhookEndpointManagementService>();
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
