@@ -19,6 +19,7 @@ namespace Presentation.Middleware
         public async Task InvokeAsync(
             HttpContext context,
             ITenantContext tenantContext,
+            IRequestTenantResolutionCache tenantResolutionCache,
             ApplicationDbContext dbContext)
         {
             // Skip tenant resolution for public endpoints
@@ -35,17 +36,18 @@ namespace Presentation.Middleware
             }
 
             Guid? requestTenantHint = null;
+            Tenant? resolvedTenant = null;
 
             // Strategy 1: Extract from subdomain (e.g., acme.yourapi.com)
             var host = context.Request.Host.Host;
             if (host.Contains('.'))
             {
                 var subdomain = host.Split('.')[0];
-                var tenant = await dbContext.Tenants
+                resolvedTenant = await dbContext.Tenants
                     .FirstOrDefaultAsync(t => t.Subdomain == subdomain);
 
-                if (tenant != null)
-                    requestTenantHint = tenant.Id;
+                if (resolvedTenant != null)
+                    requestTenantHint = resolvedTenant.Id;
             }
 
             // Strategy 2: Extract from custom header (fallback)
@@ -89,8 +91,9 @@ namespace Presentation.Middleware
             }
 
             // Verify tenant is active
-            var activeTenant = await dbContext.Tenants
-                .FirstOrDefaultAsync(t => t.Id == tenantId.Value);
+            var activeTenant = resolvedTenant?.Id == tenantId.Value
+                ? resolvedTenant
+                : await dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId.Value);
 
             if (activeTenant == null)
             {
@@ -116,6 +119,7 @@ namespace Presentation.Middleware
 
             // Set tenant context for this request
             tenantContext.SetTenantId(tenantId.Value);
+            tenantResolutionCache.SetResolvedTenant(activeTenant);
             _logger.LogInformation("Request tenant identified: {TenantId}", tenantId);
 
             await _next(context);

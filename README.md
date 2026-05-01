@@ -191,6 +191,7 @@ This repository currently contains:
   - `X-Tenant-ID` header fallback
   - JWT `tenant_id` claim fallback
 - Active-tenant enforcement that blocks requests for missing, unknown, or suspended tenants.
+- Request-scoped tenant-resolution cache foundation now stores the validated active `Tenant` entity once during middleware resolution for per-request reuse (no process-wide caching).
 - Tenant-scoped persistence for users, subscriptions, RBAC assignments, refresh tokens, and audit logs.
 
 ### Authentication and token lifecycle
