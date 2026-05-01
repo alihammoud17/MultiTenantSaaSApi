@@ -87,6 +87,8 @@ Test checks execute this standardized cross-service sequence:
 7. `npm run build` in `BillingService/`
 8. `npm test` in `BillingService/`
 
+Current notable `.NET` unit coverage additions include dedicated suites for `IdentityLifecycleService` and `MfaService`; keep HTTP contract/middleware composition assertions in integration tests.
+
 ### Expected execution order for local validation
 
 Use this order to keep triage deterministic:

@@ -8,7 +8,7 @@
 
 | Item | Priority | Effort Estimate | Depends On |
 | --- | --- | --- | --- |
-| 4) Missing unit tests for `IdentityLifecycleService` and `MfaService` | P0 | Small (1-2 slices) | None |
+| 4) Identity lifecycle + MFA unit-test gap (completed May 1, 2026) | Completed | Delivered | None |
 | 3) Missing CORS configuration in `Program.cs` | P0 | Small (1 slice) | None |
 | 2) Per-request DB query redundancy between tenant resolution and rate-limiting | P1 | Medium (2 slices) | 4 (recommended, not required) |
 | 5) Entitlement evaluator query batching | P1 | Medium (2 slices) | 4 (recommended, not required) |
@@ -17,37 +17,28 @@
 
 ---
 
-## 4) Missing Unit Tests for `IdentityLifecycleService` and `MfaService`
+## 4) Identity lifecycle + MFA unit-test gap *(Completed May 1, 2026)*
 
-### Problem and why it matters
-`IdentityLifecycleService` and `MfaService` contain security-sensitive logic (invite acceptance, verification, password reset, OTP verification, opaque token hashing) but currently lack dedicated unit-test suites comparable to other core services. This increases regression risk for tenant-safe identity behavior and authentication hardening, especially as V4 continues to refactor controller/service boundaries.
+### Implemented coverage now in place
+- `Tests/UnitTests/IdentityLifecycleServiceTests.cs`
+  - invite field normalization + notification emission
+  - tenant-safe invite acceptance guard (cross-tenant token use rejected)
+  - verification token one-time use (replay rejection)
+  - password-reset token one-time use + password hash rotation
+- `Tests/UnitTests/MfaServiceTests.cs`
+  - enrollment secret/provisioning URI shape
+  - TOTP acceptance across configured drift window
+  - malformed/null input rejection and invalid base32 error behavior
+  - opaque token entropy/format and deterministic SHA-256 hashing
 
-### Smallest safe thin vertical slice
-Add focused unit tests for deterministic core behaviors only: success/deny paths, token validity windows, tenant scoping for identity records, and MFA code format/verification behavior. Keep tests service-level and avoid any response-contract changes.
+### Intentionally integration-tested only (remaining)
+- end-to-end HTTP contract/response-shape behavior for auth endpoints
+- middleware/policy interactions (tenant resolution, authz, rate limiting)
+- cross-service billing callback and contract conformance behavior
 
-### Files likely to be created or modified
-- `Tests/UnitTests/IdentityLifecycleServiceTests.cs` (new)
-- `Tests/UnitTests/MfaServiceTests.cs` (new)
-- `Tests/Tests.csproj` (if includes need adjustment)
-- Optional shared test helpers under `Tests/UnitTests/...` if needed minimally
-
-### Test coverage expectations
-- Tenant isolation checks for invite/verification/reset token lookups (same-tenant vs cross-tenant behavior)
-- Expired/used token rejection cases
-- Duplicate user/invite edge cases
-- MFA: invalid format rejection, valid-code acceptance within allowed drift window, token/hash format checks
-
-### Migration, documentation, or runbook requirements
-- No DB migration expected
-- Update `docs/V4-Implementation-Backlog.md` when executed
-- Update `README.md` only if test command workflow changes (not expected)
-
-### Dependencies or ordering constraints
-No hard dependency. Recommended first because it reduces risk for all subsequent refactors and security-sensitive slices.
-
-### Risks and assumptions
-- **Risk:** time-dependent MFA tests can be flaky if clock handling is not controlled.
-- **Assumption:** tests can remain deterministic with narrow assertions and current time-window tolerance patterns.
+### Notes
+- No schema migration required.
+- Scope stayed additive: tests + documentation only.
 
 ---
 
@@ -220,7 +211,7 @@ High security value, but scope is larger. Recommended after item 4 (tests) and a
 
 ## Recommended Execution Order (Updated May 1, 2026)
 
-1. **Item 4 — Missing unit tests (`IdentityLifecycleService`, `MfaService`)**: Highest immediate risk reduction for security-sensitive logic with low effort.
+1. **Item 4 — Identity lifecycle + MFA unit-test gap**: Completed May 1, 2026 with dedicated deterministic unit suites.
 2. **Item 3 — CORS configuration**: Small, high-practicality hardening slice that unblocks browser clients and keeps policy explicit.
 3. **Item 5 — Entitlement evaluator query batching**: Next request-path efficiency improvement with strict semantic-regression protection.
 4. **Item 6 — Outbound webhook management + secret rotation**: High security value but larger blast radius; safer after test and request-path foundations are strengthened.
@@ -229,6 +220,4 @@ High security value, but scope is larger. Recommended after item 4 (tests) and a
 
 ## First Recommended Slice to Execute
 
-Start with **Item 4** by adding unit-test suites for `IdentityLifecycleService` and `MfaService`.
-
-One-slice objective: establish deterministic coverage for tenant-scoped identity token flows and MFA verification/token hashing behavior, with no production-code behavior changes and no contract changes.
+Item 4 is complete; keep remaining auth behavior validation focused on integration and contract suites where HTTP/middleware composition is the primary risk surface.
