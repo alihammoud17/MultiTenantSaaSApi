@@ -1,4 +1,6 @@
 ﻿using Domain.Interfaces;
+using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace Presentation.Middleware
 {
@@ -14,7 +16,9 @@ namespace Presentation.Middleware
         public async Task InvokeAsync(
             HttpContext context,
             ITenantContext tenantContext,
-            IRateLimitService rateLimitService)
+            IRateLimitService rateLimitService,
+            IRequestTenantAccessContext requestTenantAccessContext,
+            ApplicationDbContext dbContext)
         {
             // Skip for public endpoints
             var path = context.Request.Path.Value?.ToLower() ?? "";
@@ -30,6 +34,19 @@ namespace Presentation.Middleware
             {
                 await _next(context);
                 return;
+            }
+
+            if (requestTenantAccessContext.ApiCallsPerMonthLimit == null)
+            {
+                var limit = await dbContext.Subscriptions
+                    .Where(s => s.TenantId == tenantContext.TenantId)
+                    .Select(s => s.Plan.ApiCallsPerMonth)
+                    .FirstOrDefaultAsync();
+
+                if (limit > 0)
+                {
+                    requestTenantAccessContext.SetApiCallsPerMonthLimit(limit);
+                }
             }
 
             var result = await rateLimitService.CheckRateLimitAsync(tenantContext.TenantId);

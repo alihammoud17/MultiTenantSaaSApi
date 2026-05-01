@@ -192,6 +192,7 @@ This repository currently contains:
   - JWT `tenant_id` claim fallback
 - Active-tenant enforcement that blocks requests for missing, unknown, or suspended tenants.
 - Request-scoped tenant-resolution cache foundation now stores the validated active `Tenant` entity once during middleware resolution for per-request reuse (no process-wide caching).
+- Request-scoped tenant access context now preloads and reuses the tenant plan API-call limit in `RateLimitMiddleware` so `RateLimitService` can avoid a redundant subscription+plan query on the same request path while retaining a safe fallback query when preload is unavailable.
 - Tenant-scoped persistence for users, subscriptions, RBAC assignments, refresh tokens, and audit logs.
 
 ### Authentication and token lifecycle
