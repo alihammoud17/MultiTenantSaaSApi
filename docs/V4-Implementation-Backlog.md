@@ -278,6 +278,13 @@ V4 should be considered successful when:
 11. **AuthController application-boundary regression tests (completed April 27, 2026)**
    - added deterministic boundary-focused unit tests in `.NET` (`Tests/UnitTests/AuthControllerBoundaryTests.cs`) to guard outward contract stability for refactored auth flows now delegated to `IAuthOrchestrationService`.
    - protected register/login/refresh contract mapping behavior without coupling tests to controller internals or direct `DbContext` access.
+
+12. **Outbound webhook endpoint-management foundation (completed May 1, 2026)**
+   - added tenant-scoped webhook endpoint-management foundations in the .NET domain/application/persistence layers without introducing public management endpoints yet.
+   - introduced explicit secret lifecycle metadata on endpoint records:
+     - `SigningSecretIssuedAtUtc` for active-secret issuance traceability
+     - `NextSigningSecret` + `NextSigningSecretIssuedAtUtc` pre-provisioning fields to keep safe rotation additive in a follow-up slice
+   - added internal secret issuance service and internal endpoint creation service wiring so new endpoints can be created with a generated signing secret while preserving current outbound delivery behavior (`SigningSecret` remains the active delivery signing material).
    - explicit assertions now cover:
      - register conflict mapping (`SubdomainAlreadyTaken` -> `400` + existing error payload)
      - login MFA/suspension mapping (`MfaChallengeRequired`, `TenantSuspended` -> existing `401/403` payload shapes)
