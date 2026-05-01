@@ -107,6 +107,12 @@ V4 should be considered successful when:
 
 ## P0 (build now)
 
+0. **Per-request tenant-resolution cache foundation** *(Completed May 1, 2026)*
+   - added a scoped `IRequestTenantResolutionCache` abstraction and scoped implementation to hold the validated active tenant for the current request only
+   - populated the cache in `TenantMiddleware` after tenant safety checks complete
+   - avoided broad middleware refactors and preserved existing tenant mismatch/not-found/suspended rejection behavior
+
+
 1. **Local deterministic orchestration profile** *(Completed April 15, 2026)*
    - added repo-level local orchestration scripts in `scripts/local/` for bootstrap/run/smoke
    - documented exact command order and expected behavior in `README.md`, `BillingService/README.md`, and `docs/Local-Orchestration-Profile.md`
