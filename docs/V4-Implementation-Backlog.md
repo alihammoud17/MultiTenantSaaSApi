@@ -391,3 +391,4 @@ Ongoing documentation expectations for V4:
    - enforced existing RBAC policy (`billing.manage`) plus tenant-context scoping on every management action.
    - added explicit initial signing-secret rotation initiation endpoint that issues/stores `NextSigningSecret` + issuance timestamp while preserving current delivery signing behavior on the active secret.
    - added integration security coverage for member-authorization denial and cross-tenant endpoint-id mutation denial, plus unit coverage for pending-secret rotation behavior.
+   - expanded automated coverage for endpoint-management lifecycle behavior (authorized create/list/update/delete + explicit enable/disable), unauthenticated rejection, and managed-endpoint compatibility with existing outbound delivery event materialization.
