@@ -365,3 +365,7 @@ Ongoing documentation expectations for V4:
 - claiming production-readiness based solely on local tests
 - introducing live-ops obligations that cannot be validated locally
 - coupling roadmap success to unavailable infrastructure
+
+8. **Identity lifecycle unit-test coverage expansion** *(Completed May 1, 2026)*
+   - added dedicated behavior-focused unit tests for `IdentityLifecycleService` covering invite normalization/notification, tenant-safe invite acceptance, verification replay safety, and password-reset replay safety.
+   - tests are deterministic and assert behavior/state outcomes without coupling to irrelevant implementation details.
