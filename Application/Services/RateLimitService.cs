@@ -46,7 +46,17 @@ namespace Application.Services
             }
 
             var now = DateTime.UtcNow;
-            var resetDate = new DateTime(now.Year, now.Month, 1).AddMonths(1);
+
+            var currentMonthStartUtc = new DateTime(
+                now.Year,
+                now.Month,
+                1,
+                0,
+                0,
+                0,
+                DateTimeKind.Utc);
+
+            var resetDate = currentMonthStartUtc.AddMonths(1);
 
             try
             {
@@ -70,10 +80,9 @@ namespace Application.Services
                 var ttl = await db.KeyTimeToLiveAsync(key);
                 if (ttl == null)
                 {
-                    var endOfNextMonth = new DateTime(now.Year, now.Month, 1)
-                        .AddMonths(2)
-                        .AddDays(-1);
-                    await db.KeyExpireAsync(key, endOfNextMonth);
+                    var expirationUtc = currentMonthStartUtc.AddMonths(2);
+
+                    await db.KeyExpireAsync(key, expirationUtc);
                 }
 
                 var remaining = limit.Value - currentUsage - 1;
