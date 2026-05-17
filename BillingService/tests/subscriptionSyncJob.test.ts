@@ -132,8 +132,8 @@ test('SubscriptionSyncJob retry exhaustion keeps diagnosable dead-letter state w
     const snapshot = await job.snapshotQueue();
     assert.equal(snapshot[0].status, 'dead_letter');
     assert.equal(snapshot[0].attempts, 2);
-    assert.ok(snapshot[0].lastError?.includes('persistent callback outage'));
-    assert.ok(snapshot[0].deadLetterReason?.includes('persistent callback outage'));
+    assert.equal(snapshot[0].lastError?.includes('persistent callback outage'), true);
+    assert.equal(snapshot[0].deadLetterReason?.includes('persistent callback outage'), true);
     assert.equal((snapshot[0].lastError ?? '').toLowerCase().includes('sk_live_'), false);
     assert.equal((snapshot[0].lastError ?? '').toLowerCase().includes('callback-secret-unsafe'), false);
     assert.equal((snapshot[0].deadLetterReason ?? '').toLowerCase().includes('sk_live_'), false);

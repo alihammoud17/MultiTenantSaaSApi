@@ -29,7 +29,9 @@ class FixtureSequenceAdapter implements BillingProviderAdapter {
     const step = this.steps[this.index];
     this.index += 1;
 
-    assert.ok(step, `Unexpected webhook invocation for raw body: ${input.rawBody}`);
+    if (step === undefined) {
+      throw new Error(`Unexpected webhook invocation for raw body: ${input.rawBody}`);
+    }
     assert.equal(input.rawBody, step.rawBody, `Raw body mismatch for step ${step.name}`);
 
     if (!step.validSignature) {
@@ -39,7 +41,9 @@ class FixtureSequenceAdapter implements BillingProviderAdapter {
       };
     }
 
-    assert.ok(step.normalizedEvent, `Expected normalized event for step ${step.name}`);
+    if (step.normalizedEvent === undefined) {
+      throw new Error(`Expected normalized event for step ${step.name}`);
+    }
 
     return {
       accepted: true,
@@ -141,12 +145,12 @@ async function runFixtureScenario(scenario: BillingEventFixtureScenario): Promis
 
     for (const [eventId, occurredAt] of Object.entries(scenario.expected.occurredAtByEventId ?? {})) {
       const published = publishedEvents.find((event) => event.eventId === eventId);
-      assert.ok(published, `Expected published event ${eventId}`);
-      assert.equal(published.occurredAt, occurredAt, `OccurredAt mismatch for event ${eventId}`);
+      assert.equal(published !== undefined, true, `Expected published event ${eventId}`);
+      assert.equal(published?.occurredAt, occurredAt, `OccurredAt mismatch for event ${eventId}`);
     }
 
     const snapshot = await job.snapshotQueue();
     assert.equal(snapshot.length, scenario.expected.persistedEventCount, 'Persisted event count mismatch');
-    assert.ok(snapshot.every((item) => item.status === 'completed'), 'Expected all persisted events to be completed');
+    assert.equal(snapshot.every((item) => item.status === 'completed'), true, 'Expected all persisted events to be completed');
   });
 }
