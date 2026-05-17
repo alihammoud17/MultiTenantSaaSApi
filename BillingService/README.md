@@ -125,6 +125,8 @@ From the repository root:
 ```bash
 cd BillingService
 npm install
+npm run typecheck
+npm run build
 npm run dev
 ```
 

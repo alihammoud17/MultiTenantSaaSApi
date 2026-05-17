@@ -32,7 +32,7 @@ class FixtureSequenceAdapter implements BillingProviderAdapter {
     if (step === undefined) {
       throw new Error(`Unexpected webhook invocation for raw body: ${input.rawBody}`);
     }
-    assert.equal(input.rawBody, step.rawBody, `Raw body mismatch for step ${step.name}`);
+    assert.equal(input.rawBody, step.rawBody);
 
     if (!step.validSignature) {
       return {
@@ -126,11 +126,11 @@ async function runFixtureScenario(scenario: BillingEventFixtureScenario): Promis
       });
 
       if (step.validSignature) {
-        assert.equal(response.body.accepted, true, `Expected accepted webhook for step ${step.name}`);
+        assert.equal(response.body.accepted, true);
         assert.equal(response.status, 202);
         responseStatuses.push((response.body.processingStatus as 'queued' | 'duplicate') ?? 'queued');
       } else {
-        assert.equal(response.body.accepted, false, `Expected rejection for invalid signature on ${step.name}`);
+        assert.equal(response.body.accepted, false);
         assert.equal(response.status, 202);
         responseStatuses.push('rejected');
       }
@@ -138,19 +138,22 @@ async function runFixtureScenario(scenario: BillingEventFixtureScenario): Promis
       await settleQueue(job);
     }
 
-    assert.deepEqual(responseStatuses, scenario.expected.processingStatuses, 'Processing statuses mismatch');
+    assert.deepEqual(responseStatuses, scenario.expected.processingStatuses);
 
     const publishedEventIds = publishedEvents.map((event) => event.eventId);
-    assert.deepEqual(publishedEventIds, scenario.expected.publishedEventIds, 'Published event ids mismatch');
+    assert.deepEqual(publishedEventIds, scenario.expected.publishedEventIds);
 
     for (const [eventId, occurredAt] of Object.entries(scenario.expected.occurredAtByEventId ?? {})) {
       const published = publishedEvents.find((event) => event.eventId === eventId);
-      assert.equal(published !== undefined, true, `Expected published event ${eventId}`);
-      assert.equal(published?.occurredAt, occurredAt, `OccurredAt mismatch for event ${eventId}`);
+      if (!published) {
+        throw new Error(`Expected published event ${eventId}`);
+      }
+
+      assert.equal(published.occurredAt, occurredAt);
     }
 
     const snapshot = await job.snapshotQueue();
-    assert.equal(snapshot.length, scenario.expected.persistedEventCount, 'Persisted event count mismatch');
-    assert.equal(snapshot.every((item) => item.status === 'completed'), true, 'Expected all persisted events to be completed');
+    assert.equal(snapshot.length, scenario.expected.persistedEventCount);
+    assert.equal(snapshot.every((item) => item.status === 'completed'), true);
   });
 }

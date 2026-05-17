@@ -124,11 +124,11 @@ class SingleItemQueue implements WorkflowQueue {
     this.item = item;
   }
 
-  public async enqueue() {
+  public async enqueue(_event: InternalSubscriptionEvent): Promise<{ status: 'queued' | 'duplicate'; item: WorkflowItem }> {
     throw new Error('not used');
   }
 
-  public async claimNextReady(): Promise<WorkflowItem | undefined> {
+  public async claimNextReady(_now: Date): Promise<WorkflowItem | undefined> {
     if (!this.item || this.item.status !== 'queued') {
       return undefined;
     }
@@ -137,7 +137,7 @@ class SingleItemQueue implements WorkflowQueue {
     return this.item;
   }
 
-  public async markCompleted(): Promise<WorkflowItem | undefined> {
+  public async markCompleted(_eventId: string, _now: Date): Promise<WorkflowItem | undefined> {
     if (!this.item) {
       return undefined;
     }
@@ -146,7 +146,7 @@ class SingleItemQueue implements WorkflowQueue {
     return this.item;
   }
 
-  public async markForRetry(eventId: string, retryAtUtc: string, error: string): Promise<WorkflowItem | undefined> {
+  public async markForRetry(eventId: string, retryAtUtc: string, error: string, _now: Date): Promise<WorkflowItem | undefined> {
     if (!this.item || this.item.eventId !== eventId) {
       return undefined;
     }
@@ -157,7 +157,7 @@ class SingleItemQueue implements WorkflowQueue {
     return this.item;
   }
 
-  public async markDeadLetter(eventId: string, reason: string): Promise<WorkflowItem | undefined> {
+  public async markDeadLetter(eventId: string, reason: string, _now: Date): Promise<WorkflowItem | undefined> {
     if (!this.item || this.item.eventId !== eventId) {
       return undefined;
     }
