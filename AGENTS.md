@@ -179,6 +179,20 @@ For V4 work:
 - Do not log secrets, raw tokens, or signing secrets.
 - Document any new configuration keys or environment variables.
 
+## Docker and deployment rules
+- Do not commit real secrets, passwords, tokens, API keys, JWT secrets, provider secrets, or database passwords.
+- Use .env.example files only for documentation.
+- Runtime secrets must stay outside the repository, preferably under /etc/multitenant-saas-api/.
+- Prefer Docker Compose for the local Ubuntu VM deployment.
+- Do not introduce Kubernetes yet.
+- Do not remove existing local scripts unless explicitly requested.
+- Do not change application behavior unless deployment requires it.
+- Keep Dockerfiles multi-stage where possible.
+- The first target is a local Ubuntu 24.04 VM.
+- The future target is a VPS using the same deployment structure.
+- Always report validation commands executed and their result.
+- If a command cannot be executed in the Codex environment, explain why.
+
 ## Done when
 A task is complete only when:
 - the requested behavior is implemented
