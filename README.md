@@ -1,6 +1,6 @@
 # Multi-Tenant SaaS API
 
-ASP.NET Core 8 Web API for a multi-tenant SaaS platform.
+ASP.NET Core 10 Web API for a multi-tenant SaaS platform.
 The .NET API is the current system of record for tenant identity, authorization, subscription state, tenant-scoped operations, and internal billing lifecycle state updates.
 
 ## Project status
@@ -560,7 +560,7 @@ Manual-only remainder (current P0 scope):
 
 ### Prerequisites
 
-- .NET 8 SDK
+- .NET 10 SDK
 - PostgreSQL 16+
 - Redis 7+
 

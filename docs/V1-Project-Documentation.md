@@ -2,7 +2,7 @@
 
 ## 1) Executive Summary
 
-`MultiTenantSaaSApi` is an ASP.NET Core 8 Web API that implements a **Version 1 multi-tenant SaaS backend foundation**.
+`MultiTenantSaaSApi` is an ASP.NET Core 10 Web API that implements a **Version 1 multi-tenant SaaS backend foundation**.
 
 At this stage, the project delivers:
 
@@ -207,7 +207,7 @@ This test baseline validates the main V1 user and tenant flows.
 ## 12) How to Use the App (V1 Walkthrough)
 
 ## Prerequisites
-- .NET 8 SDK
+- .NET 10 SDK
 - PostgreSQL 16
 - Redis 7
 
