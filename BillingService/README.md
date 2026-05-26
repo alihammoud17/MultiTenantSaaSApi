@@ -118,6 +118,16 @@ export RECONCILIATION_INTERVAL_MS=300000
 
 These defaults match the current runbook guidance in `../docs/Billing-Workflow-Runbook.md`.
 
+## Docker (BillingService only)
+
+From the repository root, build the BillingService image with:
+
+```bash
+docker build -f deploy/billing.Dockerfile -t multitenant-billing:local .
+```
+
+The image build is multi-stage and compiles TypeScript in a build stage, then installs production-only dependencies in the runtime stage before starting with `npm run start`.
+
 ## Local development
 
 From the repository root:
