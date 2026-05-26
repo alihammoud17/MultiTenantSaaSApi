@@ -190,6 +190,16 @@ If a failure occurs, resolve it before moving to the next step. The detailed tri
 For script flags/overrides and troubleshooting, see `../docs/Local-Orchestration-Profile.md`.
 
 
+## Container build (BillingService only)
+
+From the repository root, build the BillingService container image with:
+
+```bash
+docker build -f deploy/billing.Dockerfile -t multitenant-billing:local .
+```
+
+The Dockerfile uses a multi-stage Node 22 build, compiles TypeScript in a build stage, and runs the compiled service in a production-only runtime stage on port `3001`.
+
 ## V4 pre-deployment capability map (BillingService scope, April 19, 2026)
 
 | Capability | Status | Demoable locally today | Post-deployment remaining |
