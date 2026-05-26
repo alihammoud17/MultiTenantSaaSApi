@@ -157,6 +157,11 @@ V4 should be considered successful when:
    - preserved design intent while removing stale “pre-start” documentation guidance that no longer matches completed P0 slices.
 
 ## P1 (active)
+0. **BillingService Docker packaging slice** *(Completed May 26, 2026)*
+   - added `deploy/billing.Dockerfile` as a multi-stage Docker build for BillingService-only packaging.
+   - build stage compiles TypeScript with `npm run build`; runtime stage installs production-only dependencies and starts with `npm run start`.
+   - default container port remains `3001` and `NODE_ENV=production` is set without changing BillingService runtime behavior.
+
 
 1. **Entitlement matrix test harness** *(P1.1 foundation + first regression expansion completed April 20, 2026)*
    - added a first reusable .NET unit-test harness slice with:
