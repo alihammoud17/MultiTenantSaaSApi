@@ -592,6 +592,17 @@ Optional verification:
 dotnet user-secrets list
 ```
 
+### Docker env-file templates (no real secrets)
+
+For Docker-based local deployment preparation, example env files are available under `deploy/env-examples/`:
+
+- `deploy/env-examples/db.env.example` -> copy to `/etc/multitenant-saas-api/db.env`
+- `deploy/env-examples/redis.env.example` -> copy to `/etc/multitenant-saas-api/redis.env`
+- `deploy/env-examples/api.env.example` -> copy to `/etc/multitenant-saas-api/api.env`
+- `deploy/env-examples/billing.env.example` -> copy to `/etc/multitenant-saas-api/billing.env`
+
+Each file intentionally uses placeholders only. Replace placeholder values before running locally and keep runtime secrets out of git.
+
 ### Apply database migrations
 
 From repository root:
