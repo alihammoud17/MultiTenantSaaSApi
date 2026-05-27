@@ -162,6 +162,11 @@ V4 should be considered successful when:
    - build stage compiles TypeScript with `npm run build`; runtime stage installs production-only dependencies and starts with `npm run start`.
    - default container port remains `3001` and `NODE_ENV=production` is set without changing BillingService runtime behavior.
 
+0.1 **Docker env example template slice** *(Completed May 27, 2026)*
+   - added non-secret env templates in `deploy/env-examples/` for db, redis, api, and billing runtime files.
+   - aligned documented target runtime paths to `/etc/multitenant-saas-api/*.env` for local Ubuntu VM deployment prep.
+   - preserved code-first scope by documenting placeholders only; no compose orchestration or runtime behavior changes were introduced.
+
 
 1. **Entitlement matrix test harness** *(P1.1 foundation + first regression expansion completed April 20, 2026)*
    - added a first reusable .NET unit-test harness slice with:
