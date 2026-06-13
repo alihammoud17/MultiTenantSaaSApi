@@ -711,3 +711,14 @@ Documentation was reviewed for accuracy against the current implemented baseline
 - `docs/Billing-Workflow-Runbook.md`
 - `docs/Entitlements-Model.md`
 - `docs/V4-Entitlement-Matrix-Test-Design.md`
+
+## Docker Compose deployment (local Ubuntu VM)
+
+A local-VM deployment path is now available with `compose.yml` at the repository root.
+
+Expected runtime routing through NGINX:
+
+- `http://localhost/health` -> .NET API health endpoint
+- `http://localhost/billing/health` -> BillingService health endpoint
+
+The Compose stack uses external environment files from `/etc/multitenant-saas-api/` and does not require committing secrets to this repository.
