@@ -402,3 +402,10 @@ Ongoing documentation expectations for V4:
    - added explicit initial signing-secret rotation initiation endpoint that issues/stores `NextSigningSecret` + issuance timestamp while preserving current delivery signing behavior on the active secret.
    - added integration security coverage for member-authorization denial and cross-tenant endpoint-id mutation denial, plus unit coverage for pending-secret rotation behavior.
    - expanded automated coverage for endpoint-management lifecycle behavior (authorized create/list/update/delete + explicit enable/disable), unauthenticated rejection, and managed-endpoint compatibility with existing outbound delivery event materialization.
+
+0.2 **Local Ubuntu VM Docker Compose deployment slice** *(Completed May 27, 2026)*
+   - added root `compose.yml` for full local VM stack orchestration (`postgres`, `redis`, `api`, `billing`, `nginx`).
+   - wired API image build to `deploy/api.Dockerfile` and BillingService image build to `deploy/billing.Dockerfile`.
+   - configured external runtime env files from `/etc/multitenant-saas-api/*.env` to keep secrets out of repository state.
+   - added persistent volumes for PostgreSQL data and BillingService durable workflow state.
+   - added NGINX host port `80` ingress with local routing for `/health` -> API and `/billing/health` -> BillingService.
