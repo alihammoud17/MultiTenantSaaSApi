@@ -105,6 +105,13 @@ Optional clean-state branch:
 
 If one step fails, fix that step before progressing to downstream checks.
 
+
+## Docker Compose local VM ingress
+
+The Docker Compose deployment path uses `compose.yml` plus `deploy/nginx/default.conf` for HTTP ingress on local port 80. NGINX routes root paths to the API Compose service and `/billing/` paths to BillingService with the prefix stripped before forwarding. This means `/health` is served by the API, while `/billing/health` and `/billing/metrics` are forwarded to BillingService as `/health` and `/metrics`.
+
+The NGINX config intentionally remains local-VM focused: it listens on port 80, uses `server_name _`, does not configure HTTPS, and forwards `Host`, `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto` to each upstream.
+
 ## Runtime/environment overrides
 
 `run.sh` supports:

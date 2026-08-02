@@ -409,3 +409,9 @@ Ongoing documentation expectations for V4:
    - configured external runtime env files from `/etc/multitenant-saas-api/*.env` to keep secrets out of repository state.
    - added persistent volumes for PostgreSQL data and BillingService durable workflow state.
    - added NGINX host port `80` ingress with local routing for `/health` -> API and `/billing/health` -> BillingService.
+
+0.3 **NGINX reverse-proxy config file slice** *(Completed June 13, 2026)*
+   - moved local VM NGINX ingress behavior into `deploy/nginx/default.conf` and mounted it read-only into the Compose `nginx` container.
+   - kept the local setup HTTP-only with a generic `server_name _` for the Ubuntu VM target; no HTTPS or domain-specific hostnames were introduced.
+   - routes `/billing/health` and `/billing/metrics` to BillingService as `/health` and `/metrics` after `/billing/` prefix handling, while routing `/health` and other root paths to the API service.
+   - preserved `Host`, `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto` headers for both upstream services.
