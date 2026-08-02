@@ -20,8 +20,8 @@ BillingService is not the system of record for tenant/business domain data.
 - Do not expose raw provider payloads as internal platform contracts without normalization.
 - Internal events/callbacks sent to the .NET API must be authenticated and traceable.
 
-## Current V3 focus for this service
-The next work in this folder should generally align with:
+## Current engineering focus for this service
+Work in this folder should generally align with:
 - live provider integration
 - webhook verification
 - durable retry/replay-safe processing
@@ -50,7 +50,7 @@ For any non-trivial task:
 
 ## Internal callback / contract rules
 - Use the documented internal billing contract when communicating with the .NET API.
-- If the contract changes, update docs/Internal-Billing-Contract.md.
+- If the contract changes, update docs/contracts.md.
 - Internal callbacks must be authenticated.
 - Internal callbacks must include enough information for:
   - tenant identification
@@ -108,8 +108,8 @@ Document the exact commands in BillingService/README.md if they are missing or c
 Whenever work in this folder is completed, review and update as applicable:
 - BillingService/README.md
 - README.md if platform-level behavior changed
-- docs/Internal-Billing-Contract.md if internal contracts changed
-- docs/V3-Implementation-Backlog.md
+- docs/contracts.md if internal contracts changed
+- docs/architecture.md and docs/operations.md when platform behavior or operating procedures change
 - any new runbook or feature-specific doc under docs/
 
 Do not claim live provider support, reconciliation, invoices, or customer self-service unless the code actually implements them.
