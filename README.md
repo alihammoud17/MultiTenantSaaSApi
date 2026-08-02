@@ -716,9 +716,13 @@ Documentation was reviewed for accuracy against the current implemented baseline
 
 A local-VM deployment path is now available with `compose.yml` at the repository root.
 
-Expected runtime routing through NGINX:
+Expected runtime routing through NGINX is defined in `deploy/nginx/default.conf` and mounted into the `nginx` service by `compose.yml`:
 
-- `http://localhost/health` -> .NET API health endpoint
-- `http://localhost/billing/health` -> BillingService health endpoint
+- `http://localhost/health` -> .NET API health endpoint via the `api` Compose service
+- `http://localhost/billing/health` -> BillingService `/health` endpoint via the `billing` Compose service after stripping the `/billing/` prefix
+- `http://localhost/billing/metrics` -> BillingService `/metrics` endpoint via the `billing` Compose service after stripping the `/billing/` prefix
+- all other non-`/billing/` paths route to the API service
+
+The local NGINX configuration listens on port 80, uses the generic `server_name _`, does not configure HTTPS yet, and preserves `Host`, `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto` proxy headers for both upstream services.
 
 The Compose stack uses external environment files from `/etc/multitenant-saas-api/` and does not require committing secrets to this repository.
