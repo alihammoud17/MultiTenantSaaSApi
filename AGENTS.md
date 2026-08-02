@@ -6,19 +6,19 @@ This repository contains a multi-tenant SaaS platform with:
 - a Node.js BillingService as the provider-facing billing companion service
 
 ## Current project status
-V1, V2, and V3 are complete.
+V1, V2, and V3 are complete. V4 established the current pre-deployment, code-first engineering maturity baseline; historical phase plans are archived under `docs/archive/` and are not active sources of truth.
 
-## Active V4 direction (pre-deployment / code-first)
-V4 is the active execution phase and is focused on pre-deployment engineering maturity.
+## Current direction (pre-deployment / code-first)
+Current work is focused on pre-deployment engineering maturity.
 
-### V4 north star
+### North star
 Build a production-like local platform that is:
 - code-first
 - pre-deployment
 - deterministic to validate locally
 - contract-safe and tenant-safe by default
 
-### V4 priorities
+### Priorities
 - deterministic local bootstrap and smoke validation workflows
 - cross-service contract conformance tests (.NET API <-> BillingService)
 - replay/idempotency fixture-driven billing validation
@@ -91,8 +91,8 @@ Build a production-like local platform that is:
 - If subscription or invoice data is mirrored across services, ownership and synchronization direction must be explicit in code and docs.
 - Avoid ambiguous write ownership.
 
-## V4 execution style
-For any non-trivial V4 task:
+## Execution style
+For any non-trivial task:
 1. Read this file and inspect the current implementation first.
 2. Review the relevant docs before coding.
 3. Plan the smallest safe thin vertical slice first.
@@ -107,8 +107,11 @@ Every completed iteration must update docs as applicable.
 
 Always review and update:
 - README.md
-- docs/V4-Implementation-Backlog.md
-- docs/Internal-Billing-Contract.md if contracts changed
+- docs/architecture.md when system behavior or ownership changed
+- docs/operations.md when configuration or operating procedures changed
+- docs/contracts.md if contracts changed
+- docs/decisions.md when a durable decision or unresolved deployment choice changed
+- docs/CHANGELOG.md for completed milestone-level work
 - BillingService/README.md if BillingService changed
 - any feature-specific docs added under docs/
 
@@ -166,7 +169,7 @@ If schema changes are introduced:
 - Keep local development and deterministic testability in mind.
 
 ## Observability expectations
-For V4 work:
+For pre-deployment work:
 - emit structured logs
 - include correlation or trace identifiers where possible
 - log lifecycle transitions and rejection reasons clearly

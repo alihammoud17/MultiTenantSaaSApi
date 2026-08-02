@@ -1,728 +1,119 @@
 # Multi-Tenant SaaS API
 
-ASP.NET Core 10 Web API for a multi-tenant SaaS platform.
-The .NET API is the current system of record for tenant identity, authorization, subscription state, tenant-scoped operations, and internal billing lifecycle state updates.
+A production-oriented, pre-deployment multi-tenant SaaS platform. The ASP.NET Core API is the system of record for tenants, identity, authorization, business data, entitlements, and internal subscription state. `BillingService` is a Node.js/TypeScript companion for provider-facing billing workflows.
 
-## Project status
+The repository is designed for deterministic local validation. It is **not yet a production-certified deployment**: live provider webhook verification and authenticated BillingService-to-API delivery are not wired end to end, CORS is intentionally permissive, and production telemetry and recovery procedures remain unresolved.
 
-- **V1, V2, and V3 are complete** in the current repository state.
-- **V4 execution is active for pre-deployment code-first maturity** in `docs/V4-Implementation-Backlog.md`.
-- **P0 slices 1-4, the documentation-baseline slice, P1.1 entitlement matrix harness regression iteration, P1.2 developer workflow hardening foundation, P1.3 developer-loop command index, P1.4 replay-safe outbound webhook verification iteration, and P1.5 local observability quality gates are implemented** as of **April 26, 2026**.
-- **AuthController application-layer boundary design for register/login/refresh orchestration extraction is documented (design-only, no implementation yet)** in `docs/V4-AuthController-Application-Boundary-Design.md` as of **April 26, 2026**.
-- **AuthController cleanup slice 1 is implemented** as of **April 27, 2026**: `AuthController` no longer injects `ApplicationDbContext`; register/login/refresh and MFA/step-up data access orchestration now runs through `IAuthOrchestrationService`.
-- **AuthController cleanup slice 2 is implemented** as of **April 27, 2026**: deterministic boundary-focused automated tests now protect register/login/refresh controller contract mapping against the new `IAuthOrchestrationService` boundary, including refresh request-validation short-circuits and MFA challenge response-shape compatibility.
-- **Entitlement evaluator query-batching slice is implemented** as of **May 1, 2026**: evaluator data access now batches subscription, plan-entitlement, and active override reads into one snapshot query per evaluation while preserving existing entitlement resolution semantics and contracts.
-- **Outbound webhook endpoint-management automated coverage expansion is implemented** as of **May 1, 2026**: deterministic tests now cover tenant-authorized endpoint lifecycle management, unauthenticated/cross-tenant denial paths, secret-rotation behavior, and compatibility with existing outbound delivery materialization.
-- The .NET API remains the system of record for tenant identity, authorization, tenant-scoped business state, and internal subscription lifecycle state.
-- `BillingService/` is now documented as a productionized billing companion service with explicit notes on what is implemented vs what remains design-only for post-V3 evolution.
+## Implemented capabilities
 
-## V4 orchestration profile (local-first, pre-deployment)
+- Tenant registration and JWT authentication, refresh-token rotation/revocation, identity verification/reset flows, MFA, and step-up sessions.
+- Tenant-scoped RBAC, administrative user management, audit logs, and explicit tenant resolution and mismatch rejection.
+- Plan, subscription, entitlement, add-on, override, usage-analytics, and tenant billing read/self-service foundations.
+- Signed, versioned, idempotent internal billing callbacks applied by the .NET API.
+- Tenant outbound-webhook endpoint management and file/database-backed delivery, retry, signing, and replay protection.
+- BillingService placeholder webhook ingestion, normalized events, a file-backed retry/dead-letter queue, reconciliation logic, and a tested Stripe gateway slice.
+- Local JSON health and metrics endpoints, structured correlation-aware logs, and security/contract regression tests.
 
-### Local bootstrap/reset/seed path (code-ready setup)
+See [Architecture](docs/architecture.md), [Contracts](docs/contracts.md), and [Decisions](docs/decisions.md) for boundaries and limitations.
+
+## Repository layout
+
+```text
+Presentation/    ASP.NET Core host, controllers, middleware, authorization, health and metrics
+Application/     Authentication, RBAC, billing, entitlements, audit and workflow services
+Domain/          Entities, DTOs, interfaces, responses and authorization constants
+Infrastructure/  EF Core DbContext, mappings and migrations
+Tests/           .NET unit and integration tests
+BillingService/  Node.js/TypeScript provider-facing companion service
+docs/            Durable architecture, operations, contracts, decisions and history
+scripts/         Deterministic local bootstrap, run, smoke and test workflows
+```
+
+## Prerequisites
+
+- .NET 10 SDK
+- Node.js 22 or later and npm
+- PostgreSQL 16 or later
+- Redis 7 or later
+- EF Core CLI at `/tmp/dotnet-tools/dotnet-ef` for the repository scripts, or an equivalent `dotnet ef` installation for manual use
+
+Docker Compose can provide PostgreSQL, Redis, both services, and NGINX on a local Ubuntu VM. It expects runtime env files outside the repository under `/etc/multitenant-saas-api/`; see [Operations](docs/operations.md#docker-compose-local-vm-profile).
+
+## Quick start
 
 From the repository root:
 
 ```bash
 scripts/dev.sh bootstrap
-scripts/dev.sh reset     # optional clean-state reset
-scripts/dev.sh seed      # explicit seed boundary
-```
-
-Or run the underlying scripts directly (`scripts/local/*.sh`) when needed.
-
-What this does today:
-
-1. restores and builds the .NET solution
-2. applies EF Core migrations when `/tmp/dotnet-tools/dotnet-ef` is available
-3. installs BillingService dependencies with `npm ci`
-
-`reset.sh` standardizes local cleanup + DB reset behavior:
-
-1. removes `.local-api.log` / `.local-billing.log` and BillingService durable workflow state file
-2. drops the local DB with `dotnet-ef database drop --force` (when `/tmp/dotnet-tools/dotnet-ef` exists)
-3. reapplies migrations
-
-`seed.sh` standardizes seed behavior for the current V4 stage:
-
-1. reapplies EF migrations so model-managed seed data stays current
-2. prints the explicit manual boundary for scenario/demo tenant seed data
-
-### Recommended command order (standardized P1.2 workflow)
-
-Use this exact order for the most deterministic local validation loop:
-
-```bash
-# shell A
-scripts/dev.sh bootstrap
 scripts/dev.sh seed
 scripts/dev.sh run
+```
 
-# shell B
+In another shell:
+
+```bash
 scripts/dev.sh smoke
 scripts/dev.sh test
 ```
 
-`scripts/dev.sh reset` is optional and should be used before `seed` when you need a clean-state local reset.
+Use `scripts/dev.sh reset` before `seed` when a clean local database and workflow state are required. Run `scripts/dev.sh help` for the command index. The smoke check proves local endpoint reachability and placeholder webhook acceptance; it does not prove a live provider-to-API flow.
 
-### Local smoke/test path (code-ready runtime validation)
+Detailed setup, migration, configuration, direct test commands, troubleshooting, Compose ingress, and workflow recovery are in [Operations](docs/operations.md).
 
-Run in this order from the repository root:
+## Configuration summary
 
-```bash
-# shell A
-scripts/dev.sh run
+The API requires a PostgreSQL connection, Redis connection, strong JWT secret, and internal billing shared secret. ASP.NET Core environment-variable names use double underscores:
 
-# shell B
-scripts/dev.sh smoke
-scripts/dev.sh test
-```
+- `ConnectionStrings__DefaultConnection`
+- `Redis__ConnectionString`
+- `Jwt__Secret`, `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpirationMinutes`
+- `BillingIntegration__SharedSecret`, `BillingIntegration__AllowedClockSkewMinutes`
 
-Smoke currently validates only local runtime readiness for the orchestration profile:
+BillingService variables include `BILLING_PROVIDER`, `WEBHOOK_SIGNING_SECRET`, `DOTNET_CALLBACK_BASE_URL`, `STRIPE_API_KEY`, `STRIPE_API_BASE_URL`, and the `WORKFLOW_*` and `RECONCILIATION_INTERVAL_MS` controls. Configuration of these values does not make an unwired provider or callback path live. See the complete [configuration reference](docs/operations.md#configuration-reference) and [BillingService README](BillingService/README.md).
 
-- .NET API health endpoint responsiveness
-- .NET API metrics endpoint JSON availability
-- BillingService health endpoint responsiveness
-- BillingService metrics endpoint JSON availability
-- BillingService placeholder webhook endpoint acceptance
+Never commit real secrets. Repository env examples contain placeholders only.
 
-`test.sh` standardizes full local verification across both services:
+## Endpoints and API discovery
 
-- required .NET validation commands (`dotnet --info`, `dotnet-ef --version`, restore/build/test)
-- BillingService dependency install, build, and test execution
+- Public API routes use URL-segment versioning under `/api/v1/...`.
+- Internal billing callback: `POST /api/internal/billing/subscription-events`.
+- API diagnostics: `GET /health` and `GET /metrics`.
+- BillingService diagnostics: `GET /health` and `GET /metrics`.
+- BillingService provider entry point: `POST /webhooks/provider` (placeholder runtime behavior).
+- Swagger UI is available in the Development and Testing environments.
 
-For detailed script behavior, environment overrides, and troubleshooting, use `docs/Local-Orchestration-Profile.md`.
-Use `scripts/dev.sh help` to print the command index at any time.
-
-### Common failure triage (quick index)
-
-If a step fails, stop and fix that step before continuing. Triage in this order:
-
-1. **Dependency restore/install failures** (`dotnet restore`, `npm ci`) -> rerun failing command directly, then rerun wrapper.
-2. **EF tooling/migration failures** (`dotnet-ef`) -> run printed manual `dotnet ef ...` fallback commands, then rerun.
-3. **Runtime startup failures** (`scripts/dev.sh run`) -> inspect `.local-api.log` / `.local-billing.log`, fix first startup exception.
-4. **Smoke failures** -> ensure services are still running and `/health` + `/metrics` endpoints are reachable on configured URLs.
-5. **Test failures** (`scripts/dev.sh test`) -> rerun exact failing step directly (`dotnet test`, `npm run build`, or `npm test`) and then rerun full script.
-
-### Code-ready local validation vs production readiness
-
-**Code-ready local validation (implemented now):**
-
-- deterministic bootstrap and two-shell run/smoke workflow
-- repeatable local service startup with captured logs
-- basic smoke assertions over API/BillingService health + metrics and placeholder webhook acceptance
-
-**Production readiness (not claimed in this iteration):**
-
-- verified live provider webhook authenticity and end-to-end provider -> BillingService -> .NET callback flow
-- deployment-proven telemetry exporters, dashboards, alerts, and SLO enforcement
-- production operations hardening (incident automation, key-rotation processes, and environment-level DR exercises)
-
-## V4 pre-deployment capability map (P0 baseline, April 19, 2026)
-
-| Capability track | Pre-deployment status | Demoable locally today | Post-deployment remaining |
-| --- | --- | --- | --- |
-| Deterministic platform orchestration | Implemented | `scripts/local/bootstrap.sh`, `scripts/local/run.sh`, and `scripts/local/smoke.sh` demonstrate repeatable setup + runtime smoke flow. | Environment-specific deployment bootstrap/runbooks and production incident automation. |
-| .NET internal billing callback contract safety | Implemented | Signed callback validation, version gates, required-field checks, tenant/subscription mapping validation, and duplicate-event idempotency can be validated via integration tests. | Live provider-origin event chain verification under real secrets and rotated key operations. |
-| Cross-service contract conformance | Implemented | .NET consumer contract tests + BillingService producer contract tests prove agreed payload/version behavior in local CI/test runs. | Ongoing version-compatibility rollout policy across deployed service versions. |
-| Billing replay/idempotency fixture validation | Implemented (pre-live fixture slice) | BillingService fixture-driven replay tests validate duplicate delivery safety, out-of-order processing behavior, stale timestamp handling behavior, and invalid-signature rejection pre-enqueue. | Production replay/forensics workflows against real provider delivery retries and incident datasets. |
-| Tenant-isolation invariant coverage | Implemented | Integration tests assert cross-tenant rejection across admin, analytics, audit, billing read, and internal billing callback surfaces. | Continuous production verification with runtime telemetry alerts for isolation regressions. |
-| Entitlement regression matrix harness (P1.1) | Implemented (foundation + first regression expansion) | .NET unit matrix tests now cover boolean/integer precedence, add-on increment merge behavior, override allow/deny precedence, endpoint-gated billing/admin/analytics entitlement keys, and representative lifecycle combinations (`Active`, `GracePeriod`, `Canceled`, `Expired`). | Broaden matrix dimensions (additional add-on merge modes and deeper endpoint combinations) in later P1 slices. |
-| Provider webhook verification + callback delivery wiring | Partial / pre-live | Placeholder webhook acceptance and scaffolded provider boundaries are locally demoable. | Real provider signature verification and fully wired provider -> BillingService -> .NET callback flow in deployed environments. |
-| Observability and operations hardening | Partial | Local health/metrics and structured logs are demoable for both services. | Deployment-proven exporters, dashboards, alerts, SLO/error-budget operation, and DR exercises. |
-
-### What is demoable locally today (P0-complete baseline)
-
-- full local orchestration bootstrap/run/smoke path for both services
-- cross-service callback contract conformance checks in automated tests
-- fixture-driven billing replay/idempotency validation scenarios in BillingService tests
-- tenant-isolation invariant negatives across sensitive .NET API surfaces
-- health + metrics + structured-log visibility suitable for deterministic local demonstrations
-
-### What remains explicitly post-deployment
-
-- live provider webhook signature verification in active runtime flows with production secrets
-- end-to-end provider event delivery into authenticated .NET callbacks in deployed environments
-- production-grade observability/exporter/alert/SLO maturity proven under real workloads
-- operator automation for key rotation, incident response, and DR exercises
-
-## Versioning
-
-- Public API routes use URL-segment versioning (`/api/v1/...`).
-- The first production public API version is **v1**.
-- API major versions should change only for breaking contract changes.
-- Application release versions follow SemVer (`1.0.0`, `1.0.1`, `1.1.0`, `2.0.0`).
-- Branches are workflow-only (`master`, `feature/*`, `release/*`, `hotfix/*`) and do not control runtime API version selection.
-- Production deployments should come from SemVer release tags.
-
-## Feature matrix (current capabilities)
-
-| Capability area | Current status (April 19, 2026) | Notes |
-| --- | --- | --- |
-| Multi-tenant auth + RBAC + audit | Implemented | Core tenant isolation, auth lifecycle, RBAC, and tenant audit surfaces are in production-ready shape. |
-| Plan catalog + lifecycle state | Implemented | Plan upgrades and subscription lifecycle state are persisted in the .NET API. |
-| Tenant billing self-service foundation | Implemented (foundation) | Tenant billing status/invoice reads and cancel/reactivate actions exist on internal state. |
-| Internal billing callback contract (.NET) | Implemented | Signed callback ingestion, idempotency inbox, and lifecycle application are live in the API. |
-| BillingService durable workflow scaffold | Implemented (pre-live) | Durable retry/dead-letter/reconciliation scaffolding exists, but live provider callback flow is still pending. |
-| Provider webhook verification + live provider sync | Not implemented yet | BillingService remains pre-live for verified external webhook ingestion. |
-| Entitlements model + feature gating | Implemented (progressive rollout) | Additive entitlement schema + seeded definitions/mappings are in place, with evaluator/enforcer-backed gates active for billing invoice reads, billing self-service mutations, plan upgrades, advanced admin user management, and tenant audit-log analytics access. |
-| Usage analytics + outbound webhooks | Partially implemented (analytics + outbound delivery foundation) | Tenant-scoped usage aggregation/query service and a first outbound webhook foundation (signed payloads, retries, delivery status, idempotency key headers, replay-safe event dedupe, and deterministic harness coverage for duplicate-publish suppression + retry recovery/terminal outcomes) are implemented. |
-
-## Repository overview
-
-This repository currently contains:
-
-- a production-focused .NET API that handles tenant registration, authentication, authorization, plan enforcement, audit logging, admin operations, observability basics, and internal billing callbacks
-- a Node.js `BillingService/` companion service scaffold with durable workflow orchestration, drift-aware reconciliation scaffolding, and an initial Stripe provider API gateway slice for tenant checkout/portal/invoice-sync calls
-
-## Architecture summary
-
-- **Presentation** (`Presentation/`): API host, middleware, auth wiring, observability, authorization policies, and controllers.
-- **Application** (`Application/`): service-layer implementations for JWT issuance, refresh tokens, RBAC authorization, audit logging, rate limiting, internal signature validation, and billing callback processing.
-- **Domain** (`Domain/`): entities, DTOs, contracts, interfaces, outputs, and authorization constants.
-- **Infrastructure** (`Infrastructure/`): EF Core `DbContext`, schema mappings, tenant context persistence, and migrations.
-- **Tests** (`Tests/`): integration and unit test coverage for auth, admin, audit, RBAC, observability, and billing callback flows.
-- **BillingService** (`BillingService/`): provider-facing billing scaffold with placeholder webhook handling, normalized event types, durable file-backed workflow queueing, retry/backoff, dead-letter handling, and reconciliation summary skeletons.
-
-## Implemented platform scope (V1-V3 baseline)
-
-### Multi-tenant foundation
-
-- Tenant registration with automatic tenant, admin user, and starter subscription creation.
-- Tenant-aware request resolution using:
-  - subdomain lookup
-  - `X-Tenant-ID` header fallback
-  - JWT `tenant_id` claim fallback
-- Active-tenant enforcement that blocks requests for missing, unknown, or suspended tenants.
-- Request-scoped tenant-resolution cache foundation now stores the validated active `Tenant` entity once during middleware resolution for per-request reuse (no process-wide caching).
-- Request-scoped tenant access context now preloads and reuses the tenant plan API-call limit in `RateLimitMiddleware` so `RateLimitService` can avoid a redundant subscription+plan query on the same request path while retaining a safe fallback query when preload is unavailable.
-- Tenant-scoped persistence for users, subscriptions, RBAC assignments, refresh tokens, and audit logs.
-
-### Authentication and token lifecycle
-
-- JWT Bearer authentication for API access.
-- Login and tenant registration endpoints.
-- Request-level brute-force protection for unauthenticated auth traffic is enforced by ASP.NET Core policy `UnauthenticatedAuthEndpoints` on `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `POST /api/v1/auth/refresh`.
-- This auth-endpoint protection is separate from the existing plan-based authenticated throttling model (tenant/plan Redis-backed middleware), so login/registration abuse controls do not depend on an authenticated tenant context.
-- Integration coverage now verifies deterministic brute-force protection behavior for unauthenticated auth endpoints: allowed requests continue normal endpoint behavior until the configured permit budget is exhausted, then `429 Too Many Requests` is enforced for repeated register/login attempts and cross-endpoint budget exhaustion (login -> refresh).
-- Identity lifecycle foundation endpoints for invite issuance/acceptance, verification requests/completions, and password-reset requests/completions.
-- Dedicated unit suites now cover identity lifecycle token semantics and MFA primitives (`Tests/UnitTests/IdentityLifecycleServiceTests.cs`, `Tests/UnitTests/MfaServiceTests.cs`), while auth endpoint contract behavior remains guarded by integration/boundary tests.
-- Refresh token issuance on register/login.
-- Refresh token rotation on `POST /api/v1/auth/refresh`.
-- Session inventory endpoint at `GET /api/v1/auth/sessions`.
-- Session revoke-all endpoint at `POST /api/v1/auth/sessions/revoke-all`.
-- MFA enrollment and verification endpoints for authenticated users.
-- MFA step-up endpoint for admin-sensitive actions when MFA is enrolled.
-- Refresh token revocation via:
-  - `POST /api/v1/auth/logout`
-  - `POST /api/v1/auth/revoke`
-- Tenant-aware refresh token validation that prevents cross-tenant token reuse.
-- Password hashing with BCrypt.
-
-### Authorization and tenant administration
-
-- Policy-based RBAC authorization built on permissions.
-- Legacy `ADMIN` compatibility that still grants full access.
-- Tenant admin endpoints for:
-  - reading current tenant details
-  - listing tenant users
-  - adding tenant users
-  - changing a tenant user's role / RBAC assignment
-  - deleting tenant users
-  - reading tenant audit logs
-- Dedicated tenant audit log endpoint at `GET /api/v1/tenant/audit-logs`.
-- Dedicated tenant usage analytics foundation endpoint at `GET /api/v1/tenant/analytics/usage` (tenant-scoped aggregation from audit events).
-
-### Plans and subscription management
-
-- Public plan catalog endpoint at `GET /api/v1/plans`.
-- RBAC-protected plan upgrade endpoint at `POST /api/v1/plans/upgrade`.
-- Subscription records that track:
-  - current plan
-  - active / grace-period / canceled / expired lifecycle state
-  - current billing period boundaries
-  - scheduled downgrade target and effective date
-  - cancellation timestamp
-  - grace-period expiration timestamp
-
-### Plan-based usage enforcement
-
-- Per-tenant API usage limiting based on the current subscription plan.
-- Rate-limit response headers:
-  - `X-RateLimit-Limit`
-  - `X-RateLimit-Remaining`
-  - `X-RateLimit-Reset`
-- Redis-backed monthly request counters.
-- Safe fallback behavior that logs Redis connectivity problems and allows requests instead of failing the API outright.
-
-### Audit logging
-
-- Structured tenant-scoped audit log persistence.
-- Audit records include tenant id, actor id, action, entity type/id, change payload, timestamp, and source IP.
-- Audit events are emitted for key flows such as:
-  - tenant registration
-  - login
-  - refresh token usage
-  - logout / token revocation
-  - plan changes
-  - tenant user administration
-
-### Internal billing callback support already implemented in the .NET API
-
-The external billing provider integration is **not** implemented yet, but the .NET API already supports authenticated internal subscription-event callbacks from a future billing service.
-
-Implemented callback capabilities:
-
-- Authenticated internal endpoint at `POST /api/internal/billing/subscription-events`.
-- Internal billing callback requests bypass tenant-resolution and tenant plan rate-limiting middleware; the callback pipeline validates tenant/subscription mapping from the signed payload instead.
-- HMAC SHA-256 signature validation using:
-  - `X-Billing-Timestamp`
-  - `X-Billing-Signature`
-- Clock-skew protection for callback timestamps.
-- Explicit internal billing contract version validation.
-- Safe tenant/subscription mapping validation before applying an event.
-- Event idempotency using a persisted billing inbox table keyed by event id.
-- Lifecycle handling for internal events including:
-  - `subscription.activated`
-  - `subscription.renewed`
-  - `subscription.plan_changed`
-  - `subscription.downgrade_scheduled`
-  - `subscription.canceled`
-  - `subscription.grace_period_started`
-  - `invoice.payment_failed`
-  - `subscription.grace_period_expired`
-  - `subscription.expired`
-- Subscription lifecycle updates that keep scheduled downgrades, grace periods, cancellations, and plan changes explicit and traceable.
-
-### Observability and diagnostics
-
-- Swagger UI in Development.
-- JSON health endpoint at `GET /health` with per-check details.
-- JSON metrics snapshot at `GET /metrics`.
-- Structured request completion logging with correlation and trace identifiers.
-- `X-Correlation-ID` request/response propagation.
-- Per-request `ActivitySource` instrumentation (`multi-tenant-saas-api`) for future tracing exporters.
-- Database connectivity health check.
-- Local observability guarantees for V4 are now explicitly captured in `docs/V4-Local-Observability-Contract.md` (endpoint availability, structured safe fields, correlation/trace continuity boundaries, failure diagnosability expectations, and forbidden sensitive-data logging/assertion rules).
-- Deterministic P1.5 quality-gate tests now enforce representative correlation continuity and safe structured diagnostic fields across internal billing callback processing, outbound webhook retry state, BillingService request lifecycle logging, and BillingService workflow dead-letter diagnostics.
-- P1.5 failure-path observability tests now also gate negative-path diagnostics/sanitization across transient retry scheduling, terminal dead-letter/retry exhaustion state, and webhook rejection reasons so failures stay diagnosable without exposing auth/header/token/secret values.
-
-P1.5 observability quality-gate status (April 26, 2026):
-
-- **Locally enforced now**: deterministic `/health` + `/metrics` JSON reachability gates, representative correlation continuity checks, representative structured diagnostic field gates, and sensitive-data minimization checks across covered failure paths.
-- **Partially implemented surfaces**: structured-field and forbidden-field coverage is representative on high-value paths, not yet exhaustive across every request/error path in both services.
-- **Future production telemetry (out of scope in P1.5)**: OTEL exporters, dashboard/alert rollout, SLO/error-budget governance, and deployed runbook/paging validation.
-
-### Automated testing coverage
-
-The repository includes automated tests covering:
-
-- health and metrics endpoints
-- tenant registration and login
-- refresh token rotation, logout, and revocation flows
-- tenant suspension enforcement and tenant-resolution precedence safeguards
-- tenant-scoped audit log retrieval
-- tenant admin user-management behavior
-- rate-limit header behavior plus explicit rate-limit rejection responses
-- RBAC permission evaluation and authorization handler behavior
-- internal billing callback validation (including contract-version rejection), lifecycle handling, cross-tenant rejection, and idempotency/replay protection
-- P0 cross-service contract conformance coverage for BillingService -> .NET callback behavior (valid signed payloads, required-field failures, invalid version/signature, tenant/subscription mismatch, and duplicate-event idempotency expectations)
-- BillingService callback producer contract coverage to assert payload schema/version plus `providerEventId` fallback-to-`eventId` behavior when provider ids are absent
-- deeper security-focused scenarios for authentication negatives, authorization denials, tenant-isolation tampering, input validation abuse cases, and internal billing signature hardening
-- identity-hardening edge cases for verification/password-reset token replay resistance and MFA step-up purpose binding on admin-sensitive actions
-- tenant billing visibility and self-service action behavior, including tenant-scoped subscription/invoice reads, cancel/reactivate state transitions, and clean invalid-state error handling
-- entitlement matrix harness regression coverage for billing/admin/analytics endpoint-gated entitlement keys across lower-plan/no-add-on negatives, add-on grants, override allow/deny precedence, and representative non-active subscription lifecycle combinations (allow + deny paths)
-- entitlement boundary security checks covering unauthorized access and tenant-scoped entitlement isolation on gated billing surfaces
-
-## V3 completion summary
-
-V3 is now closed as complete. The repository should no longer be interpreted as "V3 planned next" or "under active V3 development."
-
-### What V3 completed
-
-- productionized internal billing callback lifecycle handling in the .NET API with authenticated contract validation and idempotent application semantics
-- productionized BillingService workflow durability foundations including persistent queue/retry/dead-letter state and replay-safe deduplication
-- added tenant-facing billing self-service foundations against internal subscription state (`status`, `invoices`, `cancel`, `reactivate`)
-- delivered entitlements model foundations with progressive enforcement on selected billing/admin/analytics surfaces
-- delivered identity/security hardening slices (invite/verification/reset lifecycle foundations, session inventory/revoke-all, MFA enrollment + step-up)
-- delivered usage analytics foundation endpoints and initial outbound webhook delivery foundation with signed payload semantics
-- expanded docs/runbooks and automated coverage around tenant safety, replay/idempotency handling, and operational diagnostics
-
-### Implemented vs design-only status
-
-**Implemented in-repo (V3 complete):**
-
-- BillingService durable workflow runtime primitives and reconciliation scaffolding
-- .NET internal billing callback ingestion, signature checks, contract versioning, and event-id inbox protection
-- tenant billing self-service foundation endpoints on internal billing state
-- entitlement schema/seeding/evaluator/enforcer baseline with progressive rollout
-- identity lifecycle hardening + MFA step-up baseline
-- usage analytics foundation + outbound webhook delivery foundation
-
-**Design-only / post-V3 planning artifacts (not implemented as runtime behavior):**
-
-- `docs/V3-Observability-and-Operations-Design.md` remains a design artifact for future exporter/dashboard/alert maturation
-- any future provider-expansion work beyond the currently implemented provider-connected scope should be tracked as post-V3 roadmap work, not open V3 scope
-
-## Operational notes (durable workflow iteration)
-
-The current durable workflow iteration adds operational primitives in `BillingService` that are designed to survive restarts and reduce duplicate processing risk while live provider integration is still pending:
-
-- file-backed workflow state persistence for queued work, retry metadata, and dead-lettered events
-- replay-safe deduplication keyed by normalized `eventId`
-- retry with bounded exponential backoff and max-attempt dead-lettering
-- reconciliation comparison job scaffolding that can detect provider/internal drift once live readers are configured
-
-These capabilities improve service resilience, but they are still **pre-live** because webhook verification, provider SDK calls, and authenticated callback delivery to the .NET API are not yet wired end-to-end.
-
-For operational procedures (startup checks, state-file hygiene, replay handling, dead-letter triage, and reconciliation troubleshooting), use:
-
-- `docs/Billing-Workflow-Runbook.md`
-- `docs/Entitlements-Model.md`
-- `docs/V4-Entitlement-Matrix-Test-Design.md`
-- `docs/Identity-and-Security.md`
-- `docs/Usage-Analytics.md`
-- `docs/Outbound-Webhooks.md`
-- `docs/V3-Observability-and-Operations-Design.md` (design-only plan for exporters, dashboards, and alerts)
-
-## API surface summary
-
-### Public/auth endpoints
-
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
-- `POST /api/v1/auth/revoke` (authenticated + RBAC-protected)
-- `GET /api/v1/auth/sessions` (authenticated)
-- `POST /api/v1/auth/sessions/revoke-all` (authenticated)
-- `POST /api/v1/auth/invites` (authenticated + RBAC-protected)
-- `POST /api/v1/auth/invites/accept`
-- `POST /api/v1/auth/verification/request`
-- `POST /api/v1/auth/verification/complete`
-- `POST /api/v1/auth/password-reset/request`
-- `POST /api/v1/auth/password-reset/complete`
-- `POST /api/v1/auth/mfa/enroll/initiate` (authenticated)
-- `POST /api/v1/auth/mfa/enroll/verify` (authenticated)
-- `POST /api/v1/auth/mfa/step-up` (authenticated)
-- `GET /api/v1/plans`
-- `GET /health`
-- `GET /metrics`
-
-### Tenant/admin endpoints
-
-Under `api/admin/tenant`:
-
-- `GET /api/v1/admin/tenant`
-- `GET /api/v1/admin/tenant/users`
-- `POST /api/v1/admin/tenant/users`
-- `PUT /api/v1/admin/tenant/users/{userId}/role`
-- `DELETE /api/v1/admin/tenant/users/{userId}`
-- `GET /api/v1/admin/tenant/audit-logs`
-
-Additional tenant-scoped endpoint:
-
-- `GET /api/v1/tenant/audit-logs`
-- `GET /api/v1/tenant/analytics/usage`
-- `GET /api/v1/billing/status`
-- `GET /api/v1/billing/invoices` (foundation feed sourced from tenant-scoped internal invoice billing events)
-- `POST /api/v1/billing/subscription/cancel`
-- `POST /api/v1/billing/subscription/reactivate`
-
-### Internal service endpoint
-
-- `POST /api/internal/billing/subscription-events`
-
-### Outbound tenant webhooks (foundation)
-
-The .NET API includes a first outbound webhook infrastructure slice for tenant events:
-
-- versioned envelope contract (`2026-04-13`) containing `eventId`, `tenantId`, `eventType`, `correlationId`, and `occurredAtUtc`
-- endpoint-specific HMAC-SHA256 request signing (`X-Tenant-Webhook-Signature`) with timestamp and delivery id binding
-- persisted delivery state with retry scheduling and terminal status tracking (including attempt/status-code/error/timestamp diagnostic metadata)
-- replay/idempotency support via `SourceEventKey` dedupe at publish time and stable `X-Tenant-Webhook-Idempotency-Key` per delivery
-- tenant-safe endpoint management API is now available for `create/list/update/delete`, explicit enable/disable, and explicit signing-secret rotation initiation (`next` secret issuance) without changing current delivery signing semantics
-- endpoint-management and secret-rotation-init operational notes are documented in `docs/Outbound-Webhook-Endpoint-Management-Runbook.md`
-
-Automated verification coverage now explicitly includes:
-
-- duplicate publish replay suppression by `SourceEventKey` (single event + single delivery row for duplicates)
-- retry scheduling and deterministic recovery after transient downstream failures
-- deterministic terminal failure (`Exhausted`) behavior after bounded retries
-- retry-attempt metadata continuity (`LastError`, status transitions, attempt timestamps, response status persistence)
-- stable per-delivery idempotency and delivery headers across retries, with per-attempt timestamp/signature regeneration
-- envelope-level continuity for currently implemented correlation fields (`correlationId`, `eventId`, `tenantId`) across retry attempts
-
-See `docs/Outbound-Webhook-Contract.md` for contract and verification details.
-Implementation and rollout notes for this iteration are in `docs/Outbound-Webhooks.md`.
-
-### Tenant usage analytics (foundation)
-
-The .NET API includes a tenant-safe usage analytics foundation sourced from tenant-scoped audit events:
-
-- endpoint: `GET /api/v1/tenant/analytics/usage`
-- bounded lookback window using `days` query clamping for safe query cost
-- optional action filtering and top-action aggregation to support product and operations reads
-- RBAC + tenant-context enforcement aligned with existing tenant/admin safeguards
-
-Implementation and follow-up notes for this iteration are in `docs/Usage-Analytics.md`.
-
-## Local deterministic orchestration profile (P0)
-
-For a repeatable local V4 flow, use the repo-level scripts under `scripts/local/`.
-
-### Scripted sequence (exact order)
-
-From repository root:
-
-```bash
-scripts/dev.sh bootstrap
-scripts/dev.sh seed
-scripts/dev.sh run
-# in a second shell while run.sh is active:
-scripts/dev.sh smoke
-scripts/dev.sh test
-```
-
-What each script does:
-
-- `dev.sh`
-  - top-level command index/dispatcher for common local developer-loop flows
-  - delegates directly to `scripts/local/*.sh` without hiding behavior
-  - keeps all underlying scripts directly usable
-- `bootstrap.sh`
-  - runs `dotnet restore`
-  - runs `dotnet build --no-restore`
-  - applies EF migrations using `/tmp/dotnet-tools/dotnet-ef` when available
-  - runs `npm ci` in `BillingService`
-- `reset.sh`
-  - removes local logs and BillingService durable workflow state file
-  - drops and recreates the local DB through `dotnet-ef` when available
-  - prints explicit manual DB reset commands when `dotnet-ef` is unavailable
-- `seed.sh`
-  - reapplies EF migrations to keep model-managed seed data current
-  - explicitly documents the remaining manual boundary for scenario/demo tenant seeding
-- `run.sh`
-  - starts the API on `http://localhost:5000`
-  - starts BillingService on `http://localhost:3001`
-  - writes logs to `.local-api.log` and `.local-billing.log`
-- `smoke.sh`
-  - verifies `GET /health` on API and BillingService
-  - verifies `GET /metrics` returns JSON on API and BillingService
-  - verifies BillingService accepts `POST /webhooks/provider`
-- `test.sh`
-  - runs the full required .NET validation sequence
-  - runs BillingService install/build/test checks
-
-Expected behavior:
-
-- `bootstrap.sh` exits non-zero if restore/build/install fail.
-- `run.sh` keeps both services running until `Ctrl+C`, then stops both.
-- `smoke.sh` exits non-zero if any health/webhook check fails.
-- `test.sh` exits non-zero if any .NET or BillingService validation command fails.
-
-Typical local runtime expectations on a warm machine (non-binding, hardware-dependent):
-
-- `bootstrap.sh`: ~2-6 minutes (restore/build/install work dominates)
-- `reset.sh`: ~30-90 seconds (tooling + DB size dependent)
-- `seed.sh`: ~10-30 seconds when migrations are already current
-- `smoke.sh`: under 10 seconds after both services are healthy
-- `test.sh`: ~3-10 minutes depending on test cache/warmth
-
-### Runtime and validation order (failure-triage reference)
-
-When troubleshooting, keep this exact execution order so failures are isolated to one stage:
-
-1. `scripts/dev.sh bootstrap` (dependency restore/build/install + migration apply when tool exists)
-2. `scripts/dev.sh seed` (migration/seed refresh + manual seed boundary reminder)
-3. `scripts/dev.sh run` (start API and BillingService)
-4. `scripts/dev.sh smoke` in a second shell (runtime health + placeholder webhook acceptance)
-5. `scripts/dev.sh test` (full validation sequence for .NET + BillingService)
-
-If a step fails, fix that step first and rerun it before continuing to later steps.
-
-### Local failure triage (repo-specific)
-
-| Failure type | Where it fails | Immediate next steps |
-| --- | --- | --- |
-| Dependency install failure | `bootstrap.sh` or `test.sh` during `dotnet restore` / `npm ci` | Re-run the failing command directly to surface full output (`dotnet restore` from repo root or `cd BillingService && npm ci`). Confirm SDK/runtime prerequisites from this README are installed locally and retry bootstrap/test after the direct command succeeds. |
-| Migration/tooling failure | `bootstrap.sh`, `reset.sh`, or `seed.sh` at `/tmp/dotnet-tools/dotnet-ef` steps | If the tool is missing, run the printed manual command: `dotnet ef database update --project Infrastructure --startup-project Presentation` (or reset pair from `reset.sh`). If the tool exists but fails, validate DB connection secrets in `Presentation` and retry the exact EF command shown in script output. |
-| Service start failure | `run.sh` exits quickly or one PID terminates | Inspect `.local-api.log` and `.local-billing.log` immediately. Fix the first startup error in the corresponding service, then rerun `scripts/dev.sh run` before any smoke/test step. |
-| Port/config mismatch | `run.sh` can start but `smoke.sh` health checks fail or hit wrong endpoints | Ensure `API_URL` and `BILLING_URL` values match between `run.sh` and `smoke.sh` invocations. If overriding ports, export both variables in each shell before running scripts. |
-| Smoke-test failure | `smoke.sh` fails `GET /health` or webhook POST | Confirm `run.sh` is still active, then check `.local-api.log` and `.local-billing.log` for readiness/startup exceptions. Re-run `smoke.sh` only after both services are healthy and listening on expected URLs. |
-| Test-suite failure | `test.sh` fails any numbered step | Use the step number printed by `test.sh` to rerun only the failing command directly (`dotnet test --no-build --verbosity normal`, `npm run build`, or `npm test`). Fix forward at that layer, then rerun full `scripts/dev.sh test` to ensure sequence-level pass. |
-
-Manual-only remainder (current P0 scope):
-
-- This smoke path validates service readiness and placeholder webhook acceptance only.
-- End-to-end provider webhook verification and authenticated BillingService -> .NET callback flow remain manual/post-P0 because live provider wiring is still pre-live.
-
-## Local setup and run
-
-### Prerequisites
-
-- .NET 10 SDK
-- PostgreSQL 16+
-- Redis 7+
-
-### Configure secrets
-
-Run from `Presentation/`:
-
-```bash
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Database=saasapi;Username=postgres;Password=YOUR_PASSWORD"
-dotnet user-secrets set "Redis:ConnectionString" "localhost:6379"
-dotnet user-secrets set "Jwt:Secret" "YOUR_256_BIT_SECRET"
-dotnet user-secrets set "Jwt:Issuer" "MultiTenantSaasApi"
-dotnet user-secrets set "Jwt:Audience" "MultiTenantSaasApi"
-dotnet user-secrets set "Jwt:ExpirationMinutes" "60"
-dotnet user-secrets set "BillingIntegration:SharedSecret" "YOUR_INTERNAL_BILLING_SHARED_SECRET"
-dotnet user-secrets set "BillingIntegration:AllowedClockSkewMinutes" "5"
-```
-
-Identity hardening iteration notes:
-
-- No additional mandatory runtime secrets were introduced for invites, verification/reset tokens, MFA enrollment, or step-up sessions in this iteration.
-- Existing JWT settings (`Jwt:Secret`, issuer/audience, expiration) remain required and security-sensitive.
-- `IIdentityNotificationService` is still a logging placeholder and does **not** require provider credentials yet. When a live mail provider is wired, add the provider API key/secret in user-secrets or environment configuration (do not hardcode).
-- For identity/security behavior and current follow-up items, see `docs/Identity-and-Security.md`.
-
-Optional verification:
-
-```bash
-dotnet user-secrets list
-```
-
-### Docker env-file templates (no real secrets)
-
-For Docker-based local deployment preparation, example env files are available under `deploy/env-examples/`:
-
-- `deploy/env-examples/db.env.example` -> copy to `/etc/multitenant-saas-api/db.env`
-- `deploy/env-examples/redis.env.example` -> copy to `/etc/multitenant-saas-api/redis.env`
-- `deploy/env-examples/api.env.example` -> copy to `/etc/multitenant-saas-api/api.env`
-- `deploy/env-examples/billing.env.example` -> copy to `/etc/multitenant-saas-api/billing.env`
-
-Each file intentionally uses placeholders only. Replace placeholder values before running locally and keep runtime secrets out of git.
-
-### Apply database migrations
-
-From repository root:
-
-```bash
-dotnet ef database update --project Infrastructure --startup-project Presentation
-```
-
-Entitlements iteration notes:
-
-- The entitlements model and rollout contract are documented in `docs/Entitlements-Model.md`.
-- Entitlements require the latest migration chain that includes:
-  - `20260409090000_AddEntitlementsFoundation`
-  - `20260409185041_AddProgressiveEntitlementGates`
-- Re-run database update after pulling changes to ensure seeded entitlement keys/plan mappings are present before local runs/tests.
-
-### Run the API
-
-From repository root:
-
-```bash
-dotnet run --project Presentation
-```
-
-Swagger UI is enabled in Development.
-
-### Current CORS policy (V4 baseline)
-
-- The API registers and applies a named ASP.NET Core CORS policy: `InitialExplicitCorsPolicy`.
-- Current effective behavior is:
-  - allows any origin
-  - allows any header
-  - allows any HTTP method
-- This is a local/pre-deployment baseline and may be tightened later for browser clients by replacing wildcard allowances with explicit origin/header/method rules.
-
-### Run BillingService (durable workflow iteration scaffold)
-
-From repository root:
-
-```bash
-cd BillingService
-npm install
-npm run dev
-```
-
-Optional environment overrides for durability/reconciliation behavior:
-
-```bash
-export WORKFLOW_STATE_PATH="/tmp/billing-workflow-state.json"
-export WORKFLOW_MAX_ATTEMPTS=3
-export WORKFLOW_INITIAL_BACKOFF_MS=1000
-export WORKFLOW_MAX_BACKOFF_MS=30000
-export WORKFLOW_POLL_INTERVAL_MS=2000
-export RECONCILIATION_INTERVAL_MS=300000
-```
-
-Notes:
-
-- `BillingService` is still pre-live for provider integration and .NET callback delivery.
-- Use `docs/Billing-Workflow-Runbook.md` for dead-letter, replay, and reconciliation operating procedures.
+The API health endpoint checks the process and PostgreSQL, but not Redis. The metrics endpoints expose in-memory JSON snapshots; they are not production telemetry exporters.
 
 ## Testing
 
-Run directly from the repository root:
+Run the standardized full validation:
 
 ```bash
-dotnet --info
-/tmp/dotnet-tools/dotnet-ef --version
-dotnet restore
-dotnet build --no-restore
-dotnet test --no-build --verbosity normal
+scripts/dev.sh test
 ```
 
-BillingService validation commands (required only when BillingService code changes in the iteration):
+Or run the service-specific commands documented in [Operations](docs/operations.md#validation-and-tests). Coverage includes authentication and authorization security, tenant isolation, rate limiting, internal billing authentication/idempotency, entitlements, outbound webhooks, cross-service contracts, replay fixtures, workflow recovery, reconciliation, and the Stripe gateway.
 
-```bash
-cd BillingService
-npm run build
-npm test
-```
+## Current limitations
 
-Or run the deterministic local profile sequence:
+- The BillingService runtime selects a placeholder webhook adapter even when `BILLING_PROVIDER` is `stripe` or `paddle`.
+- The Stripe gateway is implemented and tested but is not connected to the default runtime provider flow.
+- The default callback publisher is a no-op logger, and default reconciliation sources return no live records.
+- Billing workflow durability uses a local JSON file, not a distributed queue.
+- API CORS currently allows any origin, header, and method; tighten it before public browser exposure.
+- There is no deployed OpenTelemetry exporter, telemetry backend, alerting/SLO practice, or deployment-proven backup/restore process.
+- Deployment topology, TLS/DNS, browser-client scope, provider scope, and secret-store choices require owner decisions.
 
-```bash
-scripts/dev.sh bootstrap
-scripts/dev.sh run
-scripts/dev.sh smoke
-```
+## Documentation
 
-## Documentation status for this completed iteration
+- [Architecture](docs/architecture.md)
+- [Operations and configuration](docs/operations.md)
+- [Service contracts](docs/contracts.md)
+- [Architecture and operational decisions](docs/decisions.md)
+- [Changelog](docs/CHANGELOG.md)
+- [Historical documentation archive](docs/archive/README.md)
+- [BillingService guide](BillingService/README.md)
 
-Documentation was reviewed for accuracy against the current implemented baseline.
+## License
 
-- `README.md` now reflects the completed April 20, 2026 P1.1 entitlement matrix regression iteration and its explicit implemented scope.
-- `docs/V4-Implementation-Backlog.md` now records P1.1 as foundation + first regression expansion complete, including documented boundaries and follow-up scope.
-- `docs/Entitlements-Model.md` now documents implemented matrix regression coverage for evaluator precedence, endpoint-gated entitlement keys, and representative lifecycle combinations.
-- `docs/V4-Entitlement-Matrix-Test-Design.md` was added to capture the implemented harness structure, covered scenarios, and intentional scope boundaries.
-- `docs/Internal-Billing-Contract.md` and `BillingService/README.md` remain accurate because no billing contract or BillingService runtime behavior changed in this iteration.
-
-## Additional docs
-
-- `BillingService/README.md`
-- `docs/V3-Implementation-Backlog.md`
-- `docs/V4-Implementation-Backlog.md`
-- `docs/Internal-Billing-Contract.md`
-- `docs/Billing-Workflow-Runbook.md`
-- `docs/Entitlements-Model.md`
-- `docs/V4-Entitlement-Matrix-Test-Design.md`
-
-## Docker Compose deployment (local Ubuntu VM)
-
-A local-VM deployment path is now available with `compose.yml` at the repository root.
-
-Expected runtime routing through NGINX is defined in `deploy/nginx/default.conf` and mounted into the `nginx` service by `compose.yml`:
-
-- `http://localhost/health` -> .NET API health endpoint via the `api` Compose service
-- `http://localhost/billing/health` -> BillingService `/health` endpoint via the `billing` Compose service after stripping the `/billing/` prefix
-- `http://localhost/billing/metrics` -> BillingService `/metrics` endpoint via the `billing` Compose service after stripping the `/billing/` prefix
-- all other non-`/billing/` paths route to the API service
-
-The local NGINX configuration listens on port 80, uses the generic `server_name _`, does not configure HTTPS yet, and preserves `Host`, `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto` proxy headers for both upstream services.
-
-The Compose stack uses external environment files from `/etc/multitenant-saas-api/` and does not require committing secrets to this repository.
+See [LICENSE.txt](LICENSE.txt).
