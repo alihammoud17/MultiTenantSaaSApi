@@ -126,15 +126,16 @@ namespace Presentation.Controllers
                 return deniedResult;
             }
 
-            var exists = await _dbContext.Users.AnyAsync(u => u.TenantId == tenantId && u.Email == request.Email);
+            var normalizedEmail = request.Email.Trim();
+            var exists = await _dbContext.Users.AnyAsync(u => u.Email == normalizedEmail);
             if (exists)
-                return BadRequest(new { error = "User already exists for tenant" });
+                return BadRequest(new { error = "User already exists" });
 
             var user = new User
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
-                Email = request.Email,
+                Email = normalizedEmail,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                 EmailVerifiedAt = DateTime.UtcNow,
                 Role = string.IsNullOrWhiteSpace(request.Role) ? "MEMBER" : request.Role.Trim().ToUpperInvariant(),

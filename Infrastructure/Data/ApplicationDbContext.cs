@@ -98,6 +98,7 @@ namespace Infrastructure.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.TenantId, e.Email }).IsUnique();
+                entity.HasIndex(e => e.Email).IsUnique();
                 entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
                 entity.Property(e => e.Role).IsRequired().HasMaxLength(32);
                 entity.Property(e => e.MfaSecret).HasMaxLength(128);
@@ -184,6 +185,7 @@ namespace Infrastructure.Data
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.EventId).IsUnique();
                 entity.HasIndex(e => new { e.TenantId, e.SubscriptionId });
+                entity.HasIndex(e => new { e.TenantId, e.EventType, e.OccurredAtUtc });
                 entity.Property(e => e.EventId).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.ContractVersion).IsRequired().HasMaxLength(32);
                 entity.Property(e => e.EventType).IsRequired().HasMaxLength(80);
@@ -406,17 +408,17 @@ namespace Infrastructure.Data
             //});
 
             // AuditLog
-            if (_tenantContext != null)
-                builder.Entity<AuditLog>(entity =>
-                {
-                    entity.HasKey(e => e.Id);
-                    entity.HasIndex(e => new { e.TenantId, e.Timestamp });
-                    entity.HasIndex(e => e.UserId);
+            builder.Entity<AuditLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.Timestamp });
+                entity.HasIndex(e => new { e.TenantId, e.Action, e.Timestamp });
 
-                    // Also filtered by tenant
-                    entity.HasQueryFilter(e =>
-                        _tenantContext == null || e.TenantId == _tenantContext.TenantId);
-                });
+                if (_tenantContext != null)
+                {
+                    entity.HasQueryFilter(e => e.TenantId == _tenantContext.TenantId);
+                }
+            });
 
             // Seed Plans
             builder.Entity<Plan>().HasData(

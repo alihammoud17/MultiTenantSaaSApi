@@ -36,6 +36,34 @@ public class IdentityLifecycleServiceTests
     }
 
     [Fact]
+    public async Task CreateInviteAsync_ShouldRejectEmailAlreadyUsedByAnotherTenant()
+    {
+        var tenantA = NewTenant("a");
+        var tenantB = NewTenant("b");
+        await using var db = CreateDbContext();
+        await db.Tenants.AddRangeAsync(tenantA, tenantB);
+        await db.Users.AddAsync(new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantA.Id,
+            Email = "existing@example.com",
+            PasswordHash = "hash",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var notifications = new RecordingIdentityNotificationService();
+        var sut = new IdentityLifecycleService(db, notifications);
+
+        var action = () => sut.CreateInviteAsync(tenantB.Id, Guid.NewGuid(), " existing@example.com ", "member", null, null);
+
+        await action.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("User already exists.");
+        notifications.Invites.Should().BeEmpty();
+        (await db.UserInvites.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task AcceptInviteAsync_ShouldCreateUserAssignRole_AndSendVerification()
     {
         var tenant = NewTenant();

@@ -24,9 +24,10 @@ namespace Application.Services
 
         public async Task<CreatedInviteResult> CreateInviteAsync(Guid tenantId, Guid actorUserId, string email, string? role, string? rbacRoleName, int? expiresInHours, CancellationToken cancellationToken = default)
         {
-            if (await _dbContext.Users.AnyAsync(u => u.TenantId == tenantId && u.Email == email, cancellationToken))
+            var normalizedEmail = email.Trim();
+            if (await _dbContext.Users.AnyAsync(u => u.Email == normalizedEmail, cancellationToken))
             {
-                throw new InvalidOperationException("User already exists for tenant.");
+                throw new InvalidOperationException("User already exists.");
             }
 
             var token = GenerateToken();
@@ -34,7 +35,7 @@ namespace Application.Services
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
-                Email = email.Trim(),
+                Email = normalizedEmail,
                 Role = string.IsNullOrWhiteSpace(role) ? "MEMBER" : role.Trim().ToUpperInvariant(),
                 RbacRoleName = string.IsNullOrWhiteSpace(rbacRoleName) ? null : rbacRoleName.Trim(),
                 TokenHash = ComputeHash(token),
@@ -62,7 +63,7 @@ namespace Application.Services
                 return null;
             }
 
-            if (await _dbContext.Users.AnyAsync(u => u.TenantId == tenantId && u.Email == invite.Email, cancellationToken))
+            if (await _dbContext.Users.AnyAsync(u => u.Email == invite.Email, cancellationToken))
             {
                 return null;
             }
