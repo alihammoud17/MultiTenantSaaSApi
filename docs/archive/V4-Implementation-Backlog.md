@@ -320,6 +320,13 @@ V4 should be considered successful when:
    - applied the named policy in the middleware pipeline after routing via `UseCors(...)` with no unrelated security middleware changes.
    - current effective policy is intentionally permissive for local/pre-deployment iteration (`AllowAnyOrigin`, `AllowAnyHeader`, `AllowAnyMethod`) and documented as a starting baseline to tighten prior to production.
 
+15. **Database query-index hardening** *(Completed September 5, 2026)*
+   - corrected `AuditLog` configuration so schema/index metadata is always included during design-time migration generation while its tenant query filter remains conditional on a runtime tenant context.
+   - added composite indexes for tenant/time audit history, tenant/action/time audit filtering, and tenant/event-type/occurrence-time billing invoice history.
+   - aligned persistence and user-creation preflight checks with the established email-only registration/login identity contract by adding global unique user-email enforcement while retaining the tenant/email index for tenant-local access patterns.
+   - added focused EF model-metadata regression coverage for all new indexes and global email uniqueness.
+   - evaluated a partial active-refresh-session index but intentionally deferred it: the repository has no configured representative PostgreSQL dataset for `EXPLAIN (ANALYZE, BUFFERS)`, and the existing `(TenantId, UserId, ExpiresAt)` index already supports active-session filtering. Reassess after production-like session cardinality and query-plan evidence are available.
+
 
 ## P2 (later pre-deployment improvements)
 
