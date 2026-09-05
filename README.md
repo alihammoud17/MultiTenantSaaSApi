@@ -6,9 +6,10 @@ The repository is designed for deterministic local validation. It is **not yet a
 
 ## Implemented capabilities
 
-- Tenant registration and JWT authentication, refresh-token rotation/revocation, identity verification/reset flows, MFA, and step-up sessions.
+- Tenant registration and JWT authentication, refresh-token rotation/revocation, identity verification/reset flows, MFA, and step-up sessions. User email is globally unique because registration and login identify users by email without a tenant discriminator; tenant-local email access remains indexed by tenant and email.
 - Tenant-scoped RBAC, administrative user management, audit logs, and explicit tenant resolution and mismatch rejection.
 - Plan, subscription, entitlement, add-on, override, usage-analytics, and tenant billing read/self-service foundations.
+- Query-aligned PostgreSQL indexes for tenant audit history, action-filtered audit analytics, billing invoice history, and email-only authentication lookups.
 - Signed, versioned, idempotent internal billing callbacks applied by the .NET API.
 - Tenant outbound-webhook endpoint management and file/database-backed delivery, retry, signing, and replay protection.
 - BillingService placeholder webhook ingestion, normalized events, a file-backed retry/dead-letter queue, reconciliation logic, and a tested Stripe gateway slice.
