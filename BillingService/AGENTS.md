@@ -1,5 +1,7 @@
 # AGENTS.md
 
+These instructions supplement the repository-root `AGENTS.md`, including its local desktop/VS Code workflow and documentation-only validation guidance. Paths below are repository-relative unless stated otherwise.
+
 ## BillingService purpose
 This folder contains the Node.js / TypeScript billing service for the multi-tenant SaaS platform.
 
@@ -20,14 +22,17 @@ BillingService is not the system of record for tenant/business domain data.
 - Do not expose raw provider payloads as internal platform contracts without normalization.
 - Internal events/callbacks sent to the .NET API must be authenticated and traceable.
 
-## Current engineering focus for this service
-Work in this folder should generally align with:
-- live provider integration
-- webhook verification
-- durable retry/replay-safe processing
-- reconciliation jobs
-- customer billing support
-- operational observability
+## Current implementation and engineering focus
+This service is a pre-live, locally validated workflow foundation. Inspect `BillingService/README.md` and the runtime wiring before claiming a capability is live.
+
+- `BillingService/src/providers/index.ts` selects the placeholder webhook adapter for every accepted provider setting, including `stripe` and `paddle`; real provider signature verification is not wired.
+- `BillingService/src/jobs/subscriptionSyncJob.ts` defaults to a no-op callback publisher that logs metadata instead of sending authenticated HTTP requests to the API.
+- `BillingService/src/app.ts` schedules reconciliation with empty provider and internal state readers. Reconciliation algorithms are implemented and tested, but live data sources are not connected.
+- The Stripe gateway supports tested checkout, portal, and invoice operations as a component; it is not wired into the default provider flow or public checkout/portal routes.
+- Retry, deduplication, dead-letter handling, and restart recovery use a local JSON state file. Preserve the controlled single-instance assumption; this is not distributed queue coordination.
+- Health/metrics are local JSON diagnostics, not proof of provider connectivity or production telemetry.
+
+Prioritize deterministic contract, replay, recovery, and tenant-mapping validation within the requested slice. Live provider wiring and customer-facing billing expansion require explicit task scope; do not treat them as already completed or automatically add them to unrelated work.
 
 ## Folder-level implementation style
 For any non-trivial task:
@@ -35,7 +40,7 @@ For any non-trivial task:
 2. identify the exact files to change
 3. plan the smallest safe slice
 4. preserve structure unless there is a strong reason to improve it
-5. add or update tests
+5. add or update tests for behavior changes; verify documentation-only changes against code and scripts
 6. update docs for the iteration
 7. summarize changes and remaining gaps
 
@@ -50,6 +55,7 @@ For any non-trivial task:
 
 ## Internal callback / contract rules
 - Use the documented internal billing contract when communicating with the .NET API.
+- Preserve the versioned DTO and timestamped HMAC over the exact raw request body defined in `docs/contracts.md`; update producer and consumer conformance tests together when changing the contract.
 - If the contract changes, update docs/contracts.md.
 - Internal callbacks must be authenticated.
 - Internal callbacks must include enough information for:
@@ -90,17 +96,21 @@ Add or update tests for:
 - reconciliation behavior
 - provider adapter behavior
 - config validation where practical
+- tenant/subscription mapping rejection and cross-tenant isolation for sensitive billing behavior
 
 ## Validation
-Run the relevant project commands after changes.
+For service code changes, run from `BillingService/`:
 
-If package scripts already exist, use them.
-If package scripts change, update the README.
+```bash
+npm ci
+npm run build
+npm run typecheck
+npm test
+```
 
-Typical expectations:
-- install dependencies
-- build the service
-- run tests
+Use Node.js 22 or later. From the repository root, `scripts/dev.sh test` runs the .NET and BillingService build/test sequence; it currently does not include the separate BillingService typecheck, so run that explicitly. For cross-service contract changes, validate both producer and consumer suites. `scripts/dev.sh smoke` only proves local endpoint reachability and placeholder acceptance.
+
+For documentation-only changes, follow the root documentation validation guidance. If package scripts change, update the README.
 
 Document the exact commands in BillingService/README.md if they are missing or changed.
 
@@ -139,7 +149,7 @@ Do not claim live provider support, reconciliation, invoices, or customer self-s
 A BillingService task is complete only when:
 - the requested behavior is implemented
 - provider/service boundaries remain clean
-- relevant build/tests pass
-- docs are updated for the iteration
+- relevant build/tests pass, or failures/skipped checks are explained
+- affected docs are updated for the iteration
 - changed files are summarized
 - assumptions, risks, and follow-up work are listed explicitly

@@ -8,6 +8,15 @@ This repository contains a multi-tenant SaaS platform with:
 ## Current project status
 V1, V2, and V3 are complete. V4 established the current pre-deployment, code-first engineering maturity baseline; historical phase plans are archived under `docs/archive/` and are not active sources of truth.
 
+Use `README.md`, `BillingService/README.md`, and the current architecture, operations, contracts, and decisions documents under `docs/` alongside the implementation to establish current behavior. Completed phases do not imply production readiness or live billing integration.
+
+## Agent working environment
+- The maintainer uses Codex in the desktop application and sometimes the Visual Studio Code extension; browser-hosted Codex is no longer the working environment.
+- Work from the active local checkout. Inspect the current branch and worktree before editing, and preserve unrelated local changes.
+- Do not assume a browser/cloud container, a Linux host, preinstalled tools, or access to local services. Check the available SDKs, tools, and connections before validation.
+- Local development and the Ubuntu deployment target are separate environments. Keep commands portable where practical and report environment-specific blockers.
+- Read `BillingService/AGENTS.md` as well when working under `BillingService/`.
+
 ## Current direction (pre-deployment / code-first)
 Current work is focused on pre-deployment engineering maturity.
 
@@ -97,7 +106,7 @@ For any non-trivial task:
 2. Review the relevant docs before coding.
 3. Plan the smallest safe thin vertical slice first.
 4. Implement only the requested scope.
-5. Add or update automated tests.
+5. Add or update automated tests when behavior changes; for documentation-only changes, verify instructions against code, scripts, and referenced paths.
 6. Run explicit local validation commands and record results.
 7. Update documentation for that completed iteration.
 8. Summarize changed files, assumptions, risks, and follow-up work.
@@ -105,7 +114,7 @@ For any non-trivial task:
 ## Required documentation workflow
 Every completed iteration must update docs as applicable.
 
-Always review and update:
+Review the following and update those affected by the change; do not make unrelated documentation edits solely to touch each file:
 - README.md
 - docs/architecture.md when system behavior or ownership changed
 - docs/operations.md when configuration or operating procedures changed
@@ -132,6 +141,10 @@ Add or update tests for:
 ## Validation
 Run the relevant commands after changes.
 
+For documentation-only changes, run `git diff --check` and verify referenced paths and commands against the repository. Application builds/tests are not required unless runtime code or configuration also changes. Report what was and was not run.
+
+The standardized local workflow is `scripts/dev.sh` (`bootstrap`, `seed`, `run`, `smoke`, `test`). `reset` drops the local database and clears workflow state; use it only when that reset is within the requested scope. Smoke checks cover placeholder billing acceptance, not live provider-to-API delivery.
+
 ### For .NET work
 Run:
 - dotnet --info
@@ -144,15 +157,17 @@ Run:
 - run the project-specific install/build/test commands documented in BillingService
 - if commands change, update BillingService/README.md
 
+The current prerequisites are .NET 10, Node.js 22 or later, PostgreSQL 16 or later, and Redis 7 or later. The full test wrapper currently expects `/tmp/dotnet-tools/dotnet-ef`; do not assume this temporary installation exists on the local machine. The bootstrap/reset/seed scripts support `DOTNET_EF_BIN`; manual EF commands can use an available `dotnet ef` installation.
+
 ## EF Core
 When a schema/model change requires a migration, you may use:
-- /tmp/dotnet-tools/dotnet-ef migrations add <MigrationName>
-- /tmp/dotnet-tools/dotnet-ef database update
+- /tmp/dotnet-tools/dotnet-ef migrations add <MigrationName> --project Infrastructure --startup-project Presentation
+- /tmp/dotnet-tools/dotnet-ef database update --project Infrastructure --startup-project Presentation
 
 If the DbContext is not in the startup project, specify:
 - --project <path-to-ef-project>
 - --startup-project <path-to-startup-project>
-<path-to-startup-project> is normally the Infrastructure project.
+The DbContext and migrations are in `Infrastructure`; the startup host is `Presentation`.
 
 If schema changes are introduced:
 - add the migration
@@ -191,8 +206,8 @@ For pre-deployment work:
 - Do not remove existing local scripts unless explicitly requested.
 - Do not change application behavior unless deployment requires it.
 - Keep Dockerfiles multi-stage where possible.
-- The first target is a local Ubuntu 24.04 VM.
-- The future target is a VPS using the same deployment structure.
+- The existing Compose profile targets a local Ubuntu VM; Ubuntu 24.04 is the intended local VM target, not an assumption about the developer's host OS.
+- A future VPS may reuse this structure, but deployment topology, TLS/DNS, secret storage, and recovery choices remain open in `docs/decisions.md`.
 - Always report validation commands executed and their result.
 - If a command cannot be executed in the Codex environment, explain why.
 
@@ -202,7 +217,7 @@ A task is complete only when:
 - the change respects system boundaries
 - thin-slice scope was maintained (no broad refactor)
 - explicit validation was executed and results were reported
-- tests pass, or failures are clearly explained
-- docs/readme are updated for that iteration
+- relevant tests pass, or failures/skipped checks are clearly explained
+- affected docs/readme are updated for that iteration
 - changed files are summarized
 - remaining risks, assumptions, and follow-up work are listed explicitly
