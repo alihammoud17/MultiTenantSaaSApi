@@ -21,13 +21,15 @@ namespace Domain.Outputs
         InvalidMfaCode,
         MfaNotEnrolled,
         StepUpRequired,
-        InvalidOrExpiredStepUpToken
+        InvalidOrExpiredStepUpToken,
+        InvalidRegistrationInput
     }
 
     public sealed record RegisterAuthResult(
         bool Succeeded,
         AuthFlowError Error,
-        AuthResponse? Response);
+        AuthResponse? Response,
+        string? ValidationError = null);
 
     public sealed record LoginAuthResult(
         bool Succeeded,

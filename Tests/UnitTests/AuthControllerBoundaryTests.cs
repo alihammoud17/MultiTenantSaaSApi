@@ -47,6 +47,21 @@ public class AuthControllerBoundaryTests
     }
 
     [Fact]
+    public async Task Register_ShouldMapInvalidInput_ToBadRequestWithValidationError()
+    {
+        var service = new RecordingAuthOrchestrationService
+        {
+            RegisterResult = new RegisterAuthResult(false, AuthFlowError.InvalidRegistrationInput, null, "Subdomain is reserved")
+        };
+        var sut = CreateController(service, "203.0.113.13");
+
+        var result = await sut.Register(new RegisterTenantRequest("Acme", "www", "admin@example.com", "Passw0rd!"), CancellationToken.None);
+
+        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        GetPayloadProperty(badRequest.Value, "error").Should().Be("Subdomain is reserved");
+    }
+
+    [Fact]
     public async Task Register_ShouldMapSuccess_ToOkWithAuthResponse()
     {
         var response = new AuthResponse("jwt-token", "refresh-token", Guid.NewGuid(), Guid.NewGuid(), "admin@example.com", DateTime.UtcNow.AddMinutes(15), DateTime.UtcNow.AddDays(7));

@@ -46,6 +46,7 @@ namespace Presentation.Controllers
 
             return result.Error switch
             {
+                AuthFlowError.InvalidRegistrationInput => BadRequest(new { error = result.ValidationError }),
                 AuthFlowError.SubdomainAlreadyTaken => BadRequest(new { error = "Subdomain already taken" }),
                 AuthFlowError.EmailAlreadyRegistered => BadRequest(new { error = "Email already registered" }),
                 AuthFlowError.None when result.Response is not null => Ok(result.Response),
