@@ -29,6 +29,8 @@ Tenant isolation is also enforced through tenant predicates in data access and s
 
 The API uses JWT Bearer authentication with issuer, audience, lifetime, and symmetric signing-key validation. Implemented identity capabilities include registration, login, refresh-token rotation/revocation, invites, email verification, password reset, MFA enrollment/verification, and step-up sessions.
 
+Tenant registration (`POST /api/v1/auth/register`) validates and normalizes input in `TenantRegistrationValidator` before any database access. Company name, subdomain, and email are trimmed. The subdomain is lowercased and must be a 3–50 character DNS label (lowercase letters, digits, and inner hyphens), not entirely numeric, and not on the reserved list (for example `www`, `api`, `admin`), because `TenantMiddleware` resolves tenants from the first host label. Email must be a plain address of at most 255 characters, and the admin password must be 8 characters to 72 UTF-8 bytes (the BCrypt input limit). Invalid input returns `400` with a specific `error` message. Subdomain and email uniqueness checks are case-insensitive so rows stored before normalization still count as duplicates; the database unique indexes remain case-sensitive.
+
 Tenant-scoped RBAC uses roles, permissions, policy handlers, and service-layer authorization. Sensitive controllers combine authenticated identity, tenant context, RBAC, and entitlement checks as applicable.
 
 Unauthenticated auth routes use a fixed-window per-IP limiter. Authenticated tenant traffic also passes through a plan-aware Redis-backed limiter. The two controls are independent.

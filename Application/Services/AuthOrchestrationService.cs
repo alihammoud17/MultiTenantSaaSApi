@@ -39,10 +39,19 @@ namespace Application.Services
 
         public async Task<RegisterAuthResult> RegisterAsync(RegisterTenantRequest request, string? requestIp, CancellationToken cancellationToken = default)
         {
-            if (await _dbContext.Tenants.AnyAsync(t => t.Subdomain == request.Subdomain, cancellationToken))
+            var validation = TenantRegistrationValidator.Validate(request);
+            if (!validation.IsValid)
+                return new RegisterAuthResult(false, AuthFlowError.InvalidRegistrationInput, null, validation.Error);
+
+            request = validation.NormalizedRequest!;
+
+            // Compare case-insensitively so rows stored before normalization still count as duplicates.
+            var subdomainLookup = request.Subdomain.ToLowerInvariant();
+            if (await _dbContext.Tenants.AnyAsync(t => t.Subdomain.ToLower() == subdomainLookup, cancellationToken))
                 return new RegisterAuthResult(false, AuthFlowError.SubdomainAlreadyTaken, null);
 
-            if (await _dbContext.Users.AnyAsync(u => u.Email == request.AdminEmail, cancellationToken))
+            var emailLookup = request.AdminEmail.ToLowerInvariant();
+            if (await _dbContext.Users.AnyAsync(u => u.Email.ToLower() == emailLookup, cancellationToken))
                 return new RegisterAuthResult(false, AuthFlowError.EmailAlreadyRegistered, null);
 
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);

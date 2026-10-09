@@ -9,6 +9,7 @@ using Domain.Authorization;
 using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Tests.Integration;
@@ -385,6 +386,117 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         second.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await second.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("error").GetString().Should().Be("Subdomain already taken");
+    }
+
+    [Fact]
+    public async Task Register_ShouldNormalizeSubdomain_AndTreatCaseVariantsAsDuplicates()
+    {
+        using var client = CreateClient();
+        var subdomain = $"case-{Guid.NewGuid():N}";
+
+        var first = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "  Case Company  ",
+            subdomain = $"  {subdomain.ToUpperInvariant()} ",
+            adminEmail = $"case-first-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        first.StatusCode.Should().Be(HttpStatusCode.OK);
+        var tenantId = (await first.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("tenantId").GetGuid();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var tenant = await dbContext.Tenants.SingleAsync(t => t.Id == tenantId);
+            tenant.Subdomain.Should().Be(subdomain);
+            tenant.Name.Should().Be("Case Company");
+        }
+
+        var second = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Second Company",
+            subdomain,
+            adminEmail = $"case-second-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        second.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await second.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Subdomain already taken");
+    }
+
+    [Fact]
+    public async Task Register_ShouldReturnBadRequest_WhenEmailAlreadyRegisteredWithDifferentCase()
+    {
+        using var client = CreateClient();
+        var email = $"dup-email-{Guid.NewGuid():N}@example.com";
+
+        var first = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "First Company",
+            subdomain = $"email-a-{Guid.NewGuid():N}",
+            adminEmail = email,
+            adminPassword = "Passw0rd!"
+        });
+
+        first.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var second = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Second Company",
+            subdomain = $"email-b-{Guid.NewGuid():N}",
+            adminEmail = $"  {email.ToUpperInvariant()} ",
+            adminPassword = "Passw0rd!"
+        });
+
+        second.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await second.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Email already registered");
+    }
+
+    [Theory]
+    [InlineData("www", "Subdomain is reserved")]
+    [InlineData("acme.corp", "Subdomain may only contain lowercase letters, digits and hyphens, and cannot start or end with a hyphen")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Subdomain must be between 3 and 50 characters")]
+    public async Task Register_ShouldReturnBadRequest_ForInvalidSubdomain(string subdomain, string expectedError)
+    {
+        using var client = CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Invalid Subdomain Co",
+            subdomain,
+            adminEmail = $"invalid-sub-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be(expectedError);
+    }
+
+    [Fact]
+    public async Task Register_ShouldReturnBadRequest_AndCreateNothing_WhenPasswordTooShort()
+    {
+        using var client = CreateClient();
+        var subdomain = $"weak-{Guid.NewGuid():N}";
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Weak Password Co",
+            subdomain,
+            adminEmail = $"weak-{Guid.NewGuid():N}@example.com",
+            adminPassword = "a"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Admin password must be at least 8 characters");
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await dbContext.Tenants.AnyAsync(t => t.Subdomain == subdomain)).Should().BeFalse();
     }
 
     [Fact]
