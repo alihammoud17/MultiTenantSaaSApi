@@ -1,10 +1,14 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace Infrastructure.Migrations
 {
+    [DbContext(typeof(ApplicationDbContext))]
+    [Migration("20260501090000_AddWebhookEndpointManagementFoundation")]
     public partial class AddWebhookEndpointManagementFoundation : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
