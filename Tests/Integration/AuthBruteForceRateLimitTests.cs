@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Net;
+using Microsoft.AspNetCore.Builder;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Infrastructure.Data;
@@ -84,7 +85,7 @@ public class AuthBruteForceRateLimitTests
     }
 
     [Fact]
-    public async Task RefreshEndpoint_ShouldReturn429_WhenLoginRateLimitBudgetIsExhausted()
+    public async Task RefreshEndpoint_ShouldNotBeRateLimited_WhenLoginRateLimitBudgetIsExhausted()
     {
         using var factory = new AuthRateLimitWebApplicationFactory();
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -92,16 +93,7 @@ public class AuthBruteForceRateLimitTests
             BaseAddress = new Uri("https://localhost")
         });
 
-        for (var attempt = 1; attempt <= PermitLimit; attempt++)
-        {
-            var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new
-            {
-                email = $"refresh-budget-{attempt}-{Guid.NewGuid():N}@example.com",
-                password = "wrong-pass"
-            });
-
-            loginResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        }
+        await ExhaustLoginBudgetAsync(client, forwardedFor: null);
 
         var refreshResponse = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
@@ -109,12 +101,80 @@ public class AuthBruteForceRateLimitTests
             refreshToken = "non-existent-refresh-token"
         });
 
-        refreshResponse.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ClientsBehindTrustedProxy_ShouldGetIndependentBuckets_ByForwardedFor()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        await ExhaustLoginBudgetAsync(client, forwardedFor: "198.51.100.1");
+
+        var sameClient = await SendLoginAsync(client, "198.51.100.1");
+        var otherClient = await SendLoginAsync(client, "198.51.100.2");
+
+        sameClient.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        otherClient.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ClientForgedForwardedForHops_ShouldNotEscapeTheirBucket()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        // The trusted proxy appends the real client (198.51.100.7); everything before it is client-supplied.
+        for (var attempt = 1; attempt <= PermitLimit; attempt++)
+        {
+            var response = await SendLoginAsync(client, $"203.0.113.{attempt}, 198.51.100.7");
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        var forgedResponse = await SendLoginAsync(client, "203.0.113.200, 198.51.100.7");
+
+        forgedResponse.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+    }
+
+    private static async Task ExhaustLoginBudgetAsync(HttpClient client, string? forwardedFor)
+    {
+        for (var attempt = 1; attempt <= PermitLimit; attempt++)
+        {
+            var loginResponse = await SendLoginAsync(client, forwardedFor);
+            loginResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+    }
+
+    private static async Task<HttpResponseMessage> SendLoginAsync(HttpClient client, string? forwardedFor)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login")
+        {
+            Content = JsonContent.Create(new
+            {
+                email = $"unknown-{Guid.NewGuid():N}@example.com",
+                password = "wrong-pass"
+            })
+        };
+
+        if (forwardedFor is not null)
+            request.Headers.TryAddWithoutValidation("X-Forwarded-For", forwardedFor);
+
+        return await client.SendAsync(request);
     }
 }
 
 public sealed class AuthRateLimitWebApplicationFactory : WebApplicationFactory<Program>
 {
+    // Every test request arrives from this address, as it would from NGINX in the Compose profile.
+    public static readonly IPAddress TrustedProxyAddress = IPAddress.Parse("10.0.0.5");
+
     private readonly string _connectionString = $"Data Source=file:auth-rate-limit-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
     private readonly SqliteConnection _keepAliveConnection;
 
@@ -139,7 +199,8 @@ public sealed class AuthRateLimitWebApplicationFactory : WebApplicationFactory<P
                 ["BillingIntegration:SharedSecret"] = "billing-integration-test-secret",
                 ["BillingIntegration:AllowedClockSkewMinutes"] = "5",
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=unused;Username=unused;Password=unused",
-                ["Redis:ConnectionString"] = "localhost:6379"
+                ["Redis:ConnectionString"] = "localhost:6379",
+                ["ForwardedHeaders:KnownProxies:0"] = TrustedProxyAddress.ToString()
             };
 
             configBuilder.AddInMemoryCollection(settings);
@@ -147,6 +208,7 @@ public sealed class AuthRateLimitWebApplicationFactory : WebApplicationFactory<P
 
         builder.ConfigureTestServices(services =>
         {
+            services.AddSingleton<IStartupFilter, TrustedProxyRemoteAddressStartupFilter>();
             services.RemoveAll<ApplicationDbContext>();
             services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
@@ -183,5 +245,18 @@ public sealed class AuthRateLimitWebApplicationFactory : WebApplicationFactory<P
         {
             _keepAliveConnection.Dispose();
         }
+    }
+
+    private sealed class TrustedProxyRemoteAddressStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use((context, nextMiddleware) =>
+            {
+                context.Connection.RemoteIpAddress = TrustedProxyAddress;
+                return nextMiddleware(context);
+            });
+            next(app);
+        };
     }
 }

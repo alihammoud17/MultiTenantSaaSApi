@@ -16,17 +16,17 @@ namespace Tests.UnitTests;
 public class AuthControllerBoundaryTests
 {
     [Theory]
-    [InlineData(nameof(AuthController.Register))]
-    [InlineData(nameof(AuthController.Login))]
-    [InlineData(nameof(AuthController.Refresh))]
-    public void HighRiskUnauthenticatedEndpoints_ShouldUseAuthBruteForceRateLimitPolicy(string methodName)
+    [InlineData(nameof(AuthController.Register), AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints)]
+    [InlineData(nameof(AuthController.Login), AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints)]
+    [InlineData(nameof(AuthController.Refresh), AuthRateLimitPolicyNames.AuthRefreshEndpoint)]
+    public void HighRiskUnauthenticatedEndpoints_ShouldUseAuthBruteForceRateLimitPolicy(string methodName, string expectedPolicyName)
     {
         var method = typeof(AuthController).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
         method.Should().NotBeNull();
 
         var attribute = method!.GetCustomAttribute<EnableRateLimitingAttribute>();
         attribute.Should().NotBeNull();
-        attribute!.PolicyName.Should().Be(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints);
+        attribute!.PolicyName.Should().Be(expectedPolicyName);
     }
 
     [Fact]

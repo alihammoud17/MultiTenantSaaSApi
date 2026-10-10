@@ -54,6 +54,8 @@ Configuration can use user secrets for development or double-underscore environm
 | `Jwt:ExpirationMinutes` | `Jwt__ExpirationMinutes` | Access-token lifetime; documented default is `60`. |
 | `BillingIntegration:SharedSecret` | `BillingIntegration__SharedSecret` | Internal callback HMAC key; required and sensitive. |
 | `BillingIntegration:AllowedClockSkewMinutes` | `BillingIntegration__AllowedClockSkewMinutes` | Callback timestamp tolerance; default is `5`. |
+| `ForwardedHeaders:KnownNetworks` | `ForwardedHeaders__KnownNetworks__0` | CIDR list of reverse-proxy networks whose `X-Forwarded-For`/`X-Forwarded-Proto` headers are trusted. Unset means only loopback is trusted. |
+| `ForwardedHeaders:KnownProxies` | `ForwardedHeaders__KnownProxies__0` | Individual reverse-proxy IP addresses to trust, in addition to `KnownNetworks`. |
 
 Example development setup from `Presentation/`:
 
@@ -205,6 +207,8 @@ Compose expects these runtime files outside Git:
 ```
 
 Copy and edit the placeholder templates under `deploy/env-examples/`. Never commit populated copies.
+
+The Compose default network uses the fixed subnet `172.28.0.0/24`, and `api.env` must set `ForwardedHeaders__KnownNetworks__0=172.28.0.0/24`. Without it, the API sees every request as coming from the NGINX container, so all clients share one auth rate-limit bucket and audit/refresh-token IP fields record the proxy address. Only the last `X-Forwarded-For` entry (the one NGINX appends) is used, so client-supplied values cannot spoof the address. If you change the subnet, change both places.
 
 ```bash
 docker compose config

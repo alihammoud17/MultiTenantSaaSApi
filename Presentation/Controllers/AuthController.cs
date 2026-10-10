@@ -75,7 +75,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("refresh")]
-        [EnableRateLimiting(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints)]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.AuthRefreshEndpoint)]
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
         {
             if (request.TenantId == Guid.Empty)
