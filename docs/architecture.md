@@ -33,7 +33,7 @@ Tenant registration (`POST /api/v1/auth/register`) validates and normalizes inpu
 
 Tenant-scoped RBAC uses roles, permissions, policy handlers, and service-layer authorization. Sensitive controllers combine authenticated identity, tenant context, RBAC, and entitlement checks as applicable.
 
-Unauthenticated auth routes use a fixed-window per-IP limiter. Authenticated tenant traffic also passes through a plan-aware Redis-backed limiter. The two controls are independent.
+Unauthenticated auth routes use in-process fixed-window per-client limiters: register and login share a budget of 10 requests per minute, and refresh has its own budget of 30 per minute so login or register floods cannot block session renewal. Clients are keyed by IPv4 address or IPv6 /64 prefix. Behind a reverse proxy, the client address comes from `X-Forwarded-For` only when the proxy is listed in `ForwardedHeaders:KnownNetworks`/`KnownProxies` (see `docs/operations.md`). Authenticated tenant traffic also passes through a plan-aware Redis-backed limiter. The two controls are independent.
 
 ## Plans, subscriptions, and entitlements
 

@@ -2,6 +2,7 @@ using Application.Services;
 using Domain.Interfaces;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -11,6 +12,7 @@ using Presentation.Middleware;
 using Presentation.RateLimiting;
 using Presentation.Observability;
 using StackExchange.Redis;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
@@ -96,10 +98,31 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddRbacAuthorization();
+// Trust X-Forwarded-For/Proto only from configured reverse proxies (e.g. the Compose NGINX subnet).
+// ForwardLimit = 1 means only the entry appended by the trusted proxy is used, so clients cannot spoof it.
+// With nothing configured, the framework default trusts loopback only.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+
+    foreach (var network in builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+
+    foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+        options.KnownProxies.Add(IPAddress.Parse(proxy));
+});
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Register and login share one budget; refresh has its own so login/register floods cannot block session renewal.
     options.AddPolicy(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints, httpContext =>
+        CreateAuthPartition(httpContext, permitLimit: 10));
+    options.AddPolicy(AuthRateLimitPolicyNames.AuthRefreshEndpoint, httpContext =>
+        CreateAuthPartition(httpContext, permitLimit: 30));
+
+    static RateLimitPartition<string> CreateAuthPartition(HttpContext httpContext, int permitLimit)
     {
         var hostEnvironment = httpContext.RequestServices.GetRequiredService<IHostEnvironment>();
         if (hostEnvironment.IsEnvironment("Testing"))
@@ -107,18 +130,16 @@ builder.Services.AddRateLimiter(options =>
             return RateLimitPartition.GetNoLimiter("testing-auth-rate-limit-bypass");
         }
 
-        var remoteIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: remoteIp,
+            partitionKey: AuthRateLimitPartitionKey.From(httpContext.Connection.RemoteIpAddress),
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = permitLimit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
             });
-    });
+    }
 });
 
 builder.Services.AddControllers();
@@ -164,6 +185,9 @@ builder.Services.AddHealthChecks()
 
 
 var app = builder.Build();
+
+// Must run first so the rate limiter, audit and refresh-token IP fields see the real client address.
+app.UseForwardedHeaders();
 
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 {
