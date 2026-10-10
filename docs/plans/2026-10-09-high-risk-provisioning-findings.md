@@ -3,7 +3,7 @@
 - **Date:** 2026-10-09
 - **Branch:** `master` (each finding gets its own branch off up-to-date `master`; see Delivery)
 - **Goal:** Close the three High-risk findings from the tenant provisioning security audit: host-based tenant resolution hijack, the shared auth rate-limit bucket behind NGINX, and email squatting through unverified registration.
-- **Status:** planned
+- **Status:** in-progress
 - **Approval:** approved in plan mode
 
 ## Context
@@ -60,16 +60,16 @@ Compose profile, with the API reachable only through `nginx` on port 80:
 As an integration test: in `AuthRateLimitWebApplicationFactory`, set the connection's `RemoteIpAddress` to a fixed proxy IP with a startup filter. Send 10 logins with `X-Forwarded-For: 198.51.100.1`, then one with `X-Forwarded-For: 198.51.100.2`. Before the fix the second client gets 429; after it gets 401.
 
 ### Steps
-- [ ] In `Program.cs`, configure `ForwardedHeadersOptions`:
+- [x] In `Program.cs`, configure `ForwardedHeadersOptions`:
   - `ForwardedHeaders = XForwardedFor | XForwardedProto`
   - `ForwardLimit = 1`
   - `KnownNetworks` / `KnownProxies` bound from a new `ForwardedHeaders` config section, holding a CIDR list and an IP list.
   - Call `app.UseForwardedHeaders()` first in the pipeline, before `UseHttpsRedirection` and `UseRateLimiter`.
   - With nothing configured, the defaults trust only loopback, so local `dotnet run` behaviour doesn't change.
-- [ ] In `compose.yml`, give the default network a fixed subnet such as `172.28.0.0/24`. Set `ForwardedHeaders__KnownNetworks__0=172.28.0.0/24` in `api.env.example`. NGINX already sends `X-Forwarded-For $proxy_add_x_forwarded_for`. With `ForwardLimit = 1` only the entry NGINX appended is trusted, so a client-supplied XFF can't be spoofed.
-- [ ] Change the limiter partition key so IPv6 addresses are grouped by their /64 prefix and IPv4 by the full address. Put this in a small helper next to `Presentation/RateLimiting/AuthRateLimitPolicyNames.cs`.
-- [ ] Split `refresh` onto its own policy (`AuthRefreshEndpoint`) with a separate budget, so register and login floods can't block session renewal. Update the `AuthControllerBoundaryTests` theory that asserts the policy name per action.
-- [ ] Docs: `docs/operations.md` covers the proxy trust configuration and the Compose subnet. `docs/architecture.md` covers the rate-limiting paragraph.
+- [x] In `compose.yml`, give the default network a fixed subnet such as `172.28.0.0/24`. Set `ForwardedHeaders__KnownNetworks__0=172.28.0.0/24` in `api.env.example`. NGINX already sends `X-Forwarded-For $proxy_add_x_forwarded_for`. With `ForwardLimit = 1` only the entry NGINX appended is trusted, so a client-supplied XFF can't be spoofed.
+- [x] Change the limiter partition key so IPv6 addresses are grouped by their /64 prefix and IPv4 by the full address. Put this in a small helper next to `Presentation/RateLimiting/AuthRateLimitPolicyNames.cs`.
+- [x] Split `refresh` onto its own policy (`AuthRefreshEndpoint`) with a separate budget, so register and login floods can't block session renewal. Update the `AuthControllerBoundaryTests` theory that asserts the policy name per action.
+- [x] Docs: `docs/operations.md` covers the proxy trust configuration and the Compose subnet. `docs/architecture.md` covers the rate-limiting paragraph.
 
 ---
 
@@ -173,3 +173,10 @@ Each finding gets its own branch off up-to-date `master` (`fix/auth-rate-limit-f
 - A real email provider for `IdentityNotificationService`.
 - Renaming existing tenants that hold reserved subdomains. This plan only produces the query to find them.
 - Audit findings 4 to 7, except where noted in finding 3 (audit write moved into the transaction) and the optional step (enumeration).
+
+## Changes
+- **2026-10-10 — Finding 2 implemented** on `fix/auth-rate-limit-forwarded-headers` (PR #137). No change to the approach. Details the plan left open:
+  - The separate refresh budget is 30 requests per minute; register and login stay at 10.
+  - The existing test `RefreshEndpoint_ShouldReturn429_WhenLoginRateLimitBudgetIsExhausted` asserted the shared login/refresh budget this step removes. It was replaced by `RefreshEndpoint_ShouldNotBeRateLimited_WhenLoginRateLimitBudgetIsExhausted` rather than kept passing.
+  - Added test infrastructure: `AuthRateLimitWebApplicationFactory` now makes every request arrive from a trusted proxy address (`10.0.0.5`) via a startup filter, and trusts it through `ForwardedHeaders:KnownProxies`.
+  - Manual two-host curl check on the Compose VM: not run (no VM available in this session).
