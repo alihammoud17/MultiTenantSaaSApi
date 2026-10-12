@@ -62,9 +62,9 @@ public class AuthControllerBoundaryTests
     }
 
     [Fact]
-    public async Task Register_ShouldMapSuccess_ToOkWithAuthResponse()
+    public async Task Register_ShouldMapSuccess_ToAcceptedWithPendingVerificationAndNoTokens()
     {
-        var response = new AuthResponse("jwt-token", "refresh-token", Guid.NewGuid(), Guid.NewGuid(), "admin@example.com", DateTime.UtcNow.AddMinutes(15), DateTime.UtcNow.AddDays(7));
+        var response = new RegistrationPendingResponse(Guid.NewGuid(), RegistrationPendingResponse.PendingVerificationStatus, DateTime.UtcNow.AddHours(48));
         var service = new RecordingAuthOrchestrationService
         {
             RegisterResult = new RegisterAuthResult(true, AuthFlowError.None, response)
@@ -73,8 +73,10 @@ public class AuthControllerBoundaryTests
 
         var result = await sut.Register(new RegisterTenantRequest("Acme", "acme", "admin@example.com", "Passw0rd!"), CancellationToken.None);
 
-        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
-        ok.Value.Should().BeEquivalentTo(response);
+        var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
+        accepted.StatusCode.Should().Be(StatusCodes.Status202Accepted);
+        accepted.Value.Should().BeEquivalentTo(response);
+        accepted.Value.Should().NotBeOfType<AuthResponse>();
         service.RegisterCallCount.Should().Be(1);
     }
 

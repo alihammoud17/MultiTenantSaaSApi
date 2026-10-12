@@ -23,21 +23,63 @@ internal static class SecurityTestHelpers
 
     internal static async Task<(string Token, string RefreshToken, Guid TenantId)> RegisterTenantAsync(HttpClient client, string email, string password)
     {
+        var (token, refreshToken, tenantId, _) = await RegisterVerifiedTenantAsync(client, email, password, $"tenant-{Guid.NewGuid():N}");
+        return (token, refreshToken, tenantId);
+    }
+
+    /// <summary>
+    /// Registers a tenant, verifies the admin email with the captured token, and logs in.
+    /// Requires a factory that registers <see cref="CapturingIdentityNotificationService"/>.
+    /// </summary>
+    internal static async Task<(string Token, string RefreshToken, Guid TenantId, string Subdomain)> RegisterVerifiedTenantAsync(
+        HttpClient client,
+        string email,
+        string password,
+        string subdomain)
+    {
+        var tenantId = await RegisterPendingTenantAsync(client, email, password, subdomain);
+        await CompleteRegistrationVerificationAsync(client, tenantId);
+
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            email,
+            password
+        });
+
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await login.Content.ReadFromJsonAsync<JsonElement>();
+        return (
+            body.GetProperty("token").GetString()!,
+            body.GetProperty("refreshToken").GetString()!,
+            body.GetProperty("tenantId").GetGuid(),
+            subdomain);
+    }
+
+    internal static async Task<Guid> RegisterPendingTenantAsync(HttpClient client, string email, string password, string subdomain)
+    {
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", new
         {
             companyName = $"Company {Guid.NewGuid():N}",
-            subdomain = $"tenant-{Guid.NewGuid():N}",
+            subdomain,
             adminEmail = email,
             adminPassword = password
         });
 
-        registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         var body = await registerResponse.Content.ReadFromJsonAsync<JsonElement>();
-        return (
-            body.GetProperty("token").GetString()!,
-            body.GetProperty("refreshToken").GetString()!,
-            body.GetProperty("tenantId").GetGuid());
+        return body.GetProperty("tenantId").GetGuid();
+    }
+
+    internal static async Task CompleteRegistrationVerificationAsync(HttpClient client, Guid tenantId)
+    {
+        var verify = await client.PostAsJsonAsync("/api/v1/auth/verification/complete", new
+        {
+            tenantId,
+            verificationToken = CapturingIdentityNotificationService.GetLatestVerificationToken(tenantId)
+        });
+
+        verify.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     internal static async Task<string> CreateMemberAndLoginAsync(HttpClient client)

@@ -49,7 +49,8 @@ namespace Presentation.Controllers
                 AuthFlowError.InvalidRegistrationInput => BadRequest(new { error = result.ValidationError }),
                 AuthFlowError.SubdomainAlreadyTaken => BadRequest(new { error = "Subdomain already taken" }),
                 AuthFlowError.EmailAlreadyRegistered => BadRequest(new { error = "Email already registered" }),
-                AuthFlowError.None when result.Response is not null => Ok(result.Response),
+                // No tokens until the admin verifies their email; they then log in through /auth/login.
+                AuthFlowError.None when result.Response is not null => Accepted(result.Response),
                 _ => StatusCode(500, new { error = "Registration failed" })
             };
         }

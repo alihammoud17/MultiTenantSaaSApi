@@ -28,7 +28,7 @@ namespace Domain.Outputs
     public sealed record RegisterAuthResult(
         bool Succeeded,
         AuthFlowError Error,
-        AuthResponse? Response,
+        RegistrationPendingResponse? Response,
         string? ValidationError = null);
 
     public sealed record LoginAuthResult(

@@ -27,6 +27,8 @@ namespace Domain.Entities
     {
         Active,
         Suspended,
-        Deleted
+        Deleted,
+        // Self-registered tenant whose admin has not verified their email yet. Stored as an int, so keep it last.
+        PendingVerification
     }
 }
