@@ -18,6 +18,9 @@ namespace Tests.Integration;
 
 public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 {
+    // Tenants resolve from hosts of the form <subdomain>.example.test in integration tests.
+    public const string TenantBaseDomain = "example.test";
+
     private readonly string _connectionString = $"Data Source=file:api-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
     private readonly SqliteConnection _keepAliveConnection;
 
@@ -42,7 +45,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 ["BillingIntegration:SharedSecret"] = "billing-integration-test-secret",
                 ["BillingIntegration:AllowedClockSkewMinutes"] = "5",
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=unused;Username=unused;Password=unused",
-                ["Redis:ConnectionString"] = "localhost:6379"
+                ["Redis:ConnectionString"] = "localhost:6379",
+                ["TenantResolution:BaseDomain"] = TenantBaseDomain
             };
 
             configBuilder.AddInMemoryCollection(settings);

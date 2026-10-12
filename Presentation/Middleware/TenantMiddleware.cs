@@ -2,6 +2,7 @@
 using Domain.Interfaces;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Presentation.Middleware
 {
@@ -9,11 +10,16 @@ namespace Presentation.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<TenantMiddleware> _logger;
+        private readonly IOptionsMonitor<TenantResolutionOptions> _resolutionOptions;
 
-        public TenantMiddleware(RequestDelegate next, ILogger<TenantMiddleware> logger)
+        public TenantMiddleware(
+            RequestDelegate next,
+            ILogger<TenantMiddleware> logger,
+            IOptionsMonitor<TenantResolutionOptions> resolutionOptions)
         {
             _next = next;
             _logger = logger;
+            _resolutionOptions = resolutionOptions;
         }
 
         public async Task InvokeAsync(
@@ -38,11 +44,12 @@ namespace Presentation.Middleware
             Guid? requestTenantHint = null;
             Tenant? resolvedTenant = null;
 
-            // Strategy 1: Extract from subdomain (e.g., acme.yourapi.com)
-            var host = context.Request.Host.Host;
-            if (host.Contains('.'))
+            // Strategy 1: Extract from subdomain, only for hosts of the form <subdomain>.<TenantResolution:BaseDomain>
+            if (TenantResolutionOptions.TryGetTenantSubdomain(
+                    context.Request.Host.Host,
+                    _resolutionOptions.CurrentValue.BaseDomain,
+                    out var subdomain))
             {
-                var subdomain = host.Split('.')[0];
                 resolvedTenant = await dbContext.Tenants
                     .FirstOrDefaultAsync(t => t.Subdomain == subdomain);
 

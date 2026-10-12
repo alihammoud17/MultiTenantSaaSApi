@@ -27,8 +27,9 @@ namespace Application.Services
         // BCrypt only uses the first 72 bytes of a password; longer input would be silently truncated.
         public const int PasswordMaxBytes = 72;
 
-        // Labels that collide with platform hosts or common infrastructure names. TenantMiddleware resolves
-        // tenants from the first host label, so a tenant owning one of these could hijack host-based resolution.
+        // Labels that collide with platform hosts or common infrastructure names. Registration rejects them, and
+        // TenantMiddleware never resolves them from the host, so a tenant owning one cannot capture a platform host.
+        // docs/operations.md has a SQL check that mirrors this list; keep them in sync.
         private static readonly HashSet<string> ReservedSubdomains = new(StringComparer.Ordinal)
         {
             "admin", "api", "app", "assets", "auth", "billing", "cdn", "dashboard", "docs", "ftp",
@@ -38,6 +39,9 @@ namespace Application.Services
         // Lowercase DNS label: letters, digits and hyphens, no leading or trailing hyphen.
         [GeneratedRegex("^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", RegexOptions.CultureInvariant)]
         private static partial Regex SubdomainPattern();
+
+        public static bool IsReservedSubdomain(string subdomain) =>
+            ReservedSubdomains.Contains(subdomain.Trim().ToLowerInvariant());
 
         public static TenantRegistrationValidationResult Validate(RegisterTenantRequest request)
         {
