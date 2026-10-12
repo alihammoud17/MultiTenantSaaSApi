@@ -70,7 +70,7 @@ public class AuthBruteForceRateLimitTests
                 adminPassword = "Passw0rd!"
             });
 
-            allowedResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+            allowedResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
         }
 
         var rateLimitedResponse = await client.PostAsJsonAsync("/api/v1/auth/register", new

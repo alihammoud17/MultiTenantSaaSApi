@@ -3,7 +3,7 @@
 - **Date:** 2026-10-09
 - **Branch:** `master` (each finding gets its own branch off up-to-date `master`; see Delivery)
 - **Goal:** Close the three High-risk findings from the tenant provisioning security audit: host-based tenant resolution hijack, the shared auth rate-limit bucket behind NGINX, and email squatting through unverified registration.
-- **Status:** in-progress
+- **Status:** done
 - **Approval:** approved in plan mode
 
 ## Context
@@ -89,18 +89,18 @@ So whoever registers an address first owns it on the whole platform, for good. T
 As an integration test: register twice with the same email under different subdomains and assert the second is rejected. After the fix, the first registration gets 202 with no tokens. Once its pending window has passed, simulated by back-dating `CreatedAt` in the DB, the second registration succeeds.
 
 ### Steps
-- [ ] Add `TenantStatus.PendingVerification` to the **end** of the enum in `Domain/Entities/Tenant.cs`. Check whether the enum is stored as int or string; if a migration is needed, add one. The middleware, login and refresh already reject non-`Active` tenants (`TenantMiddleware.cs:109-118`, `AuthOrchestrationService` login and refresh), so a pending tenant is inert without further changes.
-- [ ] In `RegisterAsync`:
+- [x] Add `TenantStatus.PendingVerification` to the **end** of the enum in `Domain/Entities/Tenant.cs`. Check whether the enum is stored as int or string; if a migration is needed, add one. The middleware, login and refresh already reject non-`Active` tenants (`TenantMiddleware.cs:109-118`, `AuthOrchestrationService` login and refresh), so a pending tenant is inert without further changes.
+- [x] In `RegisterAsync`:
   - Create the tenant as `PendingVerification` and the admin with `EmailVerifiedAt = null`.
   - In the same transaction, add a `UserVerificationToken` with a 48 h expiry, using the same hashing and token generation as `IdentityLifecycleService.AcceptInviteAsync` (`Application/Services/IdentityLifecycleService.cs:100-116`).
   - After the commit, call `IIdentityNotificationService.SendVerificationAsync`.
   - Return a new `RegisterAuthResult` shape with no `AuthResponse`: `{ tenantId, status: "pending_verification" }`. The controller maps it to `202 Accepted`.
   - Move the `TENANT_REGISTERED` audit write into the transaction while touching this code, which also addresses the post-commit failure path from audit finding 4.
   - To reuse the hashing and token generation, extract them into a small shared helper rather than copying them. Their current home is private statics in `IdentityLifecycleService`.
-- [ ] Activation: in `IdentityLifecycleService.CompleteVerificationAsync`, after verifying the user, set the tenant to `Active` if it is `PendingVerification`. The client then logs in normally through `/auth/login`.
-- [ ] Reclaim: in `RegisterAsync`, before the uniqueness checks, delete any `PendingVerification` tenant older than 48 h that holds the requested subdomain or the requested email. Tenant FKs cascade to its users, tokens and subscription; check the Subscription mapping at `ApplicationDbContext.cs:170-176`. This frees squatted names without a background job, and an attacker can hold an address for at most 48 h without access to its inbox.
-- [ ] Optional: return the same `202` for "email already registered" and send the notice by email instead. This also closes enumeration finding 5. It isn't required for finding 3, so ship it only if wanted.
-- [ ] Breaking change and docs:
+- [x] Activation: in `IdentityLifecycleService.CompleteVerificationAsync`, after verifying the user, set the tenant to `Active` if it is `PendingVerification`. The client then logs in normally through `/auth/login`.
+- [x] Reclaim: in `RegisterAsync`, before the uniqueness checks, delete any `PendingVerification` tenant older than 48 h that holds the requested subdomain or the requested email. Tenant FKs cascade to its users, tokens and subscription; check the Subscription mapping at `ApplicationDbContext.cs:170-176`. This frees squatted names without a background job, and an attacker can hold an address for at most 48 h without access to its inbox.
+- [ ] *(Not shipped — optional, left to audit finding 5.)* Optional: return the same `202` for "email already registered" and send the notice by email instead. This also closes enumeration finding 5. It isn't required for finding 3, so ship it only if wanted.
+- [x] Breaking change and docs:
   - Register no longer returns tokens.
   - Update `README.md`, the auth flow in `docs/architecture.md`, and `docs/contracts.md` if registration is listed there.
   - Add a `docs/CHANGELOG.md` line, since this changes a public contract.
@@ -141,6 +141,7 @@ As an integration test: register twice with the same email under different subdo
   - Update `Register_ShouldCreateTenantAndReturnToken` to the new contract.
 - **Tenant isolation** (`TenantIsolationSecurityTests`): a verification token for tenant A can't activate tenant B. `CompleteVerificationAsync` already filters by `TenantId`; assert it.
 - **Unit:** `AuthControllerBoundaryTests` mapping for the 202 result.
+- **Integration** (added during implementation, `ApiEndpointsTests`): an expired pending registration releases its email to a registration that uses a different subdomain and a different email case; a verified tenant is never reclaimed, however old.
 - **Run:** `dotnet test` (full suite, because the shared helpers change).
 
 ### Verification (each PR)
@@ -186,3 +187,11 @@ Each finding gets its own branch off up-to-date `master` (`fix/auth-rate-limit-f
   - Host parsing lives in `TenantResolutionOptions.TryGetTenantSubdomain` (`Presentation/Middleware/TenantResolutionOptions.cs`) so it can be unit tested; unit tests were added (see Tests, finding 1).
   - Integration tests use `TenantResolution:BaseDomain=example.test` in `ApiWebApplicationFactory`, matching the host the existing host-override test already used. The "base domain unset" test needs a JWT, because the authorization middleware returns 401 before tenant resolution for anonymous requests; it compares the same cross-tenant request with and without a base domain.
   - The documented SQL data check was not run: `psql` is not installed on this machine.
+- **2026-10-12 — Finding 3 implemented** on `fix/registration-email-verification`. No change to the approach. Details:
+  - `TenantStatus` is stored as an int, so appending `PendingVerification` (value 3) needed no migration; `dotnet ef migrations has-pending-model-changes` reports no drift.
+  - The `202` body is `{ tenantId, status: "pending_verification", verificationExpiresAt }` (`Domain/Responses/RegistrationPendingResponse.cs`). The shared token helper is `Application/Services/IdentityTokenGenerator.cs`.
+  - Reclaim uses a single `ExecuteDeleteAsync` and relies on the database cascades; every tenant foreign key was checked and cascades.
+  - A failure to send the verification after commit is logged and does not fail the request; the admin can use `/auth/verification/request`.
+  - Deviation from the docs step: `IdentityNotificationService` deliberately does not log the raw token, so it cannot be read from logs. Rather than start logging a secret, `docs/operations.md` documents a dev-only SQL activation and a read-only query for pending tenants.
+  - Test infrastructure: `CapturingIdentityNotificationService` keeps tokens per tenant id in a static store, because the shared helpers only receive an `HttpClient`. It is registered in `ApiWebApplicationFactory` and also in `RateLimitDeniedWebApplicationFactory`, whose test registers through the shared helper. Helpers now live in `SecurityTestHelpers` (`RegisterPendingTenantAsync`, `CompleteRegistrationVerificationAsync`, `RegisterVerifiedTenantAsync`); the existing helper signatures are unchanged.
+  - The optional enumeration step was not shipped.

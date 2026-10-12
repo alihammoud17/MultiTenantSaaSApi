@@ -209,27 +209,13 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         actions.Should().Contain("TENANT_USER_ROLE_CHANGED");
     }
 
-    private static async Task<(string Token, string RefreshToken, Guid TenantId, string Subdomain)> RegisterTenantWithSubdomainAsync(
+    private static Task<(string Token, string RefreshToken, Guid TenantId, string Subdomain)> RegisterTenantWithSubdomainAsync(
         HttpClient client,
         string email,
         string password,
         string subdomain)
     {
-        var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", new
-        {
-            companyName = $"Company {Guid.NewGuid():N}",
-            subdomain,
-            adminEmail = email,
-            adminPassword = password
-        });
-
-        registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await registerResponse.Content.ReadFromJsonAsync<JsonElement>();
-        return (
-            body.GetProperty("token").GetString()!,
-            body.GetProperty("refreshToken").GetString()!,
-            body.GetProperty("tenantId").GetGuid(),
-            subdomain);
+        return SecurityTestHelpers.RegisterVerifiedTenantAsync(client, email, password, subdomain);
     }
 
     private static async Task<HttpResponseMessage> SendAdminTenantRequestAsync(HttpClient client, string host, string? token)

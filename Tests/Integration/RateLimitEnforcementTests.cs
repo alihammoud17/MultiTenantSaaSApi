@@ -95,6 +95,8 @@ public sealed class RateLimitDeniedWebApplicationFactory : WebApplicationFactory
             services.RemoveAll<IConfigureOptions<DbContextOptions<ApplicationDbContext>>>();
             services.RemoveAll<IRateLimitService>();
             services.RemoveAll<DbConnection>();
+            services.RemoveAll<IIdentityNotificationService>();
+            services.AddSingleton<IIdentityNotificationService, CapturingIdentityNotificationService>();
 
             services.AddScoped<DbConnection>(_ =>
             {

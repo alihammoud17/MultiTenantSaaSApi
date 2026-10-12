@@ -4,8 +4,6 @@ using Domain.Interfaces;
 using Domain.Outputs;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Application.Services
 {
@@ -149,6 +147,7 @@ namespace Application.Services
             var tokenHash = ComputeHash(verificationToken);
             var record = await _dbContext.UserVerificationTokens
                 .Include(x => x.User)
+                .Include(x => x.Tenant)
                 .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.TokenHash == tokenHash && x.UsedAt == null && x.ExpiresAt > DateTime.UtcNow, cancellationToken);
 
             if (record == null)
@@ -156,8 +155,17 @@ namespace Application.Services
                 return false;
             }
 
-            record.UsedAt = DateTime.UtcNow;
-            record.User.EmailVerifiedAt = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            record.UsedAt = now;
+            record.User.EmailVerifiedAt = now;
+
+            // A self-registered tenant becomes usable once its admin proves they own the email address.
+            if (record.Tenant.Status == TenantStatus.PendingVerification)
+            {
+                record.Tenant.Status = TenantStatus.Active;
+                record.Tenant.UpdatedAt = now;
+            }
+
             await _dbContext.SaveChangesAsync(cancellationToken);
             return true;
         }
@@ -208,16 +216,8 @@ namespace Application.Services
             return true;
         }
 
-        private static string GenerateToken()
-        {
-            var bytes = RandomNumberGenerator.GetBytes(48);
-            return Convert.ToBase64String(bytes);
-        }
+        private static string GenerateToken() => IdentityTokenGenerator.GenerateToken();
 
-        private static string ComputeHash(string token)
-        {
-            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
-            return Convert.ToHexString(bytes);
-        }
+        private static string ComputeHash(string token) => IdentityTokenGenerator.ComputeHash(token);
     }
 }

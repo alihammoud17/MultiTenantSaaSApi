@@ -11,12 +11,17 @@ namespace Application.Services
 {
     public class AuthOrchestrationService : IAuthOrchestrationService
     {
+        // How long a self-registered tenant waits for its admin to verify their email. After this, its subdomain
+        // and email can be reclaimed by a new registration, so an unverified sign-up cannot hold them for good.
+        public static readonly TimeSpan PendingRegistrationLifetime = TimeSpan.FromHours(48);
+
         private readonly ApplicationDbContext _dbContext;
         private readonly IJwtService _jwtService;
         private readonly IRefreshTokenService _refreshTokenService;
         private readonly IAuditService _auditService;
         private readonly ITenantContext _tenantContext;
         private readonly IMfaService _mfaService;
+        private readonly IIdentityNotificationService _notificationService;
         private readonly ILogger<AuthOrchestrationService> _logger;
 
         public AuthOrchestrationService(
@@ -26,6 +31,7 @@ namespace Application.Services
             IAuditService auditService,
             ITenantContext tenantContext,
             IMfaService mfaService,
+            IIdentityNotificationService notificationService,
             ILogger<AuthOrchestrationService> logger)
         {
             _dbContext = dbContext;
@@ -34,6 +40,7 @@ namespace Application.Services
             _auditService = auditService;
             _tenantContext = tenantContext;
             _mfaService = mfaService;
+            _notificationService = notificationService;
             _logger = logger;
         }
 
@@ -47,90 +54,127 @@ namespace Application.Services
 
             // Compare case-insensitively so rows stored before normalization still count as duplicates.
             var subdomainLookup = request.Subdomain.ToLowerInvariant();
+            var emailLookup = request.AdminEmail.ToLowerInvariant();
+
+            await ReclaimExpiredPendingRegistrationsAsync(subdomainLookup, emailLookup, cancellationToken);
+
             if (await _dbContext.Tenants.AnyAsync(t => t.Subdomain.ToLower() == subdomainLookup, cancellationToken))
                 return new RegisterAuthResult(false, AuthFlowError.SubdomainAlreadyTaken, null);
 
-            var emailLookup = request.AdminEmail.ToLowerInvariant();
             if (await _dbContext.Users.AnyAsync(u => u.Email.ToLower() == emailLookup, cancellationToken))
                 return new RegisterAuthResult(false, AuthFlowError.EmailAlreadyRegistered, null);
 
-            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            var now = DateTime.UtcNow;
+            var verificationToken = IdentityTokenGenerator.GenerateToken();
+            var verificationExpiresAt = now.Add(PendingRegistrationLifetime);
+            Tenant tenant;
+            User user;
+
+            await using (var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken))
+            {
+                try
+                {
+                    // The tenant stays inert (no login, refresh or tenant-scoped requests) until the admin verifies.
+                    tenant = new Tenant
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = request.CompanyName,
+                        Subdomain = request.Subdomain,
+                        Status = TenantStatus.PendingVerification,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+
+                    await _dbContext.Tenants.AddAsync(tenant, cancellationToken);
+
+                    user = new User
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenant.Id,
+                        Email = request.AdminEmail,
+                        PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.AdminPassword),
+                        Role = "ADMIN",
+                        CreatedAt = now
+                    };
+                    await _dbContext.Users.AddAsync(user, cancellationToken);
+
+                    await _dbContext.Subscriptions.AddAsync(new Subscription
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenant.Id,
+                        PlanId = "plan-free",
+                        Status = SubscriptionStatus.Active,
+                        CurrentPeriodStart = now,
+                        CurrentPeriodEnd = now.AddMonths(1),
+                        CreatedAt = now
+                    }, cancellationToken);
+
+                    await _dbContext.UserVerificationTokens.AddAsync(new UserVerificationToken
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenant.Id,
+                        UserId = user.Id,
+                        TokenHash = IdentityTokenGenerator.ComputeHash(verificationToken),
+                        CreatedAt = now,
+                        ExpiresAt = verificationExpiresAt
+                    }, cancellationToken);
+
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+
+                    // Written inside the transaction so a registration is never committed without its audit entry.
+                    _tenantContext.SetTenantId(tenant.Id);
+                    await _auditService.LogAsync("TENANT_REGISTERED", nameof(Tenant), tenant.Id.ToString(), new
+                    {
+                        tenant.Name,
+                        tenant.Subdomain,
+                        AdminUserId = user.Id,
+                        Status = tenant.Status.ToString()
+                    });
+
+                    await transaction.CommitAsync(cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    _logger.LogError(ex, "Failed to register tenant");
+                    return new RegisterAuthResult(false, AuthFlowError.RegistrationFailed, null);
+                }
+            }
+
+            _logger.LogInformation("New tenant registered pending email verification: {TenantId}", tenant.Id);
+
             try
             {
-                var now = DateTime.UtcNow;
-                var tenant = new Tenant
-                {
-                    Id = Guid.NewGuid(),
-                    Name = request.CompanyName,
-                    Subdomain = request.Subdomain,
-                    Status = TenantStatus.Active,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
-
-                await _dbContext.Tenants.AddAsync(tenant, cancellationToken);
-
-                var user = new User
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenant.Id,
-                    Email = request.AdminEmail,
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.AdminPassword),
-                    EmailVerifiedAt = now,
-                    Role = "ADMIN",
-                    CreatedAt = now
-                };
-                await _dbContext.Users.AddAsync(user, cancellationToken);
-
-                await _dbContext.Subscriptions.AddAsync(new Subscription
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenant.Id,
-                    PlanId = "plan-free",
-                    Status = SubscriptionStatus.Active,
-                    CurrentPeriodStart = now,
-                    CurrentPeriodEnd = now.AddMonths(1),
-                    CreatedAt = now
-                }, cancellationToken);
-
-                await _dbContext.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
-
-                var accessToken = _jwtService.GenerateToken(user, tenant);
-                _tenantContext.SetTenantId(tenant.Id);
-                await _auditService.LogAsync("TENANT_REGISTERED", nameof(Tenant), tenant.Id.ToString(), new
-                {
-                    tenant.Name,
-                    tenant.Subdomain,
-                    AdminUserId = user.Id
-                });
-
-                var refreshTokenResult = await _refreshTokenService.IssueTokenAsync(
-                    tenant.Id,
-                    user.Id,
-                    now.AddDays(7),
-                    requestIp);
-
-                _logger.LogInformation("New tenant registered: {TenantId}", tenant.Id);
-
-                return new RegisterAuthResult(
-                    true,
-                    AuthFlowError.None,
-                    new AuthResponse(
-                        accessToken,
-                        refreshTokenResult.Token,
-                        tenant.Id,
-                        user.Id,
-                        user.Email,
-                        now.AddMinutes(60),
-                        refreshTokenResult.ExpiresAt));
+                await _notificationService.SendVerificationAsync(tenant.Id, user.Email, verificationToken, verificationExpiresAt, cancellationToken);
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync(cancellationToken);
-                _logger.LogError(ex, "Failed to register tenant");
-                return new RegisterAuthResult(false, AuthFlowError.RegistrationFailed, null);
+                // The registration is committed; the admin can ask for a new token via /auth/verification/request.
+                _logger.LogError(ex, "Failed to send registration verification for tenant {TenantId}", tenant.Id);
             }
+
+            return new RegisterAuthResult(
+                true,
+                AuthFlowError.None,
+                new RegistrationPendingResponse(
+                    tenant.Id,
+                    RegistrationPendingResponse.PendingVerificationStatus,
+                    verificationExpiresAt));
+        }
+
+        // Deletes unverified registrations past their pending window that hold the requested subdomain or email.
+        // Tenant foreign keys cascade, so the tenant's user, tokens and subscription go with it.
+        private async Task ReclaimExpiredPendingRegistrationsAsync(string subdomainLookup, string emailLookup, CancellationToken cancellationToken)
+        {
+            var cutoff = DateTime.UtcNow - PendingRegistrationLifetime;
+            var reclaimed = await _dbContext.Tenants
+                .Where(t => t.Status == TenantStatus.PendingVerification
+                    && t.CreatedAt < cutoff
+                    && (t.Subdomain.ToLower() == subdomainLookup || t.Users.Any(u => u.Email.ToLower() == emailLookup)))
+                .ExecuteDeleteAsync(cancellationToken);
+
+            if (reclaimed > 0)
+                _logger.LogInformation("Reclaimed {Count} expired pending tenant registration(s)", reclaimed);
         }
 
         public async Task<LoginAuthResult> LoginAsync(LoginRequest request, string? requestIp, CancellationToken cancellationToken = default)

@@ -107,6 +107,26 @@ WHERE "Subdomain" IN ('admin', 'api', 'app', 'assets', 'auth', 'billing', 'cdn',
 ORDER BY "CreatedAt";
 ```
 
+### Pending tenant registrations
+
+Self-registered tenants stay `PendingVerification` (`Status = 3`) until the admin completes email verification. `IdentityNotificationService` only logs that a verification was queued; it does not send email and deliberately does not log the token, so there is no live way to deliver it yet. Unverified registrations older than 48 hours are reclaimed only when a new registration requests the same subdomain or email; there is no background cleanup.
+
+On a **local development database only**, activate a tenant you registered yourself by hand:
+
+```sql
+UPDATE "Users" SET "EmailVerifiedAt" = now() WHERE "TenantId" = '<tenant-id>';
+UPDATE "Tenants" SET "Status" = 0, "UpdatedAt" = now() WHERE "Id" = '<tenant-id>' AND "Status" = 3;
+```
+
+To review pending registrations (read-only):
+
+```sql
+SELECT "Id", "Subdomain", "CreatedAt", "CreatedAt" < now() - interval '48 hours' AS "Reclaimable"
+FROM "Tenants"
+WHERE "Status" = 3
+ORDER BY "CreatedAt";
+```
+
 ## Database migrations
 
 From the repository root:

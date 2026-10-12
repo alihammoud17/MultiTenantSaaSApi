@@ -19,6 +19,27 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
     }
 
     [Fact]
+    public async Task RegistrationVerificationToken_ShouldNotActivateAnotherPendingTenant()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var tenantA = await SecurityTestHelpers.RegisterPendingTenantAsync(client, $"pending-a-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"pending-a-{Guid.NewGuid():N}");
+        var tenantB = await SecurityTestHelpers.RegisterPendingTenantAsync(client, $"pending-b-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"pending-b-{Guid.NewGuid():N}");
+
+        var crossTenant = await client.PostAsJsonAsync("/api/v1/auth/verification/complete", new
+        {
+            tenantId = tenantB,
+            verificationToken = CapturingIdentityNotificationService.GetLatestVerificationToken(tenantA)
+        });
+
+        crossTenant.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.Tenants.Single(t => t.Id == tenantA).Status.Should().Be(TenantStatus.PendingVerification);
+        db.Tenants.Single(t => t.Id == tenantB).Status.Should().Be(TenantStatus.PendingVerification);
+        db.Users.Where(u => u.TenantId == tenantA || u.TenantId == tenantB).Should().OnlyContain(u => u.EmailVerifiedAt == null);
+    }
+
+    [Fact]
     public async Task TenantScopedAdminEndpoints_ShouldRejectTokenHeaderTenantMismatch()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);

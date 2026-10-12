@@ -71,6 +71,9 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 options.UseSqlite(sp.GetRequiredService<DbConnection>()));
 
             services.AddScoped<IRateLimitService, AlwaysAllowRateLimitService>();
+
+            services.RemoveAll<IIdentityNotificationService>();
+            services.AddSingleton<IIdentityNotificationService, CapturingIdentityNotificationService>();
         });
     }
 
