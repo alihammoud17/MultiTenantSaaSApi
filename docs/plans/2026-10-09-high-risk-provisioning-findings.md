@@ -35,12 +35,12 @@ Deployment: the API is served at `api.example.com`. Run this on a build without 
 As an integration test: register a tenant with subdomain `api` by inserting it straight into the DB, since the validator now rejects it. Register a victim tenant. Send the victim's authenticated request with `Host: api.example.com` and assert the 403 (before the fix) or 200 (after).
 
 ### Steps
-- [ ] Add a `TenantResolution` options section with a `BaseDomain` setting, for example `example.com`. Bind it in `Presentation/Program.cs` alongside the existing options bindings.
-- [ ] In `TenantMiddleware`, only use host resolution when `Request.Host.Host` ends with `"." + BaseDomain` (ignoring case) and exactly one label sits before the base domain. Take that label lowercased.
+- [x] Add a `TenantResolution` options section with a `BaseDomain` setting, for example `example.com`. Bind it in `Presentation/Program.cs` alongside the existing options bindings.
+- [x] In `TenantMiddleware`, only use host resolution when `Request.Host.Host` ends with `"." + BaseDomain` (ignoring case) and exactly one label sits before the base domain. Take that label lowercased.
   - In every other case skip strategy 1 and fall through to `X-Tenant-ID` and the JWT. This covers a different host, an IP address, `localhost`, more than one label, or an unset `BaseDomain`, where host resolution is disabled.
   - Optionally, also skip the label when `TenantRegistrationValidator` says it is reserved, as defence in depth. Expose a static `IsReservedSubdomain(string)` from `Application/Services/TenantRegistrationValidator.cs` rather than duplicating the list.
-- [ ] Add `TenantResolution__BaseDomain=` to `deploy/env-examples/api.env.example` with a comment. Document it in `docs/operations.md` and update the tenant resolution paragraph in `docs/architecture.md`.
-- [ ] One-off data check, documented in `docs/operations.md` and not automated: run a SQL query to list existing tenants whose subdomain is reserved or invalid, so an operator can decide how to rename them.
+- [x] Add `TenantResolution__BaseDomain=` to `deploy/env-examples/api.env.example` with a comment. Document it in `docs/operations.md` and update the tenant resolution paragraph in `docs/architecture.md`.
+- [x] One-off data check, documented in `docs/operations.md` and not automated: run a SQL query to list existing tenants whose subdomain is reserved or invalid, so an operator can decide how to rename them.
 
 ---
 
@@ -116,7 +116,8 @@ As an integration test: register twice with the same email under different subdo
   - The repro above returns 200 for the victim. The `api` tenant inserted directly is ignored, because `api` is reserved.
   - `Host: 127.0.0.1`, `Host: localhost`, and `Host: a.b.example.com` don't use host resolution.
   - With `BaseDomain` unset, host resolution is disabled.
-- **Run:** `dotnet test --filter "FullyQualifiedName~TenantLifecycleAndResolutionTests"`
+- **Unit** (added during implementation): `Tests/UnitTests/TenantResolutionOptionsTests.cs` covers the host parser `TenantResolutionOptions.TryGetTenantSubdomain`: single label under the base domain (case, trailing dot, leading-dot base), and rejection of unset base domain, other domains, look-alike suffixes, the base domain itself, deeper labels, IPs, `localhost`, empty/null hosts and reserved labels.
+- **Run:** `dotnet test --filter "FullyQualifiedName~TenantLifecycleAndResolutionTests|FullyQualifiedName~TenantResolutionOptionsTests"`
 
 ### Finding 2
 - **Integration** (`Tests/Integration/AuthBruteForceRateLimitTests.cs`, extending `AuthRateLimitWebApplicationFactory` with a known proxy and a startup filter that fixes `RemoteIpAddress`):
@@ -180,3 +181,8 @@ Each finding gets its own branch off up-to-date `master` (`fix/auth-rate-limit-f
   - The existing test `RefreshEndpoint_ShouldReturn429_WhenLoginRateLimitBudgetIsExhausted` asserted the shared login/refresh budget this step removes. It was replaced by `RefreshEndpoint_ShouldNotBeRateLimited_WhenLoginRateLimitBudgetIsExhausted` rather than kept passing.
   - Added test infrastructure: `AuthRateLimitWebApplicationFactory` now makes every request arrive from a trusted proxy address (`10.0.0.5`) via a startup filter, and trusts it through `ForwardedHeaders:KnownProxies`.
   - Manual two-host curl check on the Compose VM: not run (no VM available in this session).
+- **2026-10-12 — Finding 1 implemented** on `fix/tenant-host-resolution-base-domain`. No change to the approach. Details:
+  - The optional reserved-label check was included: `TenantRegistrationValidator.IsReservedSubdomain` is now public and used by the host parser.
+  - Host parsing lives in `TenantResolutionOptions.TryGetTenantSubdomain` (`Presentation/Middleware/TenantResolutionOptions.cs`) so it can be unit tested; unit tests were added (see Tests, finding 1).
+  - Integration tests use `TenantResolution:BaseDomain=example.test` in `ApiWebApplicationFactory`, matching the host the existing host-override test already used. The "base domain unset" test needs a JWT, because the authorization middleware returns 401 before tenant resolution for anonymous requests; it compares the same cross-tenant request with and without a base domain.
+  - The documented SQL data check was not run: `psql` is not installed on this machine.

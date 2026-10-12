@@ -21,7 +21,7 @@ Controllers should remain transport-focused; business orchestration belongs in a
 
 ## Tenant resolution and isolation
 
-For tenant-sensitive requests, `TenantMiddleware` can resolve a tenant hint from the request subdomain or `X-Tenant-ID`. When a JWT is authenticated, its `tenant_id` claim is authoritative. A conflicting hint is rejected, and the resolved tenant must exist and be active before scoped tenant context is set.
+For tenant-sensitive requests, `TenantMiddleware` can resolve a tenant hint from the request subdomain or `X-Tenant-ID`. Subdomain resolution only applies to hosts of the form `<subdomain>.<TenantResolution:BaseDomain>`: any other host (a different domain, deeper subdomains, IP addresses, `localhost`) and any reserved label such as `api` or `www` is ignored, and host resolution is disabled when no base domain is configured. When a JWT is authenticated, its `tenant_id` claim is authoritative. A conflicting hint is rejected, and the resolved tenant must exist and be active before scoped tenant context is set.
 
 Tenant isolation is also enforced through tenant predicates in data access and service-layer checks. Sensitive regression suites cover authentication, administration, billing, analytics, audit, entitlements, internal callbacks, and webhook endpoint management. These controls reduce cross-tenant risk but do not replace code review for every new query and endpoint.
 

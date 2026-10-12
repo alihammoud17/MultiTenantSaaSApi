@@ -54,6 +54,7 @@ Configuration can use user secrets for development or double-underscore environm
 | `Jwt:ExpirationMinutes` | `Jwt__ExpirationMinutes` | Access-token lifetime; documented default is `60`. |
 | `BillingIntegration:SharedSecret` | `BillingIntegration__SharedSecret` | Internal callback HMAC key; required and sensitive. |
 | `BillingIntegration:AllowedClockSkewMinutes` | `BillingIntegration__AllowedClockSkewMinutes` | Callback timestamp tolerance; default is `5`. |
+| `TenantResolution:BaseDomain` | `TenantResolution__BaseDomain` | Domain tenants are served under, e.g. `example.com`. Only `<subdomain>.<BaseDomain>` hosts resolve a tenant by subdomain; reserved labels (`api`, `www`, ...) never do. Unset disables host-based resolution. |
 | `ForwardedHeaders:KnownNetworks` | `ForwardedHeaders__KnownNetworks__0` | CIDR list of reverse-proxy networks whose `X-Forwarded-For`/`X-Forwarded-Proto` headers are trusted. Unset means only loopback is trusted. |
 | `ForwardedHeaders:KnownProxies` | `ForwardedHeaders__KnownProxies__0` | Individual reverse-proxy IP addresses to trust, in addition to `KnownNetworks`. |
 
@@ -90,6 +91,21 @@ dotnet user-secrets set "BillingIntegration:AllowedClockSkewMinutes" "5"
 | `RECONCILIATION_INTERVAL_MS` | `300000` | Scheduled reconciliation interval. |
 
 Do not infer runtime capability from a parsed variable: provider selection, callback delivery, and reconciliation readers remain scaffolded.
+
+### Tenant subdomain data check
+
+Registration rejects reserved and malformed subdomains, and `TenantMiddleware` never resolves reserved labels from the host. Tenants created before those rules may still hold such names. List them with this read-only PostgreSQL query, then decide case by case how to rename them; there is no automated migration. The reserved list mirrors `ReservedSubdomains` in `Application/Services/TenantRegistrationValidator.cs`.
+
+```sql
+SELECT "Id", "Name", "Subdomain", "Status", "CreatedAt"
+FROM "Tenants"
+WHERE "Subdomain" IN ('admin', 'api', 'app', 'assets', 'auth', 'billing', 'cdn', 'dashboard', 'docs', 'ftp',
+                      'internal', 'localhost', 'mail', 'smtp', 'static', 'status', 'support', 'www')
+   OR "Subdomain" !~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'
+   OR "Subdomain" ~ '^[0-9]+$'
+   OR length("Subdomain") NOT BETWEEN 3 AND 50
+ORDER BY "CreatedAt";
+```
 
 ## Database migrations
 

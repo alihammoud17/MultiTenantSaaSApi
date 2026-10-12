@@ -98,6 +98,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddRbacAuthorization();
+builder.Services.Configure<TenantResolutionOptions>(
+    builder.Configuration.GetSection(TenantResolutionOptions.SectionName));
+
 // Trust X-Forwarded-For/Proto only from configured reverse proxies (e.g. the Compose NGINX subnet).
 // ForwardLimit = 1 means only the entry appended by the trusted proxy is used, so clients cannot spoof it.
 // With nothing configured, the framework default trusts loopback only.

@@ -5,7 +5,9 @@ using System.Text.Json;
 using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Data;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Tests.Integration;
@@ -72,6 +74,85 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("id").GetGuid().Should().Be(tenantA.TenantId);
+    }
+
+    [Fact]
+    public async Task TenantResolution_ReservedHostLabel_ShouldNotCaptureOtherTenantsRequests()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+
+        // A tenant holding "api" (e.g. registered before reserved names were rejected) must not own api.<BaseDomain>.
+        await EnsureTenantWithSubdomainAsync("api");
+        var victim = await RegisterTenantWithSubdomainAsync(client, $"victim-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"victim-{Guid.NewGuid():N}");
+
+        var response = await SendAdminTenantRequestAsync(client, $"api.{ApiWebApplicationFactory.TenantBaseDomain}", victim.Token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("id").GetGuid().Should().Be(victim.TenantId);
+    }
+
+    [Theory]
+    [InlineData("{0}.other.test")]          // different domain
+    [InlineData("{0}.deep.example.test")]   // more than one label under the base domain
+    [InlineData("{0}")]                     // bare label, no domain
+    public async Task TenantResolution_HostOutsideBaseDomain_ShouldNotResolveTenant(string hostTemplate)
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+
+        var attacker = await RegisterTenantWithSubdomainAsync(client, $"attacker-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"attacker-{Guid.NewGuid():N}");
+        var victim = await RegisterTenantWithSubdomainAsync(client, $"victim-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"victim-{Guid.NewGuid():N}");
+
+        var response = await SendAdminTenantRequestAsync(client, string.Format(hostTemplate, attacker.Subdomain), victim.Token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("id").GetGuid().Should().Be(victim.TenantId);
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1", "127")]
+    [InlineData("localhost", "localhost")]
+    public async Task TenantResolution_IpAndLocalhostHosts_ShouldNotResolveTenant(string host, string matchingSubdomain)
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+
+        await EnsureTenantWithSubdomainAsync(matchingSubdomain);
+        var victim = await RegisterTenantWithSubdomainAsync(client, $"victim-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"victim-{Guid.NewGuid():N}");
+
+        var response = await SendAdminTenantRequestAsync(client, host, victim.Token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("id").GetGuid().Should().Be(victim.TenantId);
+    }
+
+    [Fact]
+    public async Task TenantResolution_WithoutBaseDomain_ShouldDisableHostResolution()
+    {
+        using var registrationClient = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var hostTenant = await RegisterTenantWithSubdomainAsync(registrationClient, $"no-base-a-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"no-base-a-{Guid.NewGuid():N}");
+        var caller = await RegisterTenantWithSubdomainAsync(registrationClient, $"no-base-b-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"no-base-b-{Guid.NewGuid():N}");
+        var host = $"{hostTenant.Subdomain}.{ApiWebApplicationFactory.TenantBaseDomain}";
+
+        // With a base domain, the host resolves to hostTenant and conflicts with the caller's JWT.
+        var withBaseDomain = await SendAdminTenantRequestAsync(registrationClient, host, caller.Token);
+        withBaseDomain.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        using var noBaseDomainFactory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, config) =>
+                config.AddInMemoryCollection(new Dictionary<string, string?> { ["TenantResolution:BaseDomain"] = "" })));
+        using var client = noBaseDomainFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        // Without one, the host is ignored and the caller's JWT tenant is used.
+        var withoutBaseDomain = await SendAdminTenantRequestAsync(client, host, caller.Token);
+
+        withoutBaseDomain.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await withoutBaseDomain.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("id").GetGuid().Should().Be(caller.TenantId);
     }
 
     [Fact]
@@ -149,5 +230,36 @@ public class TenantLifecycleAndResolutionTests : IClassFixture<ApiWebApplication
             body.GetProperty("refreshToken").GetString()!,
             body.GetProperty("tenantId").GetGuid(),
             subdomain);
+    }
+
+    private static async Task<HttpResponseMessage> SendAdminTenantRequestAsync(HttpClient client, string host, string? token)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/tenant");
+        if (token is not null)
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Host = host;
+
+        return await client.SendAsync(request);
+    }
+
+    // Inserts a tenant directly, bypassing registration validation, to simulate data that predates it.
+    private async Task EnsureTenantWithSubdomainAsync(string subdomain)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        if (await dbContext.Tenants.AnyAsync(t => t.Subdomain == subdomain))
+            return;
+
+        var now = DateTime.UtcNow;
+        dbContext.Tenants.Add(new Tenant
+        {
+            Id = Guid.NewGuid(),
+            Name = $"Legacy {subdomain}",
+            Subdomain = subdomain,
+            Status = TenantStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await dbContext.SaveChangesAsync();
     }
 }
