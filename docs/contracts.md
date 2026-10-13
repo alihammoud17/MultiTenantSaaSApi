@@ -18,16 +18,27 @@ The .NET API consumes this contract and remains the internal subscription system
 
 Requests use:
 
-- `X-Billing-Timestamp`: Unix timestamp in seconds.
-- `X-Billing-Signature`: lowercase hexadecimal HMAC-SHA256.
+- `X-Billing-Timestamp`: ISO 8601 timestamp, e.g. `2026-01-01T00:00:00Z`. Include an explicit offset or `Z`; a timestamp without one is treated as UTC.
+- `X-Billing-Signature`: `sha256=` followed by the lowercase hexadecimal HMAC-SHA256 of the signing input.
 
-The signing input is:
+The signing input is the timestamp header value, a newline (`\n`), then the raw request body:
 
 ```text
-<timestamp>.<raw request body>
+<timestamp>\n<raw request body>
 ```
 
-The key is `BillingIntegration:SharedSecret`. The API rejects absent or invalid signatures and timestamps outside `BillingIntegration:AllowedClockSkewMinutes`. Sign the exact bytes sent; JSON reserialization can change the signature.
+The key is `BillingIntegration:SharedSecret`. The API rejects absent or invalid signatures and timestamps outside `BillingIntegration:AllowedClockSkewMinutes` (default 5). Sign the exact bytes sent and the exact timestamp string sent; reserializing the JSON or reformatting the timestamp changes the signature. The internal tenant-operations endpoints use the same scheme with their own key (see below); both are verified by `Application/Services/HmacRequestSignature.cs`.
+
+Known-answer test vector. Producers and the consumer must both reproduce it; it is asserted in `Tests/UnitTests/HmacRequestSignatureTests.cs`:
+
+| Input | Value |
+| --- | --- |
+| Key | `example-shared-secret` |
+| Timestamp | `2026-01-01T00:00:00Z` |
+| Body | `{"eventId":"evt_example"}` |
+| Signature | `sha256=b82b6991c877ed60e6a337a1928478d323770ca01846828fa0a77c424b19d8ae` |
+
+The producer side is not implemented yet: BillingService's default callback publisher only logs. When a signing publisher is added, `BillingService/tests/billingCallbackContract.test.ts` must assert the same vector.
 
 ### Current version and body
 
@@ -87,7 +98,7 @@ Operator-only tenant status changes. The API is the producer's only counterpart;
 ### Authentication
 
 - `X-Operations-Timestamp`: ISO 8601 timestamp, e.g. `2026-10-13T14:00:00.0000000+00:00`.
-- `X-Operations-Signature`: `sha256=` followed by the lowercase hexadecimal HMAC-SHA256 of `<timestamp>\n<raw request body>` (a newline between the two).
+- `X-Operations-Signature`: `sha256=` followed by the lowercase hexadecimal HMAC-SHA256 of `<timestamp>\n<raw request body>` (a newline between the two). Same scheme and test vector as the billing callback, with a different key.
 
 The key is `TenantOperations:SharedSecret`, deliberately separate from the billing secret. An unset secret rejects every request. Timestamps outside `TenantOperations:AllowedClockSkewMinutes` (default 5) are rejected. Sign the exact bytes sent.
 

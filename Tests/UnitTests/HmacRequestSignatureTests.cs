@@ -19,6 +19,19 @@ public class HmacRequestSignatureTests
         HmacRequestSignature.IsValid(Secret, Skew, Payload, timestamp, signature).Should().BeTrue();
     }
 
+    // Known-answer vector published in docs/contracts.md. Producers (BillingService, operator scripts) must
+    // reproduce it exactly; if this test needs to change, the published contract changes too.
+    [Fact]
+    public void Compute_ShouldMatchThePublishedContractTestVector()
+    {
+        var signature = HmacRequestSignature.Compute(
+            "example-shared-secret",
+            "2026-01-01T00:00:00Z",
+            "{\"eventId\":\"evt_example\"}");
+
+        signature.Should().Be("sha256=b82b6991c877ed60e6a337a1928478d323770ca01846828fa0a77c424b19d8ae");
+    }
+
     [Fact]
     public void IsValid_ShouldRejectSignatureFromADifferentSecret()
     {
