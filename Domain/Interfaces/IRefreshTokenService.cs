@@ -44,5 +44,12 @@ namespace Domain.Interfaces
             string? reason = null,
             string? exceptRefreshToken = null,
             CancellationToken cancellationToken = default);
+
+        // Revokes every active refresh token of every user in the tenant (e.g. on suspension).
+        // RefreshTokens are tenant-filtered, so the caller must have set the tenant context to tenantId.
+        Task<int> RevokeAllTenantTokensAsync(
+            Guid tenantId,
+            string? reason = null,
+            CancellationToken cancellationToken = default);
     }
 }

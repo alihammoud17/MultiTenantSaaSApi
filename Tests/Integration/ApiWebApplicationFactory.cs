@@ -20,6 +20,7 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 {
     // Tenants resolve from hosts of the form <subdomain>.example.test in integration tests.
     public const string TenantBaseDomain = "example.test";
+    public const string TenantOperationsSecret = "tenant-operations-test-secret";
 
     private readonly string _connectionString = $"Data Source=file:api-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
     private readonly SqliteConnection _keepAliveConnection;
@@ -46,7 +47,9 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 ["BillingIntegration:AllowedClockSkewMinutes"] = "5",
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=unused;Username=unused;Password=unused",
                 ["Redis:ConnectionString"] = "localhost:6379",
-                ["TenantResolution:BaseDomain"] = TenantBaseDomain
+                ["TenantResolution:BaseDomain"] = TenantBaseDomain,
+                ["TenantOperations:SharedSecret"] = TenantOperationsSecret,
+                ["TenantOperations:AllowedClockSkewMinutes"] = "5"
             };
 
             configBuilder.AddInMemoryCollection(settings);

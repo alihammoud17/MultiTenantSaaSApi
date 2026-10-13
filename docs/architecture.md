@@ -23,6 +23,10 @@ Controllers should remain transport-focused; business orchestration belongs in a
 
 For tenant-sensitive requests, `TenantMiddleware` can resolve a tenant hint from the request subdomain or `X-Tenant-ID`. Subdomain resolution only applies to hosts of the form `<subdomain>.<TenantResolution:BaseDomain>`: any other host (a different domain, deeper subdomains, IP addresses, `localhost`) and any reserved label such as `api` or `www` is ignored, and host resolution is disabled when no base domain is configured. When a JWT is authenticated, its `tenant_id` claim is authoritative. A conflicting hint is rejected, and the resolved tenant must exist and be active before scoped tenant context is set.
 
+Authenticated `/auth/*` routes skip tenant resolution, because register, login and refresh run before there is a tenant context. They still require the caller's JWT tenant to exist and be `Active`, so a token issued before a suspension stops working everywhere at once. Anonymous identity routes that take a `tenantId` in the body also require an `Active` tenant: invite acceptance and password reset. Email verification also accepts `PendingVerification`, and never changes a `Suspended` status.
+
+Operators suspend and reactivate tenants through the signed internal endpoints `POST /api/internal/tenants/{id}/suspend|reactivate` (`InternalTenantOperationsController` → `TenantLifecycleService`). See [contracts.md](contracts.md). Suspension is manual: billing state (`Expired`/`Canceled` subscriptions) does not suspend a tenant automatically.
+
 Tenant isolation is also enforced through tenant predicates in data access and service-layer checks. Sensitive regression suites cover authentication, administration, billing, analytics, audit, entitlements, internal callbacks, and webhook endpoint management. These controls reduce cross-tenant risk but do not replace code review for every new query and endpoint.
 
 ## Authentication and authorization

@@ -73,6 +73,43 @@ The event inbox stores external event identity for replay protection. Duplicate 
 
 These tests prove local payload, version, authentication, and replay conformance. They do not prove a deployed BillingService callback transport, because the default publisher is not wired to HTTP.
 
+## Internal tenant operations
+
+### Endpoints
+
+```http
+POST /api/internal/tenants/{tenantId}/suspend
+POST /api/internal/tenants/{tenantId}/reactivate
+```
+
+Operator-only tenant status changes. The API is the producer's only counterpart; there is no user identity on these requests.
+
+### Authentication
+
+- `X-Operations-Timestamp`: ISO 8601 timestamp, e.g. `2026-10-13T14:00:00.0000000+00:00`.
+- `X-Operations-Signature`: `sha256=` followed by the lowercase hexadecimal HMAC-SHA256 of `<timestamp>\n<raw request body>` (a newline between the two).
+
+The key is `TenantOperations:SharedSecret`, deliberately separate from the billing secret. An unset secret rejects every request. Timestamps outside `TenantOperations:AllowedClockSkewMinutes` (default 5) are rejected. Sign the exact bytes sent.
+
+### Body
+
+```json
+{ "reason": "Chargeback investigation #1234", "actor": "ops:alice" }
+```
+
+`reason` is required to suspend (at most 500 characters) and optional to reactivate. `actor` is optional (at most 100 characters). It is recorded in the audit entry but not authenticated: anyone holding the secret can claim any actor.
+
+### Behavior
+
+| Request | Allowed from | Effect |
+| --- | --- | --- |
+| suspend | `Active` | Status `Suspended`; reason stored; every refresh token of the tenant revoked; `TENANT_SUSPENDED` audit entry. |
+| reactivate | `Suspended` | Status `Active`; reason cleared; `TENANT_REACTIVATED` audit entry. Refresh tokens revoked by the suspension stay revoked. |
+
+Responses: `200 { tenantId, status }`, `400` invalid body or missing reason, `401` missing or invalid signature, `404` unknown tenant, `409` transition not allowed from the current status. A request whose signed timestamp is not later than the tenant's last status change also returns `409`. Status changes are ordered by signed timestamp, so a captured older request cannot undo a newer one.
+
+Integration coverage: `Tests/Integration/TenantSuspensionTests.cs`.
+
 ## Outbound tenant webhooks
 
 ### Envelope

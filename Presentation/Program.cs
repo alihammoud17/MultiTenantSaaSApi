@@ -47,6 +47,7 @@ builder.Services.AddScoped<IIdentityNotificationService, IdentityNotificationSer
 builder.Services.AddScoped<IMfaService, MfaService>();
 builder.Services.AddScoped<IWebhookEndpointSecretIssuer, WebhookEndpointSecretIssuer>();
 builder.Services.AddScoped<IWebhookEndpointManagementService, WebhookEndpointManagementService>();
+builder.Services.AddScoped<ITenantLifecycleService, TenantLifecycleService>();
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
@@ -71,6 +72,7 @@ builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IBillingCallbackProcessor, BillingCallbackProcessor>();
 builder.Services.AddSingleton<IInternalRequestSignatureValidator, InternalRequestSignatureValidator>();
+builder.Services.AddSingleton<ITenantOperationsSignatureValidator, TenantOperationsSignatureValidator>();
 builder.Services.AddScoped<IEntitlementEvaluator, EntitlementEvaluator>();
 builder.Services.AddScoped<IEntitlementEnforcer, EntitlementEnforcer>();
 builder.Services.AddScoped<IUsageAnalyticsService, UsageAnalyticsService>();

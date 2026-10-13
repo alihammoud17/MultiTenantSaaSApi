@@ -54,6 +54,8 @@ Configuration can use user secrets for development or double-underscore environm
 | `Jwt:ExpirationMinutes` | `Jwt__ExpirationMinutes` | Access-token lifetime; documented default is `60`. |
 | `BillingIntegration:SharedSecret` | `BillingIntegration__SharedSecret` | Internal callback HMAC key; required and sensitive. |
 | `BillingIntegration:AllowedClockSkewMinutes` | `BillingIntegration__AllowedClockSkewMinutes` | Callback timestamp tolerance; default is `5`. |
+| `TenantOperations:SharedSecret` | `TenantOperations__SharedSecret` | HMAC key for the operator suspend/reactivate endpoints; sensitive. Unset disables them. Must differ from the billing secret. |
+| `TenantOperations:AllowedClockSkewMinutes` | `TenantOperations__AllowedClockSkewMinutes` | Accepted timestamp skew for operator requests; default `5`. |
 | `TenantResolution:BaseDomain` | `TenantResolution__BaseDomain` | Domain tenants are served under, e.g. `example.com`. Only `<subdomain>.<BaseDomain>` hosts resolve a tenant by subdomain; reserved labels (`api`, `www`, ...) never do. Unset disables host-based resolution. |
 | `ForwardedHeaders:KnownNetworks` | `ForwardedHeaders__KnownNetworks__0` | CIDR list of reverse-proxy networks whose `X-Forwarded-For`/`X-Forwarded-Proto` headers are trusted. Unset means only loopback is trusted. |
 | `ForwardedHeaders:KnownProxies` | `ForwardedHeaders__KnownProxies__0` | Individual reverse-proxy IP addresses to trust, in addition to `KnownNetworks`. |
@@ -126,6 +128,26 @@ FROM "Tenants"
 WHERE "Status" = 3
 ORDER BY "CreatedAt";
 ```
+
+### Suspending and reactivating a tenant
+
+Suspension blocks the tenant's login, refresh, and every tenant-scoped request (including authenticated `/auth/*` routes), and revokes its refresh tokens. Data is kept. Requests are signed with `TenantOperations:SharedSecret`; see `docs/contracts.md` for the contract.
+
+NGINX rejects `/api/internal/*` with `403`, so call the API on the Compose network. For example, from the VM:
+
+```bash
+TENANT_ID=<tenant-id>
+SECRET=<TenantOperations secret>
+BODY='{"reason":"Chargeback investigation #1234","actor":"ops:alice"}'
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+SIG="sha256=$(printf '%s\n%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | sed 's/^.* //')"
+
+docker compose exec -T nginx wget -qO- --header "Content-Type: application/json" \
+  --header "X-Operations-Timestamp: $TS" --header "X-Operations-Signature: $SIG" \
+  --post-data "$BODY" "http://api:8080/api/internal/tenants/$TENANT_ID/suspend"
+```
+
+Use `/reactivate` to lift a suspension (the reason is optional there). Each request must be signed with a fresh timestamp: a timestamp not later than the tenant's last status change is rejected with `409`. Check the result in the tenant's audit log (`TENANT_SUSPENDED` / `TENANT_REACTIVATED`).
 
 ## Database migrations
 
@@ -232,6 +254,7 @@ The default publisher only logs callback payloads, so successful local queue pro
 
 - `http://localhost/health` routes to the API.
 - `http://localhost/billing/health` and `/billing/metrics` route to BillingService with the `/billing/` prefix removed.
+- `/api/internal/*` (any case) returns `403`. The internal billing callback and the operator tenant endpoints are reached only on the Compose network at `http://api:8080`.
 
 Compose expects these runtime files outside Git:
 
