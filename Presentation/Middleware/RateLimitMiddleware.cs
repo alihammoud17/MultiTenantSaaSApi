@@ -27,6 +27,8 @@ namespace Presentation.Middleware
                 // They are not tenant-authenticated API traffic, so tenant plan limits do not apply here.
                 // Tenant/subscription validation is performed by the internal billing callback processor.
                 path.StartsWith("/api/internal/billing") ||
+                // Signed operator requests (suspend/reactivate) target a tenant but are not that tenant's traffic.
+                path.StartsWith("/api/internal/tenants") ||
                 path.StartsWith("/health") ||
                 path.StartsWith("/metrics") ||
                 path.StartsWith("/swagger") ||

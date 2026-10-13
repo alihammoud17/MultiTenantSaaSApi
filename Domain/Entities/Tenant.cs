@@ -15,6 +15,10 @@ namespace Domain.Entities
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 
+        // When an operator last suspended or reactivated the tenant; signed operator requests older than this are rejected.
+        public DateTime? StatusChangedAtUtc { get; set; }
+        public string? SuspensionReason { get; set; }
+
         // Navigation
         public List<User> Users { get; set; } = [];
         public List<RefreshToken> RefreshTokens { get; set; } = [];

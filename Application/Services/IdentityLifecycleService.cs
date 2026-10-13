@@ -56,7 +56,7 @@ namespace Application.Services
             var invite = await _dbContext.UserInvites
                 .FirstOrDefaultAsync(i => i.TenantId == tenantId && i.TokenHash == tokenHash && i.AcceptedAt == null && i.ExpiresAt > DateTime.UtcNow, cancellationToken);
 
-            if (invite == null)
+            if (invite == null || !await IsTenantActiveAsync(tenantId, cancellationToken))
             {
                 return null;
             }
@@ -119,9 +119,10 @@ namespace Application.Services
         public async Task RequestVerificationAsync(Guid tenantId, string email, CancellationToken cancellationToken = default)
         {
             var user = await _dbContext.Users
+                .Include(u => u.Tenant)
                 .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == email.Trim(), cancellationToken);
 
-            if (user == null || user.EmailVerifiedAt.HasValue)
+            if (user == null || user.EmailVerifiedAt.HasValue || !AllowsVerification(user.Tenant.Status))
             {
                 return;
             }
@@ -150,7 +151,8 @@ namespace Application.Services
                 .Include(x => x.Tenant)
                 .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.TokenHash == tokenHash && x.UsedAt == null && x.ExpiresAt > DateTime.UtcNow, cancellationToken);
 
-            if (record == null)
+            // A suspended tenant must not be able to complete identity flows; verification never changes that status.
+            if (record == null || !AllowsVerification(record.Tenant.Status))
             {
                 return false;
             }
@@ -173,9 +175,10 @@ namespace Application.Services
         public async Task RequestPasswordResetAsync(Guid tenantId, string email, string? requestIp, CancellationToken cancellationToken = default)
         {
             var user = await _dbContext.Users
+                .Include(u => u.Tenant)
                 .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == email.Trim(), cancellationToken);
 
-            if (user == null)
+            if (user == null || user.Tenant.Status != TenantStatus.Active)
             {
                 return;
             }
@@ -203,9 +206,10 @@ namespace Application.Services
             var tokenHash = ComputeHash(resetToken);
             var record = await _dbContext.PasswordResetTokens
                 .Include(x => x.User)
+                .Include(x => x.Tenant)
                 .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.TokenHash == tokenHash && x.UsedAt == null && x.ExpiresAt > DateTime.UtcNow, cancellationToken);
 
-            if (record == null)
+            if (record == null || record.Tenant.Status != TenantStatus.Active)
             {
                 return false;
             }
@@ -214,6 +218,15 @@ namespace Application.Services
             record.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
             await _dbContext.SaveChangesAsync(cancellationToken);
             return true;
+        }
+
+        // Email verification also serves self-registered tenants that are waiting to be activated.
+        private static bool AllowsVerification(TenantStatus status) =>
+            status is TenantStatus.Active or TenantStatus.PendingVerification;
+
+        private Task<bool> IsTenantActiveAsync(Guid tenantId, CancellationToken cancellationToken)
+        {
+            return _dbContext.Tenants.AnyAsync(t => t.Id == tenantId && t.Status == TenantStatus.Active, cancellationToken);
         }
 
         private static string GenerateToken() => IdentityTokenGenerator.GenerateToken();

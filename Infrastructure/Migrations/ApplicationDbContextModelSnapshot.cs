@@ -17,7 +17,7 @@ namespace Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.3")
+                .HasAnnotation("ProductVersion", "10.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -945,10 +945,17 @@ namespace Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("StatusChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Subdomain")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("SuspensionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

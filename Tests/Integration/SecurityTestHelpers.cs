@@ -135,6 +135,38 @@ internal static class SecurityTestHelpers
         return await client.SendAsync(request);
     }
 
+    /// <summary>
+    /// A signed operator request to <c>/api/internal/tenants/{tenantId}/{action}</c>, ready to send (or to replay).
+    /// </summary>
+    internal static HttpRequestMessage CreateSignedTenantOperation(
+        Guid tenantId,
+        string action,
+        object? body,
+        DateTimeOffset? timestamp = null,
+        string secret = ApiWebApplicationFactory.TenantOperationsSecret)
+    {
+        var json = body is null ? string.Empty : JsonSerializer.Serialize(body);
+        var resolvedTimestamp = (timestamp ?? DateTimeOffset.UtcNow).ToString("O");
+
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/internal/tenants/{tenantId}/{action}");
+        request.Headers.Add("X-Operations-Timestamp", resolvedTimestamp);
+        request.Headers.Add("X-Operations-Signature", Application.Services.HmacRequestSignature.Compute(secret, resolvedTimestamp, json));
+        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+        return request;
+    }
+
+    internal static async Task<HttpResponseMessage> SuspendTenantAsync(HttpClient client, Guid tenantId, string reason = "test suspension")
+    {
+        using var request = CreateSignedTenantOperation(tenantId, "suspend", new { reason, actor = "integration-test" });
+        return await client.SendAsync(request);
+    }
+
+    internal static async Task<HttpResponseMessage> ReactivateTenantAsync(HttpClient client, Guid tenantId)
+    {
+        using var request = CreateSignedTenantOperation(tenantId, "reactivate", new { reason = "test reactivation", actor = "integration-test" });
+        return await client.SendAsync(request);
+    }
+
     internal static Guid GetSubscriptionId(ApiWebApplicationFactory factory, Guid tenantId)
     {
         using var scope = factory.Services.CreateScope();

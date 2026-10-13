@@ -269,6 +269,9 @@ public class AuthControllerBoundaryTests
 
         public Task<int> RevokeAllActiveTokensAsync(Guid tenantId, Guid userId, string? revokedByIp = null, string? reason = null, string? exceptRefreshToken = null, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+
+        public Task<int> RevokeAllTenantTokensAsync(Guid tenantId, string? reason = null, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 
     private sealed class StubTenantContext : ITenantContext

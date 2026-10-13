@@ -184,6 +184,28 @@ namespace Application.Services
             return activeTokens.Count;
         }
 
+        public async Task<int> RevokeAllTenantTokensAsync(
+            Guid tenantId,
+            string? reason = null,
+            CancellationToken cancellationToken = default)
+        {
+            var now = DateTime.UtcNow;
+            var activeTokens = await _dbContext.RefreshTokens
+                .Where(t => t.TenantId == tenantId
+                    && t.RevokedAt == null
+                    && t.ExpiresAt > now)
+                .ToListAsync(cancellationToken);
+
+            foreach (var token in activeTokens)
+            {
+                token.RevokedAt = now;
+                token.RevocationReason = reason;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return activeTokens.Count;
+        }
+
         private static string GenerateToken()
         {
             var bytes = RandomNumberGenerator.GetBytes(64);

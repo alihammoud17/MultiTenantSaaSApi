@@ -91,6 +91,7 @@ namespace Infrastructure.Data
                 entity.HasIndex(e => e.Subdomain).IsUnique();
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.Subdomain).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.SuspensionReason).HasMaxLength(500);
             });
 
             // User
