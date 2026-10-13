@@ -257,10 +257,16 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
             adminPassword = "Passw0rd!"
         });
 
-        sameEmail.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await sameEmail.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().Should().Be("Email already registered");
+        // The email answer is indistinguishable from a new registration, but the pending tenant keeps the email.
+        sameEmail.StatusCode.Should().Be(HttpStatusCode.Accepted);
         sameSubdomain.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await sameSubdomain.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().Should().Be("Subdomain already taken");
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await dbContext.Tenants.SingleAsync(t => t.Id == pendingTenantId)).Status.Should().Be(TenantStatus.PendingVerification);
+        (await dbContext.Users.Where(u => u.Email == email).Select(u => u.TenantId).ToListAsync())
+            .Should().Equal(pendingTenantId);
     }
 
     [Fact]
@@ -576,10 +582,11 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
-    public async Task Register_ShouldReturnBadRequest_WhenEmailAlreadyRegisteredWithDifferentCase()
+    public async Task Register_WithAlreadyRegisteredEmail_ShouldBeIndistinguishableFromNewRegistration_AndCreateNothing()
     {
         using var client = CreateClient();
         var email = $"dup-email-{Guid.NewGuid():N}@example.com";
+        var secondSubdomain = $"email-b-{Guid.NewGuid():N}";
 
         var first = await client.PostAsJsonAsync("/api/v1/auth/register", new
         {
@@ -590,18 +597,60 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         });
 
         first.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var noticesBefore = CapturingIdentityNotificationService.GetExistingAccountNoticeCount(email);
 
         var second = await client.PostAsJsonAsync("/api/v1/auth/register", new
         {
             companyName = "Second Company",
-            subdomain = $"email-b-{Guid.NewGuid():N}",
+            subdomain = secondSubdomain,
             adminEmail = $"  {email.ToUpperInvariant()} ",
             adminPassword = "Passw0rd!"
         });
 
-        second.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await second.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("error").GetString().Should().Be("Email already registered");
+        second.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var firstBody = await first.Content.ReadFromJsonAsync<JsonElement>();
+        var secondBody = await second.Content.ReadFromJsonAsync<JsonElement>();
+        secondBody.EnumerateObject().Select(p => p.Name).Should().Equal(firstBody.EnumerateObject().Select(p => p.Name));
+        secondBody.GetProperty("status").GetString().Should().Be(firstBody.GetProperty("status").GetString());
+        var fakeTenantId = secondBody.GetProperty("tenantId").GetGuid();
+        fakeTenantId.Should().NotBe(firstBody.GetProperty("tenantId").GetGuid());
+
+        CapturingIdentityNotificationService.GetExistingAccountNoticeCount(email).Should().Be(noticesBefore + 1);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            (await dbContext.Tenants.AnyAsync(t => t.Id == fakeTenantId || t.Subdomain == secondSubdomain)).Should().BeFalse();
+            (await dbContext.Users.CountAsync(u => u.Email.ToLower() == email)).Should().Be(1);
+        }
+
+        var verify = await client.PostAsJsonAsync("/api/v1/auth/verification/complete", new
+        {
+            tenantId = fakeTenantId,
+            verificationToken = "not-a-real-token"
+        });
+        verify.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await verify.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().Should().Be("Invalid or expired verification token");
+    }
+
+    [Fact]
+    public async Task Register_WithTakenSubdomainAndRegisteredEmail_ShouldReportSubdomainOnly()
+    {
+        using var client = CreateClient();
+        var email = $"both-taken-{Guid.NewGuid():N}@example.com";
+        var subdomain = $"both-taken-{Guid.NewGuid():N}";
+        await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Passw0rd!", subdomain);
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Both Taken Co",
+            subdomain,
+            adminEmail = email,
+            adminPassword = "Passw0rd!"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().Should().Be("Subdomain already taken");
     }
 
     [Theory]
@@ -665,6 +714,24 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("error").GetString().Should().Be("Invalid credentials");
+    }
+
+    [Fact]
+    public async Task Login_UnknownEmail_ShouldMatchWrongPasswordResponse()
+    {
+        using var client = CreateClient();
+        var email = $"known-{Guid.NewGuid():N}@example.com";
+        await RegisterTenant(client, email, "Passw0rd!");
+
+        var wrongPassword = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "WrongPass123!" });
+        var unknownEmail = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            email = $"unknown-{Guid.NewGuid():N}@example.com",
+            password = "WrongPass123!"
+        });
+
+        unknownEmail.StatusCode.Should().Be(wrongPassword.StatusCode);
+        (await unknownEmail.Content.ReadAsStringAsync()).Should().Be(await wrongPassword.Content.ReadAsStringAsync());
     }
 
     [Fact]

@@ -11,6 +11,12 @@ namespace Tests.Integration;
 public sealed class CapturingIdentityNotificationService : IIdentityNotificationService
 {
     private static readonly ConcurrentDictionary<Guid, string> LatestVerificationTokens = new();
+    private static readonly ConcurrentDictionary<string, int> ExistingAccountNotices = new(StringComparer.OrdinalIgnoreCase);
+
+    public static int GetExistingAccountNoticeCount(string email)
+    {
+        return ExistingAccountNotices.TryGetValue(email, out var count) ? count : 0;
+    }
 
     public static string GetLatestVerificationToken(Guid tenantId)
     {
@@ -27,6 +33,12 @@ public sealed class CapturingIdentityNotificationService : IIdentityNotification
     public Task SendVerificationAsync(Guid tenantId, string email, string verificationToken, DateTime expiresAt, CancellationToken cancellationToken = default)
     {
         LatestVerificationTokens[tenantId] = verificationToken;
+        return Task.CompletedTask;
+    }
+
+    public Task SendExistingAccountRegistrationNoticeAsync(string email, CancellationToken cancellationToken = default)
+    {
+        ExistingAccountNotices.AddOrUpdate(email, 1, (_, count) => count + 1);
         return Task.CompletedTask;
     }
 

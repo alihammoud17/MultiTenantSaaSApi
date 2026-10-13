@@ -129,7 +129,7 @@ namespace Presentation.Controllers
             var normalizedEmail = request.Email.Trim();
             var exists = await _dbContext.Users.AnyAsync(u => u.Email == normalizedEmail);
             if (exists)
-                return BadRequest(new { error = "User already exists" });
+                return BadRequest(new { error = "Email is already in use" });
 
             var user = new User
             {

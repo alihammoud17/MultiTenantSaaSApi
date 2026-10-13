@@ -7,7 +7,6 @@ namespace Domain.Outputs
     {
         None = 0,
         SubdomainAlreadyTaken,
-        EmailAlreadyRegistered,
         RegistrationFailed,
         InvalidCredentials,
         EmailNotVerified,

@@ -109,7 +109,7 @@ ORDER BY "CreatedAt";
 
 ### Pending tenant registrations
 
-Self-registered tenants stay `PendingVerification` (`Status = 3`) until the admin completes email verification. `IdentityNotificationService` only logs that a verification was queued; it does not send email and deliberately does not log the token, so there is no live way to deliver it yet. Unverified registrations older than 48 hours are reclaimed only when a new registration requests the same subdomain or email; there is no background cleanup.
+Self-registered tenants stay `PendingVerification` (`Status = 3`) until the admin completes email verification. A registration for an email that already has an account creates nothing and only logs that an existing-account notice was queued. `IdentityNotificationService` only logs that a verification was queued; it does not send email and deliberately does not log the token, so there is no live way to deliver it yet. Unverified registrations older than 48 hours are reclaimed only when a new registration requests the same subdomain or email; there is no background cleanup.
 
 On a **local development database only**, activate a tenant you registered yourself by hand:
 

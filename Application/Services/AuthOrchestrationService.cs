@@ -15,6 +15,10 @@ namespace Application.Services
         // and email can be reclaimed by a new registration, so an unverified sign-up cannot hold them for good.
         public static readonly TimeSpan PendingRegistrationLifetime = TimeSpan.FromHours(48);
 
+        // Verified against when a login email is unknown, so that path costs the same as a wrong password.
+        // HashPassword uses the same default work factor as real user hashes.
+        private static readonly string DummyPasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N"));
+
         private readonly ApplicationDbContext _dbContext;
         private readonly IJwtService _jwtService;
         private readonly IRefreshTokenService _refreshTokenService;
@@ -61,8 +65,9 @@ namespace Application.Services
             if (await _dbContext.Tenants.AnyAsync(t => t.Subdomain.ToLower() == subdomainLookup, cancellationToken))
                 return new RegisterAuthResult(false, AuthFlowError.SubdomainAlreadyTaken, null);
 
+            // Checked after the subdomain so the subdomain answer never depends on the email.
             if (await _dbContext.Users.AnyAsync(u => u.Email.ToLower() == emailLookup, cancellationToken))
-                return new RegisterAuthResult(false, AuthFlowError.EmailAlreadyRegistered, null);
+                return await AnswerExistingAccountRegistrationAsync(request, cancellationToken);
 
             var now = DateTime.UtcNow;
             var verificationToken = IdentityTokenGenerator.GenerateToken();
@@ -162,6 +167,31 @@ namespace Application.Services
                     verificationExpiresAt));
         }
 
+        // Anonymous callers must not learn whether an email has an account, so a known email gets the same 202 shape
+        // as a new registration (with a tenant id that does not exist) and roughly the same cost, but nothing is
+        // written. The real owner is told about the attempt instead.
+        private async Task<RegisterAuthResult> AnswerExistingAccountRegistrationAsync(RegisterTenantRequest request, CancellationToken cancellationToken)
+        {
+            _ = BCrypt.Net.BCrypt.HashPassword(request.AdminPassword);
+
+            try
+            {
+                await _notificationService.SendExistingAccountRegistrationNoticeAsync(request.AdminEmail, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send existing-account registration notice");
+            }
+
+            return new RegisterAuthResult(
+                true,
+                AuthFlowError.None,
+                new RegistrationPendingResponse(
+                    Guid.NewGuid(),
+                    RegistrationPendingResponse.PendingVerificationStatus,
+                    DateTime.UtcNow.Add(PendingRegistrationLifetime)));
+        }
+
         // Deletes unverified registrations past their pending window that hold the requested subdomain or email.
         // Tenant foreign keys cascade, so the tenant's user, tokens and subscription go with it.
         private async Task ReclaimExpiredPendingRegistrationsAsync(string subdomainLookup, string emailLookup, CancellationToken cancellationToken)
@@ -183,7 +213,14 @@ namespace Application.Services
                 .Include(u => u.Tenant)
                 .FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
-            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            if (user == null)
+            {
+                // Same cost as a wrong password, so response time does not reveal whether the email exists.
+                BCrypt.Net.BCrypt.Verify(request.Password, DummyPasswordHash);
+                return new LoginAuthResult(false, AuthFlowError.InvalidCredentials, null);
+            }
+
+            if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
                 return new LoginAuthResult(false, AuthFlowError.InvalidCredentials, null);
 
             if (!user.EmailVerifiedAt.HasValue)

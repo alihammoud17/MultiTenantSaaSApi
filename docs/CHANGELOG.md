@@ -4,6 +4,7 @@ This is a milestone-level implementation history, not a release promise or activ
 
 ## Unreleased
 
+- `POST /api/v1/auth/register` no longer returns `400 "Email already registered"`. A known email gets the same `202` as a new registration, creates nothing, and triggers an existing-account notice. Login with an unknown email now costs the same as a wrong password. The invite and add-user duplicate-email errors now read `"Email is already in use"`.
 - **Breaking:** `POST /api/v1/auth/register` now returns `202 Accepted` with `{ tenantId, status, verificationExpiresAt }` instead of `200` with tokens. The tenant stays `PendingVerification` until the admin completes `/api/v1/auth/verification/complete`, then logs in through `/api/v1/auth/login`. Unverified registrations release their subdomain and email after 48 hours.
 
 ## V4 — pre-deployment engineering maturity
