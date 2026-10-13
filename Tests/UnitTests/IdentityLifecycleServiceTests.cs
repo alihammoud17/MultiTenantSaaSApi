@@ -210,6 +210,11 @@ public class IdentityLifecycleServiceTests
             return Task.CompletedTask;
         }
 
+        public Task SendExistingAccountRegistrationNoticeAsync(string email, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
         public Task SendPasswordResetAsync(Guid tenantId, string email, string resetToken, DateTime expiresAt, CancellationToken cancellationToken = default)
         {
             PasswordResets.Add((tenantId, email, resetToken, expiresAt));

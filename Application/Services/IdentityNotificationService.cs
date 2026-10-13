@@ -58,5 +58,12 @@ namespace Application.Services
 
             return Task.CompletedTask;
         }
+
+        public Task SendExistingAccountRegistrationNoticeAsync(string email, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Existing-account registration notice queued.");
+
+            return Task.CompletedTask;
+        }
     }
 }
