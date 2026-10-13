@@ -1,6 +1,7 @@
 using Domain.Authorization;
 using Domain.DTOs;
 using Domain.Entities;
+using Domain.Identity;
 using Domain.Interfaces;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -126,7 +127,7 @@ namespace Presentation.Controllers
                 return deniedResult;
             }
 
-            var normalizedEmail = request.Email.Trim();
+            var normalizedEmail = EmailAddress.Normalize(request.Email);
             var exists = await _dbContext.Users.AnyAsync(u => u.Email == normalizedEmail);
             if (exists)
                 return BadRequest(new { error = "Email is already in use" });

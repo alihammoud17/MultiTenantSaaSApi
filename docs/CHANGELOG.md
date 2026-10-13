@@ -4,6 +4,7 @@ This is a milestone-level implementation history, not a release promise or activ
 
 ## Unreleased
 
+- Emails are now stored lowercase, so login, invites, verification, password reset and admin add-user ignore case. Migration `NormalizeUserEmails` lowercases existing rows; run the duplicate check in `docs/operations.md` first. A registration that loses a race to a simultaneous one now gets the normal `400` or `202` answer instead of a `500`.
 - Login and refresh now return the access token's real expiry (`Jwt:ExpirationMinutes`) instead of a fixed 60 minutes. Registration, login, refresh and invite-acceptance audit entries now record the acting user's id instead of an empty `UserId`.
 - Corrected the documented internal billing callback signing format in `docs/contracts.md` to match what the API verifies: an ISO 8601 timestamp, a signing input of `<timestamp>\n<body>`, and a `sha256=`-prefixed signature. Added a published known-answer test vector. API behaviour is unchanged.
 - Operator tenant suspension: signed `POST /api/internal/tenants/{id}/suspend` and `/reactivate`, keyed by a new `TenantOperations:SharedSecret`. Suspending revokes the tenant's refresh tokens and is audited. A suspended tenant is now also blocked on authenticated `/auth/*` routes and on invite acceptance and password reset. NGINX now rejects `/api/internal/*` from outside the Compose network. New migration `AddTenantSuspensionState`.

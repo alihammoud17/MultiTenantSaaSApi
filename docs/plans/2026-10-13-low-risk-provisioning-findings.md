@@ -3,7 +3,7 @@
 - **Date:** 2026-10-13
 - **Branch:** two PRs off up-to-date `master`: `fix/auth-audit-actor-and-token-expiry` (PR A), then `fix/registration-race-and-email-normalization` (PR B, started after A merges).
 - **Goal:** Make auth audit entries record the acting user and return the real access-token expiry (PR A). Make simultaneous registrations get the normal answers instead of a 500, with emails stored lowercase (PR B).
-- **Status:** in-progress
+- **Status:** done
 - **Approval:** approved in plan mode
 
 ## Context
@@ -29,21 +29,21 @@ None of these affects tenant isolation. Delivery is two thin PRs grouped by area
 - [x] **Docs.** `docs/architecture.md`: one sentence saying the auth audit entries record the acting user and the response expiry follows `Jwt:ExpirationMinutes`. `docs/CHANGELOG.md`: an Unreleased line.
 
 ### PR B: registration race and canonical lowercase emails
-- [ ] **One email normalizer.** Add `Domain/Identity/EmailAddress.cs` with `Normalize(string) => Trim().ToLowerInvariant()`. Use it at every write and lookup site, so stored emails are always lowercase:
+- [x] **One email normalizer.** Add `Domain/Identity/EmailAddress.cs` with `Normalize(string) => Trim().ToLowerInvariant()`. Use it at every write and lookup site, so stored emails are always lowercase:
   - `TenantRegistrationValidator` (normalized admin email);
   - `AuthOrchestrationService`: the login lookup, the registration duplicate check and the reclaim query;
   - `IdentityLifecycleService`: invite create and duplicate check, invite accept, verification request and password-reset request;
   - `AdminTenantManagementController`: the add-user check and insert.
 
   Once stored data is lowercase, replace the `u.Email.ToLower() == x` comparisons with plain `==`, so they can use the indexes.
-- [ ] **Data migration `NormalizeUserEmails`.** Raw SQL: `UPDATE "Users" SET "Email" = lower("Email") WHERE "Email" <> lower("Email")`, and the same for `"UserInvites"`. `Down` is a no-op, because the original casing can't be restored. If two existing users differ only in case, the update violates `IX_Users_Email` and the migration rolls back. `docs/operations.md` documents a read-only check to run first (`SELECT lower("Email"), count(*) FROM "Users" GROUP BY 1 HAVING count(*) > 1`) and says such duplicates are resolved by hand. With all emails lowercase, the existing case-sensitive unique index enforces uniqueness regardless of case, so no index change is needed.
-- [ ] **Map lost races to the normal answers.** In `RegisterAsync`, catch `DbUpdateException` from the transactional insert. Roll back, clear the change tracker, and run the checks again:
+- [x] **Data migration `NormalizeUserEmails`.** Raw SQL: `UPDATE "Users" SET "Email" = lower("Email") WHERE "Email" <> lower("Email")`, and the same for `"UserInvites"`. `Down` is a no-op, because the original casing can't be restored. If two existing users differ only in case, the update violates `IX_Users_Email` and the migration rolls back. `docs/operations.md` documents a read-only check to run first (`SELECT lower("Email"), count(*) FROM "Users" GROUP BY 1 HAVING count(*) > 1`) and says such duplicates are resolved by hand. With all emails lowercase, the existing case-sensitive unique index enforces uniqueness regardless of case, so no index change is needed.
+- [x] **Map lost races to the normal answers.** In `RegisterAsync`, catch `DbUpdateException` from the transactional insert. Roll back, clear the change tracker, and run the checks again:
   - subdomain now taken → `400 "Subdomain already taken"`;
   - email now taken → the existing `AnswerExistingAccountRegistrationAsync` (the same `202` as #142, which closes the 500-versus-202 signal);
   - otherwise → `500 "Registration failed"`, as today.
 
   This works on any database provider; it doesn't parse constraint names.
-- [ ] **Docs.**
+- [x] **Docs.**
   - `docs/architecture.md`: emails are stored lowercase, and a lost registration race gets the normal answer.
   - `docs/operations.md`: the pre-migration duplicate check.
   - `docs/CHANGELOG.md`: an Unreleased line (stored emails are lowercased and login ignores case; migration `NormalizeUserEmails`).
@@ -100,3 +100,13 @@ None of these affects tenant isolation. Delivery is two thin PRs grouped by area
   - `JwtService` returns `token.ValidTo`, the `exp` claim truncated to whole seconds, so the returned `expiresAt` equals the token's `exp` exactly.
   - Tests added: `AnonymousAuthFlows_ShouldRecordTheActingUserInAuditLog` and `LoginAndRefresh_ShouldReturnTheTokensRealExpiry_FromJwtExpirationMinutes` (both in `ApiEndpointsTests`). The second uses `WithWebHostBuilder` with `Jwt:ExpirationMinutes = 15`.
   - Mutation checks: putting back the hard-coded `+60 min` and dropping the actor argument each fail their test.
+- **2026-10-13 — PR B implemented** on `fix/registration-race-and-email-normalization`. No change to the approach. Details:
+  - Subdomain comparisons keep `ToLower()`. Only the email comparisons became plain `==`, as the plan said: no migration normalizes subdomains, and rows stored before #136 may not be lowercase.
+  - The existing test `TenantRegistrationValidatorTests.Validate_ShouldTrimAndLowercaseSubdomain_AndTrimCompanyNameAndEmail` asserted the old trim-only email. It was renamed `..._ShouldTrimAndLowercaseSubdomainAndEmail_AndTrimCompanyName` and now expects a lowercase email.
+  - Race tests: the competing row is committed from `DbTransactionInterceptor.TransactionStartingAsync`, as planned. The "not a conflict" case uses a `SaveChangesInterceptor` that throws a `DbUpdateException` instead. A throw in `TransactionStartingAsync` would fire at `BeginTransactionAsync`, which is outside the code under test.
+  - Migration check on a throwaway `postgres:16` container:
+    - Mixed-case users and invites were lowercased.
+    - With two users differing only in case, the pre-migration duplicate query found them, and the migration failed with `23505` and rolled back. No rows changed and it was not recorded as applied. Because both users were in the same tenant, the violated index was `IX_Users_TenantId_Email` rather than `IX_Users_Email`, so the migration comment and the docs mention both.
+  - Mutation checks:
+    - Disabling the `DbUpdateException` mapping fails both race tests.
+    - Making `EmailAddress.Normalize` trim-only fails five tests: the validator test, the email race test, both new normalization integration tests, and the #142 duplicate-email test.

@@ -367,6 +367,61 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Register_ShouldStoreEmailLowercase_AndLoginShouldIgnoreCase()
+    {
+        using var client = CreateClient();
+        var id = Guid.NewGuid().ToString("N");
+        var tenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, $"Bob-{id}@Example.COM", "Passw0rd!", $"case-{id}");
+        await SecurityTestHelpers.CompleteRegistrationVerificationAsync(client, tenantId);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            (await dbContext.Users.SingleAsync(u => u.TenantId == tenantId)).Email.Should().Be($"bob-{id}@example.com");
+        }
+
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { email = $"BOB-{id.ToUpperInvariant()}@example.com", password = "Passw0rd!" });
+
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("tenantId").GetGuid().Should().Be(tenantId);
+    }
+
+    [Fact]
+    public async Task InviteAndAddUser_ShouldNormalizeEmails_AndTreatCaseVariantsAsDuplicates()
+    {
+        using var client = CreateClient();
+        var (token, _, tenantId) = await RegisterTenant(client, $"case-admin-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var id = Guid.NewGuid().ToString("N");
+
+        var invite = await client.PostAsJsonAsync("/api/v1/auth/invites", new { email = $"  Mixed-{id}@Case.COM ", role = "MEMBER" });
+        invite.StatusCode.Should().Be(HttpStatusCode.OK);
+        var inviteToken = (await invite.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("inviteToken").GetString();
+
+        client.DefaultRequestHeaders.Authorization = null;
+        var accept = await client.PostAsJsonAsync("/api/v1/auth/invites/accept", new { tenantId, inviteToken, password = "Passw0rd!" });
+        accept.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            (await dbContext.UserInvites.SingleAsync(i => i.TenantId == tenantId)).Email.Should().Be($"mixed-{id}@case.com");
+            (await dbContext.Users.CountAsync(u => u.Email == $"mixed-{id}@case.com")).Should().Be(1);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var duplicate = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
+        {
+            email = $"MIXED-{id.ToUpperInvariant()}@case.com",
+            password = "Passw0rd!",
+            role = "MEMBER"
+        });
+
+        duplicate.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().Should().Be("Email is already in use");
+    }
+
+    [Fact]
     public async Task Login_ShouldReturnJwt_ForExistingUser()
     {
         using var client = CreateClient();

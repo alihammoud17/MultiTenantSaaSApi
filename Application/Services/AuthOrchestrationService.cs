@@ -1,5 +1,6 @@
 using Domain.DTOs;
 using Domain.Entities;
+using Domain.Identity;
 using Domain.Interfaces;
 using Domain.Outputs;
 using Domain.Responses;
@@ -56,17 +57,18 @@ namespace Application.Services
 
             request = validation.NormalizedRequest!;
 
-            // Compare case-insensitively so rows stored before normalization still count as duplicates.
+            // Subdomains are compared case-insensitively so rows stored before normalization still count as duplicates.
+            // Emails are stored in canonical form (EmailAddress.Normalize), so plain equality is case-insensitive.
             var subdomainLookup = request.Subdomain.ToLowerInvariant();
-            var emailLookup = request.AdminEmail.ToLowerInvariant();
+            var emailLookup = request.AdminEmail;
 
             await ReclaimExpiredPendingRegistrationsAsync(subdomainLookup, emailLookup, cancellationToken);
 
-            if (await _dbContext.Tenants.AnyAsync(t => t.Subdomain.ToLower() == subdomainLookup, cancellationToken))
+            if (await IsSubdomainTakenAsync(subdomainLookup, cancellationToken))
                 return new RegisterAuthResult(false, AuthFlowError.SubdomainAlreadyTaken, null);
 
             // Checked after the subdomain so the subdomain answer never depends on the email.
-            if (await _dbContext.Users.AnyAsync(u => u.Email.ToLower() == emailLookup, cancellationToken))
+            if (await IsEmailTakenAsync(emailLookup, cancellationToken))
                 return await AnswerExistingAccountRegistrationAsync(request, cancellationToken);
 
             var now = DateTime.UtcNow;
@@ -138,6 +140,23 @@ namespace Application.Services
 
                     await transaction.CommitAsync(cancellationToken);
                 }
+                catch (DbUpdateException ex)
+                {
+                    // Most likely a simultaneous registration won the race between our checks and this insert, and a
+                    // unique index rejected it. Re-run the checks so the caller gets the same answer as if it had lost
+                    // before the insert, instead of a 500 (which would also reveal that the email exists).
+                    await transaction.RollbackAsync(cancellationToken);
+                    _dbContext.ChangeTracker.Clear();
+
+                    if (await IsSubdomainTakenAsync(subdomainLookup, cancellationToken))
+                        return new RegisterAuthResult(false, AuthFlowError.SubdomainAlreadyTaken, null);
+
+                    if (await IsEmailTakenAsync(emailLookup, cancellationToken))
+                        return await AnswerExistingAccountRegistrationAsync(request, cancellationToken);
+
+                    _logger.LogError(ex, "Failed to register tenant");
+                    return new RegisterAuthResult(false, AuthFlowError.RegistrationFailed, null);
+                }
                 catch (Exception ex)
                 {
                     await transaction.RollbackAsync(cancellationToken);
@@ -166,6 +185,12 @@ namespace Application.Services
                     RegistrationPendingResponse.PendingVerificationStatus,
                     verificationExpiresAt));
         }
+
+        private Task<bool> IsSubdomainTakenAsync(string subdomainLookup, CancellationToken cancellationToken) =>
+            _dbContext.Tenants.AnyAsync(t => t.Subdomain.ToLower() == subdomainLookup, cancellationToken);
+
+        private Task<bool> IsEmailTakenAsync(string normalizedEmail, CancellationToken cancellationToken) =>
+            _dbContext.Users.AnyAsync(u => u.Email == normalizedEmail, cancellationToken);
 
         // Anonymous callers must not learn whether an email has an account, so a known email gets the same 202 shape
         // as a new registration (with a tenant id that does not exist) and roughly the same cost, but nothing is
@@ -200,7 +225,7 @@ namespace Application.Services
             var reclaimed = await _dbContext.Tenants
                 .Where(t => t.Status == TenantStatus.PendingVerification
                     && t.CreatedAt < cutoff
-                    && (t.Subdomain.ToLower() == subdomainLookup || t.Users.Any(u => u.Email.ToLower() == emailLookup)))
+                    && (t.Subdomain.ToLower() == subdomainLookup || t.Users.Any(u => u.Email == emailLookup)))
                 .ExecuteDeleteAsync(cancellationToken);
 
             if (reclaimed > 0)
@@ -209,9 +234,10 @@ namespace Application.Services
 
         public async Task<LoginAuthResult> LoginAsync(LoginRequest request, string? requestIp, CancellationToken cancellationToken = default)
         {
+            var email = EmailAddress.Normalize(request.Email);
             var user = await _dbContext.Users
                 .Include(u => u.Tenant)
-                .FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
+                .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
 
             if (user == null)
             {
