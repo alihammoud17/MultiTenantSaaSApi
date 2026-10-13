@@ -1,5 +1,6 @@
 ﻿using Domain.Entities;
 using Domain.Interfaces;
+using Domain.Outputs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System;
@@ -19,7 +20,7 @@ namespace Application.Services
             _configuration = configuration;
         }
 
-        public string GenerateToken(User user, Tenant tenant)
+        public AccessToken GenerateToken(User user, Tenant tenant)
         {
             var key = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(_configuration["Jwt:Secret"]!));
@@ -35,16 +36,18 @@ namespace Application.Services
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
+            // One value for the token's exp claim and the expiry reported to the client, so they cannot disagree.
+            var expiresAt = DateTime.UtcNow.AddMinutes(int.Parse(_configuration["Jwt:ExpirationMinutes"]!));
+
             var token = new JwtSecurityToken(
                 issuer: _configuration["Jwt:Issuer"],
                 audience: _configuration["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(
-                    int.Parse(_configuration["Jwt:ExpirationMinutes"]!)),
+                expires: expiresAt,
                 signingCredentials: credentials
             );
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            return new AccessToken(new JwtSecurityTokenHandler().WriteToken(token), token.ValidTo);
         }
     }
 }
