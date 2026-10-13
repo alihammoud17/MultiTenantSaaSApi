@@ -236,7 +236,7 @@ namespace Presentation.Controllers
             await _auditService.LogAsync("USER_INVITE_ACCEPTED", "User", userId.Value.ToString(), new
             {
                 request.TenantId
-            });
+            }, actorUserId: userId.Value);
 
             return Ok(new { message = "Invite accepted. Verify email before login." });
         }

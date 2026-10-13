@@ -25,7 +25,7 @@ namespace Application.Services
             _httpContextAccessor = httpContextAccessor;
         }
 
-        public async Task LogAsync(string action, string entityType, string entityId, object? changes = null)
+        public async Task LogAsync(string action, string entityType, string entityId, object? changes = null, Guid? actorUserId = null)
         {
             var httpContext = _httpContextAccessor.HttpContext;
             var userId = httpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
@@ -36,7 +36,7 @@ namespace Application.Services
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantContext.TenantId,
-                UserId = Guid.TryParse(userId, out var parsedUserId) ? parsedUserId : Guid.Empty,
+                UserId = actorUserId ?? (Guid.TryParse(userId, out var parsedUserId) ? parsedUserId : Guid.Empty),
                 Action = action,
                 EntityType = entityType,
                 EntityId = entityId,

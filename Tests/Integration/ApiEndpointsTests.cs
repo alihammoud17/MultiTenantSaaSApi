@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -11,6 +12,8 @@ using Domain.Interfaces;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Tests.Integration;
@@ -188,7 +191,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var user = await dbContext.Users.Include(u => u.Tenant).SingleAsync(u => u.TenantId == tenantId);
-            token = scope.ServiceProvider.GetRequiredService<IJwtService>().GenerateToken(user, user.Tenant);
+            token = scope.ServiceProvider.GetRequiredService<IJwtService>().GenerateToken(user, user.Tenant).Token;
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/tenant");
@@ -290,6 +293,77 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         using var scope = _factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         (await dbContext.Tenants.SingleAsync(t => t.Id == tenantId)).Status.Should().Be(TenantStatus.Active);
+    }
+
+    [Fact]
+    public async Task AnonymousAuthFlows_ShouldRecordTheActingUserInAuditLog()
+    {
+        using var client = CreateClient();
+        var email = $"actor-{Guid.NewGuid():N}@example.com";
+        var tenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Passw0rd!", $"actor-{Guid.NewGuid():N}");
+        await SecurityTestHelpers.CompleteRegistrationVerificationAsync(client, tenantId);
+
+        var login = await (await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "Passw0rd!" }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        var adminId = login.GetProperty("userId").GetGuid();
+
+        var refresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
+        {
+            tenantId,
+            refreshToken = login.GetProperty("refreshToken").GetString()
+        });
+        refresh.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var inviteeEmail = $"invitee-{Guid.NewGuid():N}@example.com";
+        using (var inviteRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/invites"))
+        {
+            inviteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", login.GetProperty("token").GetString());
+            inviteRequest.Content = JsonContent.Create(new { email = inviteeEmail, role = "MEMBER" });
+            var invite = await client.SendAsync(inviteRequest);
+            invite.StatusCode.Should().Be(HttpStatusCode.OK);
+            var inviteToken = (await invite.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("inviteToken").GetString();
+
+            var accept = await client.PostAsJsonAsync("/api/v1/auth/invites/accept", new { tenantId, inviteToken, password = "Passw0rd!" });
+            accept.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var inviteeId = (await dbContext.Users.SingleAsync(u => u.Email == inviteeEmail)).Id;
+        var actors = await dbContext.AuditLogs.IgnoreQueryFilters()
+            .Where(a => a.TenantId == tenantId)
+            .ToListAsync();
+
+        actors.Single(a => a.Action == "TENANT_REGISTERED").UserId.Should().Be(adminId);
+        actors.Single(a => a.Action == "USER_LOGGED_IN").UserId.Should().Be(adminId);
+        actors.Single(a => a.Action == "USER_TOKEN_REFRESHED").UserId.Should().Be(adminId);
+        actors.Single(a => a.Action == "USER_INVITE_ACCEPTED").UserId.Should().Be(inviteeId);
+    }
+
+    [Fact]
+    public async Task LoginAndRefresh_ShouldReturnTheTokensRealExpiry_FromJwtExpirationMinutes()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, config) =>
+                config.AddInMemoryCollection(new Dictionary<string, string?> { ["Jwt:ExpirationMinutes"] = "15" })));
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        var email = $"expiry-{Guid.NewGuid():N}@example.com";
+        var (_, refreshToken, tenantId) = await SecurityTestHelpers.RegisterTenantAsync(client, email, "Passw0rd!");
+
+        var login = await (await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "Passw0rd!" }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        var refreshResponse = await client.PostAsJsonAsync("/api/v1/auth/refresh", new { tenantId, refreshToken });
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var refreshed = await refreshResponse.Content.ReadFromJsonAsync<JsonElement>();
+
+        foreach (var body in new[] { login, refreshed })
+        {
+            var expiresAt = body.GetProperty("expiresAt").GetDateTimeOffset();
+            var jwtExpiry = new DateTimeOffset(new JwtSecurityTokenHandler().ReadJwtToken(body.GetProperty("token").GetString()).ValidTo, TimeSpan.Zero);
+
+            expiresAt.Should().Be(jwtExpiry);
+            expiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddMinutes(15), TimeSpan.FromMinutes(1));
+        }
     }
 
     [Fact]

@@ -4,6 +4,7 @@ This is a milestone-level implementation history, not a release promise or activ
 
 ## Unreleased
 
+- Login and refresh now return the access token's real expiry (`Jwt:ExpirationMinutes`) instead of a fixed 60 minutes. Registration, login, refresh and invite-acceptance audit entries now record the acting user's id instead of an empty `UserId`.
 - Corrected the documented internal billing callback signing format in `docs/contracts.md` to match what the API verifies: an ISO 8601 timestamp, a signing input of `<timestamp>\n<body>`, and a `sha256=`-prefixed signature. Added a published known-answer test vector. API behaviour is unchanged.
 - Operator tenant suspension: signed `POST /api/internal/tenants/{id}/suspend` and `/reactivate`, keyed by a new `TenantOperations:SharedSecret`. Suspending revokes the tenant's refresh tokens and is audited. A suspended tenant is now also blocked on authenticated `/auth/*` routes and on invite acceptance and password reset. NGINX now rejects `/api/internal/*` from outside the Compose network. New migration `AddTenantSuspensionState`.
 - `POST /api/v1/auth/register` no longer returns `400 "Email already registered"`. A known email gets the same `202` as a new registration, creates nothing, and triggers an existing-account notice. Login with an unknown email now costs the same as a wrong password. The invite and add-user duplicate-email errors now read `"Email is already in use"`.

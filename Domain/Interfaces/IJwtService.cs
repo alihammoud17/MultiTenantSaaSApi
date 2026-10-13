@@ -1,4 +1,5 @@
 ﻿using Domain.Entities;
+using Domain.Outputs;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -7,6 +8,6 @@ namespace Domain.Interfaces
 {
     public interface IJwtService
     {
-        string GenerateToken(User user, Tenant tenant);
+        AccessToken GenerateToken(User user, Tenant tenant);
     }
 }

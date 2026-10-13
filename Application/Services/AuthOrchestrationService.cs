@@ -134,7 +134,7 @@ namespace Application.Services
                         tenant.Subdomain,
                         AdminUserId = user.Id,
                         Status = tenant.Status.ToString()
-                    });
+                    }, actorUserId: user.Id);
 
                     await transaction.CommitAsync(cancellationToken);
                 }
@@ -241,9 +241,9 @@ namespace Application.Services
             {
                 user.Email,
                 user.Role
-            });
+            }, actorUserId: user.Id);
 
-            var token = _jwtService.GenerateToken(user, user.Tenant);
+            var accessToken = _jwtService.GenerateToken(user, user.Tenant);
             var refreshTokenResult = await _refreshTokenService.IssueTokenAsync(
                 user.TenantId,
                 user.Id,
@@ -254,12 +254,12 @@ namespace Application.Services
                 true,
                 AuthFlowError.None,
                 new AuthResponse(
-                    token,
+                    accessToken.Token,
                     refreshTokenResult.Token,
                     user.TenantId,
                     user.Id,
                     user.Email,
-                    now.AddMinutes(60),
+                    accessToken.ExpiresAt,
                     refreshTokenResult.ExpiresAt));
         }
 
@@ -291,18 +291,18 @@ namespace Application.Services
             await _auditService.LogAsync("USER_TOKEN_REFRESHED", nameof(User), user.Id.ToString(), new
             {
                 user.Email
-            });
+            }, actorUserId: user.Id);
 
             return new RefreshAuthResult(
                 true,
                 AuthFlowError.None,
                 new AuthResponse(
-                    accessToken,
+                    accessToken.Token,
                     rotated.Token,
                     user.TenantId,
                     user.Id,
                     user.Email,
-                    DateTime.UtcNow.AddMinutes(60),
+                    accessToken.ExpiresAt,
                     rotated.ExpiresAt));
         }
 
