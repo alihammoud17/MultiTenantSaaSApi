@@ -109,6 +109,19 @@ WHERE "Subdomain" IN ('admin', 'api', 'app', 'assets', 'auth', 'billing', 'cdn',
 ORDER BY "CreatedAt";
 ```
 
+### Email normalization check
+
+Migration `NormalizeUserEmails` lowercases every stored `Users` and `UserInvites` email, because emails are now stored in canonical lowercase form. If two users have emails that differ only in case, the update violates a unique email index and the whole migration rolls back. Its `Down` is a no-op, because the original casing is not kept. Before applying it, run this read-only check:
+
+```sql
+SELECT lower("Email") AS "Email", count(*) AS "Users"
+FROM "Users"
+GROUP BY lower("Email")
+HAVING count(*) > 1;
+```
+
+An empty result means the migration will apply. Otherwise, decide by hand which account keeps the address (rename or remove the others), then run the migration. Lowercasing uses PostgreSQL `lower()` and the app uses `ToLowerInvariant()`. They agree for ASCII addresses; a non-ASCII address could in rare cases be normalized differently.
+
 ### Pending tenant registrations
 
 Self-registered tenants stay `PendingVerification` (`Status = 3`) until the admin completes email verification. A registration for an email that already has an account creates nothing and only logs that an existing-account notice was queued. `IdentityNotificationService` only logs that a verification was queued; it does not send email and deliberately does not log the token, so there is no live way to deliver it yet. Unverified registrations older than 48 hours are reclaimed only when a new registration requests the same subdomain or email; there is no background cleanup.

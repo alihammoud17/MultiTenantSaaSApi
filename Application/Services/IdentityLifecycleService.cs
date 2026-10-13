@@ -1,5 +1,6 @@
 using BCrypt.Net;
 using Domain.Entities;
+using Domain.Identity;
 using Domain.Interfaces;
 using Domain.Outputs;
 using Infrastructure.Data;
@@ -22,7 +23,7 @@ namespace Application.Services
 
         public async Task<CreatedInviteResult> CreateInviteAsync(Guid tenantId, Guid actorUserId, string email, string? role, string? rbacRoleName, int? expiresInHours, CancellationToken cancellationToken = default)
         {
-            var normalizedEmail = email.Trim();
+            var normalizedEmail = EmailAddress.Normalize(email);
             if (await _dbContext.Users.AnyAsync(u => u.Email == normalizedEmail, cancellationToken))
             {
                 throw new InvalidOperationException("User already exists.");
@@ -118,9 +119,10 @@ namespace Application.Services
 
         public async Task RequestVerificationAsync(Guid tenantId, string email, CancellationToken cancellationToken = default)
         {
+            var normalizedEmail = EmailAddress.Normalize(email);
             var user = await _dbContext.Users
                 .Include(u => u.Tenant)
-                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == email.Trim(), cancellationToken);
+                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == normalizedEmail, cancellationToken);
 
             if (user == null || user.EmailVerifiedAt.HasValue || !AllowsVerification(user.Tenant.Status))
             {
@@ -174,9 +176,10 @@ namespace Application.Services
 
         public async Task RequestPasswordResetAsync(Guid tenantId, string email, string? requestIp, CancellationToken cancellationToken = default)
         {
+            var normalizedEmail = EmailAddress.Normalize(email);
             var user = await _dbContext.Users
                 .Include(u => u.Tenant)
-                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == email.Trim(), cancellationToken);
+                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == normalizedEmail, cancellationToken);
 
             if (user == null || user.Tenant.Status != TenantStatus.Active)
             {

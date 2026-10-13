@@ -2,6 +2,7 @@ using System.Net.Mail;
 using System.Text;
 using System.Text.RegularExpressions;
 using Domain.DTOs;
+using Domain.Identity;
 
 namespace Application.Services
 {
@@ -47,7 +48,7 @@ namespace Application.Services
         {
             var companyName = request.CompanyName?.Trim() ?? string.Empty;
             var subdomain = request.Subdomain?.Trim().ToLowerInvariant() ?? string.Empty;
-            var adminEmail = request.AdminEmail?.Trim() ?? string.Empty;
+            var adminEmail = EmailAddress.Normalize(request.AdminEmail);
             var adminPassword = request.AdminPassword ?? string.Empty;
 
             if (companyName.Length == 0)

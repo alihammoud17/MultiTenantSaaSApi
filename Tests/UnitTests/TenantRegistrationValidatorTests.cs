@@ -9,14 +9,14 @@ public class TenantRegistrationValidatorTests
     private const string ValidPassword = "Passw0rd!";
 
     [Fact]
-    public void Validate_ShouldTrimAndLowercaseSubdomain_AndTrimCompanyNameAndEmail()
+    public void Validate_ShouldTrimAndLowercaseSubdomainAndEmail_AndTrimCompanyName()
     {
         var result = TenantRegistrationValidator.Validate(
             new RegisterTenantRequest("  Acme Corp  ", "  Acme-Corp ", "  Admin@Example.com ", ValidPassword));
 
         result.IsValid.Should().BeTrue();
         result.NormalizedRequest.Should().Be(
-            new RegisterTenantRequest("Acme Corp", "acme-corp", "Admin@Example.com", ValidPassword));
+            new RegisterTenantRequest("Acme Corp", "acme-corp", "admin@example.com", ValidPassword));
     }
 
     [Theory]
