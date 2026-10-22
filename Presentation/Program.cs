@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Presentation.Authorization;
+using Presentation.Cors;
 using Presentation.Middleware;
 using Presentation.RateLimiting;
 using Presentation.Observability;
@@ -18,7 +19,6 @@ using System.Text.Json;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
-const string InitialCorsPolicyName = "InitialExplicitCorsPolicy";
 
 // Add services to the container.
 
@@ -148,18 +148,7 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddControllers();
-builder.Services.AddCors(options =>
-{
-    // Initial V4 baseline: explicit temporary permissive policy for local/dev clients.
-    // Tighten allowed origins/headers/methods before production deployment.
-    options.AddPolicy(InitialCorsPolicyName, policy =>
-    {
-        policy
-            .AllowAnyOrigin()
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
-});
+builder.Services.AddApiCors();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -207,7 +196,7 @@ app.UseHttpsRedirection();
 app.UseMiddleware<RequestObservabilityMiddleware>();
 
 app.UseRouting();
-app.UseCors(InitialCorsPolicyName);
+app.UseCors(ApiCorsPolicy.PolicyName);
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

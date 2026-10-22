@@ -3,5 +3,7 @@
 # Only connectivity and the common role are meaningful here; see deploy/ansible/README.md.
 app_environment: Production
 app_tenant_base_domain: ""
+# Browser origins allowed by CORS (e.g. ["https://app.example.com"]). Empty allows none.
+api_cors_allowed_origins: []
 common_swap_size_mb: 0
 common_install_ssm_agent: false

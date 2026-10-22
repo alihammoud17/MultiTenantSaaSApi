@@ -38,9 +38,9 @@ BillingService uses a JSON workflow state file for deterministic retry, deduplic
 
 Both services expose local JSON health/metrics and correlation-aware structured logs. Production exporter, backend, dashboards, alerts, paging, and SLO implementation are deferred rather than implied.
 
-### CORS is temporarily permissive
+### CORS is a configured allowlist outside Development
 
-`InitialExplicitCorsPolicy` allows any origin, header, and method for local/pre-deployment clients. It must be replaced with an environment-appropriate allowlist before public browser exposure.
+`ApiCorsPolicy` allows any origin without credentials in `Development` only. Every other environment allows only the origins in `Cors:AllowedOrigins`, with credentials, and allows none when it is unset. This fails closed: forgetting the setting blocks browser clients rather than exposing the API to every origin. Which origins belong in the production list is still open (item 4 below).
 
 ## Open owner-review items
 

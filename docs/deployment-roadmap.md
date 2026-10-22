@@ -35,7 +35,7 @@ The Docker Compose profile (`compose.yml`, `deploy/*.Dockerfile`) stays as the l
 - TLS through certbot with the Route 53 DNS-01 plugin, which can issue the wildcard certificate. The article puts ACM on a load balancer in stage 8, but a SaaS with authentication can't wait for a load balancer to get HTTPS. ACM replaces certbot in v3.
 - Remote Terraform state in S3 with locking.
 - Nightly `pg_dump` to S3 and an EBS snapshot policy (DLM).
-- CORS allowlist (decisions #3 and #4).
+- CORS allowlist: set `api_cors_allowed_origins` once the browser origins are known (decisions #3 and #4). Until then the API, running as `Production`, allows no cross-origin browser calls.
 - CI: build, tests, `ansible-lint`, `tofu plan`.
 
 ## v2: managed data tier (article stages 4, 14 and part of 9; stage 3 skipped)
