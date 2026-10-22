@@ -13,6 +13,8 @@ namespace Application.Services
         internal const string AllTenantsScope = "all";
         internal static string SubdomainScope(string subdomain) => $"subdomain:{subdomain}";
 
+        private static string SanitizeForLog(string value) => value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+
         private readonly ApplicationDbContext _dbContext;
         private readonly ICorsOriginCache _cache;
         private readonly IAuditService _auditService;
@@ -81,7 +83,7 @@ namespace Application.Services
 
             await _cache.InvalidateAsync(cancellationToken);
             await _auditService.LogAsync("CORS_ORIGIN_ADDED", nameof(TenantAllowedOrigin), entity.Id.ToString(), new { entity.Origin });
-            _logger.LogInformation("Tenant {TenantId} registered CORS origin {Origin}", tenantId, entity.Origin);
+            _logger.LogInformation("Tenant {TenantId} registered CORS origin {Origin}", tenantId, SanitizeForLog(entity.Origin));
 
             return new TenantCorsOriginAddResult(
                 TenantCorsOriginAddOutcome.Added,
