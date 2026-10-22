@@ -13,6 +13,7 @@ namespace Application.Services
         private readonly ITenantContext _tenantContext;
         private readonly IRefreshTokenService _refreshTokenService;
         private readonly IAuditService _auditService;
+        private readonly ITenantCorsOriginService _corsOriginService;
         private readonly ILogger<TenantLifecycleService> _logger;
 
         public TenantLifecycleService(
@@ -20,12 +21,14 @@ namespace Application.Services
             ITenantContext tenantContext,
             IRefreshTokenService refreshTokenService,
             IAuditService auditService,
+            ITenantCorsOriginService corsOriginService,
             ILogger<TenantLifecycleService> logger)
         {
             _dbContext = dbContext;
             _tenantContext = tenantContext;
             _refreshTokenService = refreshTokenService;
             _auditService = auditService;
+            _corsOriginService = corsOriginService;
             _logger = logger;
         }
 
@@ -93,6 +96,9 @@ namespace Application.Services
                 });
 
             await transaction.CommitAsync(cancellationToken);
+
+            // Only active tenants' origins are allowed for CORS, so cached origin lists change with the status.
+            await _corsOriginService.InvalidateCacheAsync(cancellationToken);
 
             _logger.LogInformation("Tenant {TenantId} status changed from {PreviousStatus} to {Status} by operator request",
                 tenant.Id, previousStatus, newStatus);

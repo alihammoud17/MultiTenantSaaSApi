@@ -59,7 +59,7 @@ Configuration can use user secrets for development or double-underscore environm
 | `TenantResolution:BaseDomain` | `TenantResolution__BaseDomain` | Domain tenants are served under, e.g. `example.com`. Only `<subdomain>.<BaseDomain>` hosts resolve a tenant by subdomain; reserved labels (`api`, `www`, ...) never do. Unset disables host-based resolution. |
 | `ForwardedHeaders:KnownNetworks` | `ForwardedHeaders__KnownNetworks__0` | CIDR list of reverse-proxy networks whose `X-Forwarded-For`/`X-Forwarded-Proto` headers are trusted. Unset means only loopback is trusted. |
 | `ForwardedHeaders:KnownProxies` | `ForwardedHeaders__KnownProxies__0` | Individual reverse-proxy IP addresses to trust, in addition to `KnownNetworks`. |
-| `Cors:AllowedOrigins` | `Cors__AllowedOrigins` or `Cors__AllowedOrigins__0` | Browser origins allowed to call the API outside `Development`, e.g. `https://app.example.com`. One comma-separated value or an indexed list. Listed origins get credentials. Unset means no origin gets CORS headers. Ignored in `Development`. See [CORS](#cors). |
+| `Cors:AllowedOrigins` | `Cors__AllowedOrigins` or `Cors__AllowedOrigins__0` | Browser origins allowed to call the API outside `Development`, e.g. `https://app.example.com`. One comma-separated value or an indexed list. Listed origins get credentials. Unset means only tenant-registered origins get CORS headers. Ignored in `Development`. See [CORS](#cors). |
 
 Example development setup from `Presentation/`:
 
@@ -209,6 +209,8 @@ dotnet build --no-restore
 dotnet test --no-build --verbosity normal
 ```
 
+`dotnet test` needs no PostgreSQL or Redis. `RedisCorsOriginCacheTests` has two tests that run against a real Redis only when `REDIS_TEST_CONNECTION_STRING` is set (e.g. `REDIS_TEST_CONNECTION_STRING=localhost:6379 dotnet test --no-build`) and are skipped otherwise.
+
 BillingService checks:
 
 ```bash
@@ -319,10 +321,13 @@ The Docker Compose profile above remains the local VM profile.
 
 ## CORS
 
-The API applies one named policy, `ApiCorsPolicy` (`Presentation/Cors/ApiCorsPolicy.cs`):
+The API applies one named policy, `ApiCorsPolicy` (`Presentation/Cors/ApiCorsPolicy.cs`), evaluated per request by `TenantAwareCorsPolicyProvider` (`Presentation/Cors/TenantAwareCorsPolicyProvider.cs`):
 
-- **`Development`:** any origin, header, and method, without credentials. `Cors:AllowedOrigins` is ignored.
-- **Every other environment** (including `Production`, `Staging`, and the test host's `Testing`): only the origins in `Cors:AllowedOrigins`. A listed origin is echoed in `Access-Control-Allow-Origin` with `Access-Control-Allow-Credentials: true`, and any header and method are allowed. Any other origin gets no CORS headers, so the browser blocks the response. With nothing configured, no origin is allowed.
+- **`Development`:** any origin, header, and method, without credentials. `Cors:AllowedOrigins` and tenant origins are ignored.
+- **Every other environment** (including `Production`, `Staging`, and the test host's `Testing`):
+  1. An origin in `Cors:AllowedOrigins` is echoed in `Access-Control-Allow-Origin` with `Access-Control-Allow-Credentials: true`, and any header and method are allowed.
+  2. Otherwise, an origin registered by an **active** tenant (see [Tenant-registered origins](#tenant-registered-origins)) is echoed **without** credentials, with any header and method, and with `Vary: Origin`.
+  3. Any other origin gets no CORS headers, so the browser blocks the response. Preflights still answer `204`. With nothing configured and no tenant origins, no origin is allowed.
 
 Set origins with either form:
 
@@ -338,6 +343,33 @@ Each entry must be a full `http`/`https` origin: scheme, host, and optional port
 The Compose `api.env.example` sets `ASPNETCORE_ENVIRONMENT=Development`, which keeps the permissive policy. Set another environment and `Cors__AllowedOrigins` before exposing a browser client.
 
 The v1 Ansible deployment runs the API as `Production` and writes `Cors__AllowedOrigins` from the `api_cors_allowed_origins` list in `deploy/ansible/inventories/<env>/group_vars/all/main.yml`. It is empty by default, so no browser origin is allowed until you set it and rerun `playbooks/deploy.yml`.
+
+### Tenant-registered origins
+
+Tenant administrators manage their own origins under `/api/v1/admin/tenant/cors-origins`:
+
+| Method | Route | Permission | Result |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/admin/tenant/cors-origins` | `tenants.read` | `200` with `[{ id, origin, createdAt }]` for the caller's tenant |
+| `POST` | `/api/v1/admin/tenant/cors-origins` with `{ "origin": "https://app.example.com" }` | `tenants.manage` | `201` with the stored origin; `400` if invalid or the tenant already has 20; `409` if already registered |
+| `DELETE` | `/api/v1/admin/tenant/cors-origins/{id}` | `tenants.manage` | `204`, or `404` if the id is not the caller's |
+
+All three also require the `feature.security.cors_origins.manage` entitlement, which both seeded plans grant; a tenant override set to `false` turns it off. Adds and removals are audited as `CORS_ORIGIN_ADDED` and `CORS_ORIGIN_REMOVED`.
+
+An origin must be exactly `https://host[:port]` as a browser sends it: no path (not even a trailing `/`), query, fragment, credentials, wildcard, explicit `:443`, or non-ASCII host (use punycode). `null` is rejected. Case is ignored and the origin is stored lowercase. `http://localhost[:port]` is accepted only when the API runs as `Development`; outside it, `localhost` is rejected under any scheme.
+
+Which tenants' origins apply to a request:
+
+- **Host is a tenant subdomain** (`<subdomain>.<TenantResolution:BaseDomain>`): only that tenant's origins, and only while the tenant is active. An unknown subdomain gets no tenant origins.
+- **Any other host** (for example a shared `api.` host): origins registered by any active tenant. A preflight carries no credentials or tenant header, so the tenant cannot be identified there. No public route carries the tenant in its path, so the path is not used.
+
+Because an origin one tenant registers is then accepted on shared hosts for every tenant's routes, tenant origins never get `Access-Control-Allow-Credentials`. The API authenticates with bearer tokens, not cookies, so this does not limit normal clients; a browser request sent with `credentials: "include"` from a tenant origin is blocked.
+
+#### Origin cache
+
+The lists are cached in Redis (`Application/Services/RedisCorsOriginCache.cs`) for 5 minutes, one list for all active tenants and one per tenant subdomain, under `cors:tenant-origins:<generation>:<scope>`. Adding or removing an origin, and suspending or reactivating a tenant, increments `cors:tenant-origins:generation`, so every list reloads from PostgreSQL on its next use. A change made directly in the database is picked up within 5 minutes, or at once with `redis-cli INCR cors:tenant-origins:generation`.
+
+If Redis is unreachable, every cross-origin request with an unlisted origin reads PostgreSQL instead and a warning is logged. If Redis fails during an invalidation, a removed origin can stay allowed until its cached list expires (at most 5 minutes); the warning `CORS origin cache invalidation failed` marks this.
 
 ## Troubleshooting order
 

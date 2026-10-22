@@ -311,6 +311,18 @@ namespace Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "feature.security.cors_origins.manage",
+                            Category = 0,
+                            CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DefaultValue = "false",
+                            Description = "Allows tenant administrators to register the browser origins allowed to call the API cross-origin.",
+                            DisplayName = "Tenant CORS origin management",
+                            IsActive = true,
+                            UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            ValueType = 0
+                        },
+                        new
+                        {
                             Key = "quota.api.calls.monthly",
                             Category = 1,
                             CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, 0, DateTimeKind.Utc),
@@ -739,6 +751,24 @@ namespace Infrastructure.Migrations
                         new
                         {
                             PlanId = "plan-free",
+                            EntitlementKey = "feature.security.cors_origins.manage",
+                            CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Source = 0,
+                            UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Value = "true"
+                        },
+                        new
+                        {
+                            PlanId = "plan-pro",
+                            EntitlementKey = "feature.security.cors_origins.manage",
+                            CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Source = 0,
+                            UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Value = "true"
+                        },
+                        new
+                        {
+                            PlanId = "plan-free",
                             EntitlementKey = "quota.api.calls.monthly",
                             CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, 0, DateTimeKind.Utc),
                             Source = 0,
@@ -1010,6 +1040,31 @@ namespace Infrastructure.Migrations
                     b.HasIndex("TenantId", "Status", "EffectiveFromUtc");
 
                     b.ToTable("TenantAddOnAssignments");
+                });
+
+            modelBuilder.Entity("Domain.Entities.TenantAllowedOrigin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Origin")
+                        .IsUnique();
+
+                    b.ToTable("TenantAllowedOrigins");
                 });
 
             modelBuilder.Entity("Domain.Entities.TenantEntitlementOverride", b =>
@@ -1520,6 +1575,15 @@ namespace Infrastructure.Migrations
                     b.Navigation("AddOn");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Domain.Entities.TenantAllowedOrigin", b =>
+                {
+                    b.HasOne("Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Domain.Entities.TenantEntitlementOverride", b =>

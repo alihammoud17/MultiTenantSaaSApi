@@ -102,7 +102,7 @@ Or run the service-specific commands documented in [Operations](docs/operations.
 - The Stripe gateway is implemented and tested but is not connected to the default runtime provider flow.
 - The default callback publisher is a no-op logger, and default reconciliation sources return no live records.
 - Billing workflow durability uses a local JSON file, not a distributed queue.
-- API CORS is permissive in `Development` only. Every other environment allows only the origins in `Cors:AllowedOrigins` (`Cors__AllowedOrigins`), and none by default; see [Operations](docs/operations.md#cors). The production allowlist itself is still an owner decision.
+- API CORS is permissive in `Development` only. Every other environment allows the origins in `Cors:AllowedOrigins` (`Cors__AllowedOrigins`, none by default, with credentials) plus exact `https` origins that active tenants register through `/api/v1/admin/tenant/cors-origins` (without credentials); see [Operations](docs/operations.md#cors). The production allowlist itself is still an owner decision.
 - There is no deployed OpenTelemetry exporter, telemetry backend, alerting/SLO practice, or deployment-proven backup/restore process.
 - The v1 deployment (one EC2 host, Terraform + Ansible) is verified against the Floci emulator and a local systemd container, not yet on real AWS. TLS/DNS, environment count, browser-client scope, provider scope, and secret-store choices require owner decisions.
 

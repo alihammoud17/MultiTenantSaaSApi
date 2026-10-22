@@ -47,7 +47,7 @@ Unauthenticated auth routes use in-process fixed-window per-client limiters: reg
 
 ## Plans, subscriptions, and entitlements
 
-The API owns the plan catalog and internal subscription lifecycle. Entitlements are assembled from plan mappings, active add-ons, and tenant overrides with deterministic precedence. Current enforcement covers selected billing reads and mutations, plan upgrades, advanced tenant administration, and audit-log analytics; enforcement is not claimed for every possible API surface.
+The API owns the plan catalog and internal subscription lifecycle. Entitlements are assembled from plan mappings, active add-ons, and tenant overrides with deterministic precedence. Current enforcement covers selected billing reads and mutations, plan upgrades, advanced tenant administration, tenant CORS origin management, and audit-log analytics; enforcement is not claimed for every possible API surface.
 
 Subscription state changes can originate from tenant actions or the authenticated internal billing callback. Provider state never directly becomes authoritative without tenant/subscription mapping validation.
 
@@ -77,7 +77,7 @@ Audit entries and usage analytics belong to the API and are queried in tenant sc
 ## Persistence and background processing
 
 - PostgreSQL stores authoritative API state and outbound-webhook workflow records.
-- Redis stores plan-aware request counters; it is not a general platform cache.
+- Redis stores plan-aware request counters and caches the tenant-registered CORS origin lists (invalidated on change, 5-minute expiry); it is not a general platform cache.
 - `OutboundWebhookDeliveryDispatcher` is an ASP.NET Core hosted service.
 - BillingService stores queue, retry, deduplication, and dead-letter state in a JSON file. This is appropriate for deterministic local and single-instance validation, not distributed coordination.
 

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Presentation.Cors
 {
@@ -11,12 +12,14 @@ namespace Presentation.Cors
 
         /// <summary>
         /// Registers <see cref="PolicyName"/>. Development allows any origin without credentials. Every other
-        /// environment allows only the origins in <c>Cors:AllowedOrigins</c>, with credentials; with none
-        /// configured, no cross-origin request receives CORS headers. Invalid origins fail startup.
+        /// environment allows the origins in <c>Cors:AllowedOrigins</c>, with credentials, plus origins registered by
+        /// active tenants, without credentials (see <see cref="TenantAwareCorsPolicyProvider"/>). Any other origin
+        /// receives no CORS headers. Invalid configured origins fail startup.
         /// </summary>
         public static IServiceCollection AddApiCors(this IServiceCollection services)
         {
             services.AddCors();
+            services.Replace(ServiceDescriptor.Scoped<ICorsPolicyProvider, TenantAwareCorsPolicyProvider>());
             services.AddOptions<CorsOptions>()
                 .Configure<IConfiguration, IHostEnvironment>((options, configuration, environment) =>
                     options.AddPolicy(PolicyName, policy =>

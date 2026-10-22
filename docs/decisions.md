@@ -42,6 +42,10 @@ Both services expose local JSON health/metrics and correlation-aware structured 
 
 `ApiCorsPolicy` allows any origin without credentials in `Development` only. Every other environment allows only the origins in `Cors:AllowedOrigins`, with credentials, and allows none when it is unset. This fails closed: forgetting the setting blocks browser clients rather than exposing the API to every origin. Which origins belong in the production list is still open (item 4 below).
 
+### Tenants can register their own CORS origins, without credentials
+
+Active tenants can also register exact `https` origins (`TenantAllowedOrigins`), managed by tenant administrators and gated by the `feature.security.cors_origins.manage` entitlement. Preflights carry no credentials, so on a shared API host an origin is accepted if any active tenant registered it; on a tenant subdomain only that tenant's origins count. Since one tenant's origin is then accepted for all tenants' routes on a shared host, tenant origins never get `Access-Control-Allow-Credentials`; only `Cors:AllowedOrigins` does. This is safe while the API authenticates with bearer tokens only. Adding cookie-based authentication would need this revisited. The origin lists are cached in Redis and invalidated on change; see [Operations](operations.md#origin-cache).
+
 ## Open owner-review items
 
 1. Select the environment count and the release/promotion process. The first topology is chosen: one Debian 12 EC2 host provisioned by Terraform and configured by Ansible with native systemd services, growing toward multi-region active-passive DR ([deployment roadmap](deployment-roadmap.md)). Still open: how many environments, and how a release is promoted between them.

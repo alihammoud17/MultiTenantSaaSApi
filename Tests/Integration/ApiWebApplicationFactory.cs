@@ -77,6 +77,9 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 
             services.RemoveAll<IIdentityNotificationService>();
             services.AddSingleton<IIdentityNotificationService, CapturingIdentityNotificationService>();
+
+            services.RemoveAll<ICorsOriginCache>();
+            services.AddSingleton<ICorsOriginCache, InMemoryCorsOriginCache>();
         });
     }
 
