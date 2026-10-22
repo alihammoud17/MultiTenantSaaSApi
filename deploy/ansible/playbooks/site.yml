@@ -1,0 +1,58 @@
+---
+# Full provision and deploy of the single v1 host.
+#   ansible-playbook -i inventories/<env> playbooks/site.yml
+- name: Build the release on the controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: [build, api, billing]
+  roles:
+    - build
+
+- name: Prepare the host for Ansible
+  hosts: app
+  gather_facts: false
+  become: true
+  tags: [always]
+  tasks:
+    # Floci's Debian image has no Python; Debian's AWS images do. raw needs neither.
+    - name: Install Python and sudo
+      ansible.builtin.raw: >-
+        test -x /usr/bin/python3 -a -x /usr/bin/sudo ||
+        (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3 sudo)
+      # Floci logs in as root before sudo exists; AWS's admin user needs sudo for apt.
+      become: "{{ ansible_user | default('root') != 'root' }}"
+      register: site_bootstrap
+      changed_when: site_bootstrap.stdout | length > 0
+
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Refuse placeholder or missing secrets
+      ansible.builtin.assert:
+        that:
+          - vault_db_password is defined and vault_db_password | length >= 16
+          - vault_redis_password is defined and vault_redis_password | length >= 16
+          - vault_jwt_secret is defined and vault_jwt_secret | length >= 32
+          - vault_billing_shared_secret is defined and vault_billing_shared_secret | length >= 16
+          - vault_webhook_signing_secret is defined
+          - >-
+            [vault_db_password, vault_redis_password, vault_jwt_secret, vault_billing_shared_secret,
+            vault_webhook_signing_secret] | select('search', 'CHANGE_ME') | list | length == 0
+        fail_msg: Create inventories/<env>/group_vars/all/vault.yml from vault.example.yml with real values.
+        quiet: true
+      no_log: true
+
+- name: Configure and deploy the app host
+  hosts: app
+  gather_facts: false
+  become: true
+  roles:
+    - { role: common, tags: [common] }
+    - { role: postgresql, tags: [postgresql] }
+    - { role: redis, tags: [redis] }
+    - { role: dotnet_runtime, tags: [dotnet_runtime] }
+    - { role: nodejs, tags: [nodejs] }
+    - { role: api, tags: [api] }
+    - { role: billing, tags: [billing] }
+    - { role: nginx, tags: [nginx] }

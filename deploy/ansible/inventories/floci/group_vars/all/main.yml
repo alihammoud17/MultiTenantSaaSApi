@@ -1,0 +1,7 @@
+---
+# Floci runs the "instance" as a Debian container with no systemd (PID 1 is tail).
+# Only connectivity and the common role are meaningful here; see deploy/ansible/README.md.
+app_environment: Production
+app_tenant_base_domain: ""
+common_swap_size_mb: 0
+common_install_ssm_agent: false

@@ -1,0 +1,4 @@
+---
+# Debian 12 ships PostgreSQL 15; the PGDG repository provides newer majors.
+postgresql_version: 16
+postgresql_repo_key_url: https://www.postgresql.org/media/keys/ACCC4CF8.asc

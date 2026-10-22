@@ -1,0 +1,60 @@
+---
+- name: Create the release directory
+  ansible.builtin.file:
+    path: "{{ billing_release_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Unpack the BillingService release
+  ansible.builtin.unarchive:
+    src: "{{ billing_artifact }}"
+    dest: "{{ billing_release_dir }}"
+    owner: root
+    group: root
+    creates: "{{ billing_release_dir }}/dist/src/index.js"
+
+- name: Write the BillingService environment file
+  ansible.builtin.template:
+    src: billing.env.j2
+    dest: "{{ billing_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart billing
+
+- name: Point current at the release
+  ansible.builtin.file:
+    src: "{{ billing_release_dir }}"
+    dest: "{{ billing_home }}/current"
+    state: link
+    force: true
+  notify: Restart billing
+
+- name: Install the BillingService unit
+  ansible.builtin.template:
+    src: mtsaas-billing.service.j2
+    dest: /etc/systemd/system/{{ billing_service }}.service
+    mode: "0644"
+  notify: Restart billing
+
+- name: Start BillingService
+  ansible.builtin.systemd_service:
+    name: "{{ billing_service }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Restart BillingService if the release, unit or config changed
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for BillingService to report healthy
+  ansible.builtin.uri:
+    url: http://127.0.0.1:{{ app_billing_port }}/health
+    status_code: 200
+  register: billing_health
+  until: billing_health.status == 200
+  retries: "{{ billing_health_retries }}"
+  delay: 2

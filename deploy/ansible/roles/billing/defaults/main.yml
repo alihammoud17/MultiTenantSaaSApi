@@ -1,0 +1,18 @@
+---
+billing_release_id: "{{ hostvars['localhost']['build_release_id'] }}"
+billing_artifact: "{{ hostvars['localhost']['build_release_dir'] }}/billing.tar.gz"
+billing_home: "{{ app_root }}/billing"
+billing_release_dir: "{{ billing_home }}/releases/{{ billing_release_id }}"
+billing_env_file: "{{ app_config_dir }}/billing.env"
+billing_service: mtsaas-billing
+# systemd creates /var/lib/<name> for the service user (StateDirectory=).
+billing_state_directory: mtsaas-billing
+
+billing_provider: placeholder
+billing_stripe_api_base_url: https://api.stripe.com
+billing_workflow_max_attempts: 3
+billing_workflow_initial_backoff_ms: 1000
+billing_workflow_max_backoff_ms: 30000
+billing_workflow_poll_interval_ms: 2000
+billing_reconciliation_interval_ms: 300000
+billing_health_retries: 30

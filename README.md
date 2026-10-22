@@ -28,6 +28,7 @@ Tests/           .NET unit and integration tests
 BillingService/  Node.js/TypeScript provider-facing companion service
 docs/            Durable architecture, operations, contracts, decisions and history
 scripts/         Deterministic local bootstrap, run, smoke and test workflows
+deploy/          Dockerfiles, NGINX and env templates for Compose; Terraform and Ansible for the v1 EC2 deployment
 ```
 
 ## Prerequisites
@@ -103,7 +104,7 @@ Or run the service-specific commands documented in [Operations](docs/operations.
 - Billing workflow durability uses a local JSON file, not a distributed queue.
 - API CORS currently allows any origin, header, and method; tighten it before public browser exposure.
 - There is no deployed OpenTelemetry exporter, telemetry backend, alerting/SLO practice, or deployment-proven backup/restore process.
-- Deployment topology, TLS/DNS, browser-client scope, provider scope, and secret-store choices require owner decisions.
+- The v1 deployment (one EC2 host, Terraform + Ansible) is verified against the Floci emulator and a local systemd container, not yet on real AWS. TLS/DNS, environment count, browser-client scope, provider scope, and secret-store choices require owner decisions.
 
 ## Documentation
 
@@ -111,6 +112,7 @@ Or run the service-specific commands documented in [Operations](docs/operations.
 - [Operations and configuration](docs/operations.md)
 - [Service contracts](docs/contracts.md)
 - [Architecture and operational decisions](docs/decisions.md)
+- [Deployment roadmap](docs/deployment-roadmap.md)
 - [Changelog](docs/CHANGELOG.md)
 - [Historical documentation archive](docs/archive/README.md)
 - [BillingService guide](BillingService/README.md)

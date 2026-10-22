@@ -289,6 +289,33 @@ docker compose up --build
 
 This profile uses HTTP ingress and is intended for a local Ubuntu VM. TLS, public DNS, hardened CORS, external secret storage, backup/restore, production telemetry, and rollback rehearsals are not completed by running Compose.
 
+## v1 deployment: Terraform and Ansible
+
+The first deployment is one EC2 host, v1 of [the deployment roadmap](deployment-roadmap.md).
+
+- `deploy/terraform/` provisions a VPC with one public subnet, an internet gateway, a security group and a `t3.small` Debian 12 instance. It targets the local Floci emulator by default. Steps, defaults and limitations are in [deploy/terraform/README.md](../deploy/terraform/README.md).
+- `deploy/ansible/` configures that host: PostgreSQL 16, Redis 7, the ASP.NET Core 10 runtime, Node 22 and NGINX run natively, and the API and BillingService run as the `mtsaas-api` and `mtsaas-billing` systemd services. See [deploy/ansible/README.md](../deploy/ansible/README.md).
+
+```bash
+cd deploy/terraform && tofu init && tofu apply -var "ssh_public_key=$(cat ~/.ssh/mtsaas-ansible.pub)"
+cd ../ansible && scripts/inventory.sh aws ~/.ssh/mtsaas-ansible
+ansible-playbook -i inventories/aws playbooks/site.yml --ask-vault-pass     # full provision
+ansible-playbook -i inventories/aws playbooks/deploy.yml --ask-vault-pass   # later releases
+```
+
+On the host:
+
+| Item | Location |
+| --- | --- |
+| Runtime env files (`0600`, root) | `/etc/multitenant-saas-api/api.env`, `billing.env` |
+| Releases and the active one | `/opt/multitenant-saas-api/{api,billing}/releases/<commit>/`, `.../current` |
+| BillingService workflow state | `/var/lib/mtsaas-billing/billing-workflow-state.json` |
+| Logs | `journalctl -u mtsaas-api`, `journalctl -u mtsaas-billing` |
+
+Migrations run from the release's `efbundle` before `current` switches. To roll back the code, point `current` at the previous release and `systemctl restart mtsaas-api` (or `mtsaas-billing`); migrations aren't rolled back. Backups aren't automated yet (roadmap v1.1).
+
+The Docker Compose profile above remains the local VM profile.
+
 ## CORS warning
 
 `InitialExplicitCorsPolicy` currently permits any origin, header, and method. This is explicit but intentionally permissive for pre-deployment development. Define an environment-specific allowlist before exposing a browser client publicly.
