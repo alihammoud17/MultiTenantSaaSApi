@@ -59,6 +59,7 @@ Configuration can use user secrets for development or double-underscore environm
 | `TenantResolution:BaseDomain` | `TenantResolution__BaseDomain` | Domain tenants are served under, e.g. `example.com`. Only `<subdomain>.<BaseDomain>` hosts resolve a tenant by subdomain; reserved labels (`api`, `www`, ...) never do. Unset disables host-based resolution. |
 | `ForwardedHeaders:KnownNetworks` | `ForwardedHeaders__KnownNetworks__0` | CIDR list of reverse-proxy networks whose `X-Forwarded-For`/`X-Forwarded-Proto` headers are trusted. Unset means only loopback is trusted. |
 | `ForwardedHeaders:KnownProxies` | `ForwardedHeaders__KnownProxies__0` | Individual reverse-proxy IP addresses to trust, in addition to `KnownNetworks`. |
+| `Cors:AllowedOrigins` | `Cors__AllowedOrigins` or `Cors__AllowedOrigins__0` | Browser origins allowed to call the API outside `Development`, e.g. `https://app.example.com`. One comma-separated value or an indexed list. Listed origins get credentials. Unset means no origin gets CORS headers. Ignored in `Development`. See [CORS](#cors). |
 
 Example development setup from `Presentation/`:
 
@@ -287,7 +288,7 @@ docker compose config
 docker compose up --build
 ```
 
-This profile uses HTTP ingress and is intended for a local Ubuntu VM. TLS, public DNS, hardened CORS, external secret storage, backup/restore, production telemetry, and rollback rehearsals are not completed by running Compose.
+This profile uses HTTP ingress and is intended for a local Ubuntu VM. TLS, public DNS, a non-`Development` CORS allowlist, external secret storage, backup/restore, production telemetry, and rollback rehearsals are not completed by running Compose.
 
 ## v1 deployment: Terraform and Ansible
 
@@ -316,9 +317,27 @@ Migrations run from the release's `efbundle` before `current` switches. To roll 
 
 The Docker Compose profile above remains the local VM profile.
 
-## CORS warning
+## CORS
 
-`InitialExplicitCorsPolicy` currently permits any origin, header, and method. This is explicit but intentionally permissive for pre-deployment development. Define an environment-specific allowlist before exposing a browser client publicly.
+The API applies one named policy, `ApiCorsPolicy` (`Presentation/Cors/ApiCorsPolicy.cs`):
+
+- **`Development`:** any origin, header, and method, without credentials. `Cors:AllowedOrigins` is ignored.
+- **Every other environment** (including `Production`, `Staging`, and the test host's `Testing`): only the origins in `Cors:AllowedOrigins`. A listed origin is echoed in `Access-Control-Allow-Origin` with `Access-Control-Allow-Credentials: true`, and any header and method are allowed. Any other origin gets no CORS headers, so the browser blocks the response. With nothing configured, no origin is allowed.
+
+Set origins with either form:
+
+```bash
+Cors__AllowedOrigins=https://app.example.com,https://admin.example.com
+# or
+Cors__AllowedOrigins__0=https://app.example.com
+Cors__AllowedOrigins__1=https://admin.example.com
+```
+
+Each entry must be a full `http`/`https` origin: scheme, host, and optional port, with no path, query, or wildcard. A trailing `/` is dropped. The API refuses to start if an entry is invalid. Matching is exact, so `http://` and `https://`, a different port, and a different subdomain are all different origins.
+
+The Compose `api.env.example` sets `ASPNETCORE_ENVIRONMENT=Development`, which keeps the permissive policy. Set another environment and `Cors__AllowedOrigins` before exposing a browser client.
+
+The v1 Ansible deployment runs the API as `Production` and writes `Cors__AllowedOrigins` from the `api_cors_allowed_origins` list in `deploy/ansible/inventories/<env>/group_vars/all/main.yml`. It is empty by default, so no browser origin is allowed until you set it and rerun `playbooks/deploy.yml`.
 
 ## Troubleshooting order
 

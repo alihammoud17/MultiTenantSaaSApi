@@ -2,6 +2,8 @@
 # Local systemd test host (scripts/test-host.sh). Swap and the SSM agent don't apply to a container.
 app_environment: Production
 app_tenant_base_domain: ""
+# Browser origins allowed by CORS (e.g. ["https://app.example.com"]). Empty allows none.
+api_cors_allowed_origins: []
 common_swap_size_mb: 0
 common_install_ssm_agent: false
 # On Apple silicon this amd64 container runs under qemu, where .NET's W^X memory mapping
