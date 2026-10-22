@@ -1,0 +1,11 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+build/
+*.tfvars
+!*.tfvars.example
+# Lock files differ between Terraform (registry.terraform.io) and OpenTofu
+# (registry.opentofu.org); generate locally with whichever CLI you use.
+.terraform.lock.hcl

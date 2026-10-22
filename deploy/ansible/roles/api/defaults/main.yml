@@ -1,0 +1,16 @@
+---
+api_release_id: "{{ hostvars['localhost']['build_release_id'] }}"
+api_artifact: "{{ hostvars['localhost']['build_release_dir'] }}/api.tar.gz"
+api_home: "{{ app_root }}/api"
+api_release_dir: "{{ api_home }}/releases/{{ api_release_id }}"
+api_env_file: "{{ app_config_dir }}/api.env"
+api_service: mtsaas-api
+
+api_jwt_issuer: MultiTenantSaasApi
+api_jwt_audience: MultiTenantSaasApi
+api_jwt_expiration_minutes: 60
+api_clock_skew_minutes: 5
+# How long to wait for /health after a (re)start.
+api_health_retries: 30
+# Extra environment for the API and the migrations bundle (e.g. emulator workarounds on the test host).
+api_extra_environment: {}

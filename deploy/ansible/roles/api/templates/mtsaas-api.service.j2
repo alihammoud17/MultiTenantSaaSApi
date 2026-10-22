@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+[Unit]
+Description=MultiTenantSaaSApi .NET API
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ app_api_user }}
+Group={{ app_api_user }}
+WorkingDirectory={{ api_home }}/current
+EnvironmentFile={{ api_env_file }}
+ExecStart=/usr/bin/dotnet {{ api_home }}/current/Presentation.dll
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+SyslogIdentifier={{ api_service }}
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

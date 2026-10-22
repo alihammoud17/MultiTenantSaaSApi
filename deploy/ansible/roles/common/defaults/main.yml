@@ -1,0 +1,14 @@
+---
+common_base_packages:
+  - acl
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - unattended-upgrades
+# 0 disables swap. Swap can't be enabled inside a container (Floci, the test host).
+common_swap_size_mb: 2048
+common_swap_file: /swapfile
+# Debian AMIs don't ship the SSM agent; Session Manager is the shell access path on AWS.
+common_install_ssm_agent: true
+common_aws_region: us-east-1

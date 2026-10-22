@@ -1,0 +1,10 @@
+---
+# Local systemd test host (scripts/test-host.sh). Swap and the SSM agent don't apply to a container.
+app_environment: Production
+app_tenant_base_domain: ""
+common_swap_size_mb: 0
+common_install_ssm_agent: false
+# On Apple silicon this amd64 container runs under qemu, where .NET's W^X memory mapping
+# crashes the runtime. Native x86 EC2 doesn't need this.
+api_extra_environment:
+  DOTNET_EnableWriteXorExecute: "0"

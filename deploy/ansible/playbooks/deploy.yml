@@ -1,0 +1,16 @@
+---
+# Ship a new application release to a host that site.yml has already configured.
+#   ansible-playbook -i inventories/<env> playbooks/deploy.yml
+- name: Build the release on the controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - build
+
+- name: Deploy the API and BillingService
+  hosts: app
+  become: true
+  roles:
+    - api
+    - billing

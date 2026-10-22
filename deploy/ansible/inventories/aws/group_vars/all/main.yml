@@ -1,0 +1,7 @@
+---
+app_environment: Production
+# Tenants resolve from <subdomain>.<base domain>. Empty until DNS exists (roadmap v1.1).
+app_tenant_base_domain: ""
+common_swap_size_mb: 2048
+common_install_ssm_agent: true
+common_aws_region: us-east-1

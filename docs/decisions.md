@@ -44,7 +44,7 @@ Both services expose local JSON health/metrics and correlation-aware structured 
 
 ## Open owner-review items
 
-1. Select the first deployment topology, environment count, hosts, and release/promotion process.
+1. Select the environment count and the release/promotion process. The first topology is chosen: one Debian 12 EC2 host provisioned by Terraform and configured by Ansible with native systemd services, growing toward multi-region active-passive DR ([deployment roadmap](deployment-roadmap.md)). Still open: how many environments, and how a release is promoted between them.
 2. Decide whether the first deployment is internal-only or public/customer-facing.
 3. Select public DNS, TLS termination, and certificate ownership.
 4. Decide whether a browser client is in scope and define the production CORS allowlist.

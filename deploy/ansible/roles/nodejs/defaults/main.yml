@@ -1,0 +1,4 @@
+---
+# BillingService needs Node 22+ (package.json engines); Debian 12 ships 18.
+nodejs_major_version: 22
+nodejs_repo_key_url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key

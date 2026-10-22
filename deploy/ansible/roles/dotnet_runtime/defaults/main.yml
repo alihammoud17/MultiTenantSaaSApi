@@ -1,0 +1,3 @@
+---
+dotnet_runtime_package: aspnetcore-runtime-10.0
+dotnet_runtime_repo_key_url: https://packages.microsoft.com/keys/microsoft.asc
