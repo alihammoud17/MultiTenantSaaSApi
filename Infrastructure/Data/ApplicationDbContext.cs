@@ -77,6 +77,7 @@ namespace Infrastructure.Data
         public DbSet<UserMfaEnrollmentChallenge> UserMfaEnrollmentChallenges => Set<UserMfaEnrollmentChallenge>();
         public DbSet<UserStepUpSession> UserStepUpSessions => Set<UserStepUpSession>();
         public DbSet<TenantWebhookEndpoint> TenantWebhookEndpoints => Set<TenantWebhookEndpoint>();
+        public DbSet<TenantAllowedOrigin> TenantAllowedOrigins => Set<TenantAllowedOrigin>();
         public DbSet<OutboundWebhookEvent> OutboundWebhookEvents => Set<OutboundWebhookEvent>();
         public DbSet<OutboundWebhookDelivery> OutboundWebhookDeliveries => Set<OutboundWebhookDelivery>();
 
@@ -206,6 +207,19 @@ namespace Infrastructure.Data
                 entity.Property(e => e.SigningSecret).IsRequired().HasMaxLength(256);
                 entity.Property(e => e.NextSigningSecret).HasMaxLength(256);
                 entity.Property(e => e.SubscribedEventTypes).IsRequired().HasMaxLength(500);
+            });
+
+            // Not tenant query-filtered: CORS evaluation matches origins across tenants before any tenant is resolved.
+            // Every tenant-facing query must filter on TenantId explicitly.
+            builder.Entity<TenantAllowedOrigin>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.Origin }).IsUnique();
+                entity.Property(e => e.Origin).IsRequired().HasMaxLength(255);
+                entity.HasOne<Tenant>()
+                    .WithMany()
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             builder.Entity<OutboundWebhookEvent>(entity =>
@@ -528,6 +542,18 @@ namespace Infrastructure.Data
                 },
                 new EntitlementDefinition
                 {
+                    Key = "feature.security.cors_origins.manage",
+                    DisplayName = "Tenant CORS origin management",
+                    Description = "Allows tenant administrators to register the browser origins allowed to call the API cross-origin.",
+                    ValueType = EntitlementValueType.Boolean,
+                    Category = EntitlementCategory.Feature,
+                    IsActive = true,
+                    DefaultValue = "false",
+                    CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new EntitlementDefinition
+                {
                     Key = "quota.api.calls.monthly",
                     DisplayName = "Monthly API call quota",
                     Description = "Plan-level monthly API call quota baseline.",
@@ -659,6 +685,24 @@ namespace Infrastructure.Data
                     Source = EntitlementSourceType.PlanDefault,
                     CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
                     UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "feature.security.cors_origins.manage",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "feature.security.cors_origins.manage",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc)
                 },
                 new PlanEntitlement
                 {

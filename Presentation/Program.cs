@@ -48,6 +48,8 @@ builder.Services.AddScoped<IMfaService, MfaService>();
 builder.Services.AddScoped<IWebhookEndpointSecretIssuer, WebhookEndpointSecretIssuer>();
 builder.Services.AddScoped<IWebhookEndpointManagementService, WebhookEndpointManagementService>();
 builder.Services.AddScoped<ITenantLifecycleService, TenantLifecycleService>();
+builder.Services.AddScoped<ITenantCorsOriginService, TenantCorsOriginService>();
+builder.Services.AddSingleton<ICorsOriginCache, RedisCorsOriginCache>();
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
