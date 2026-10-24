@@ -111,6 +111,23 @@ public sealed class OutboundWebhookDispatcherPostgreSqlTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TransportErrorWithLongMessage_ShouldStillRecordTheRetry()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (endpointId, _) = await CreateEndpointAsync(tenantId, "https://hooks.example.test/long-error");
+        _handler.Respond = _ => throw new HttpRequestException("upstream refused: " + new string('x', 5000));
+
+        await PublishAsync(tenantId, "src-long-error");
+        await DispatchOnceAsync();
+
+        var delivery = await SingleDeliveryAsync(endpointId);
+        delivery.Status.Should().Be(OutboundWebhookDeliveryStatus.RetryScheduled);
+        delivery.AttemptCount.Should().Be(1);
+        delivery.LastError.Should().StartWith("upstream refused: ");
+        delivery.LastError!.Length.Should().BeLessThanOrEqualTo(1000);
+    }
+
+    [Fact]
     public async Task EndpointWithMalformedUrl_ShouldNotBlockOrDuplicateOtherTenantsDeliveries()
     {
         var brokenTenant = await SeedTenantAsync();
