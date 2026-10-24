@@ -73,6 +73,11 @@ public sealed class WebhookEndpointManagementService : IWebhookEndpointManagemen
         return MapView(endpoint);
     }
 
+    public Task<bool> IsNameTakenAsync(Guid tenantId, string name, Guid? exceptEndpointId = null, CancellationToken cancellationToken = default)
+        => _dbContext.TenantWebhookEndpoints.AnyAsync(
+            x => x.TenantId == tenantId && x.Name == name && (exceptEndpointId == null || x.Id != exceptEndpointId),
+            cancellationToken);
+
     public async Task<bool> DeleteEndpointAsync(Guid tenantId, Guid endpointId, CancellationToken cancellationToken = default)
     {
         var endpoint = await _dbContext.TenantWebhookEndpoints.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == endpointId, cancellationToken);
