@@ -209,7 +209,12 @@ dotnet build --no-restore
 dotnet test --no-build --verbosity normal
 ```
 
-`dotnet test` needs no PostgreSQL or Redis. `RedisCorsOriginCacheTests` has two tests that run against a real Redis only when `REDIS_TEST_CONNECTION_STRING` is set (e.g. `REDIS_TEST_CONNECTION_STRING=localhost:6379 dotnet test --no-build`) and are skipped otherwise.
+Most of `dotnet test` needs no PostgreSQL or Redis: the API integration suites use SQLite in memory. Tests that need the real services use Testcontainers (`Tests/Containers/`) and need a running Docker daemon; without one they are skipped, not failed:
+
+- PostgreSQL (`postgres:16-alpine`): the fixture applies the real EF Core migrations to a template database once, and each test gets its own copy. Used by the outbound-webhook dispatcher tests and the PostgreSQL run of the entitlement resolution tests, which catch provider behaviour SQLite does not have (column lengths, query translation).
+- Redis (`redis:7-alpine`): used by `RateLimitServiceRedisTests` and `RedisCorsOriginCacheTests`. Set `REDIS_TEST_CONNECTION_STRING` (e.g. `localhost:6379`) to use an existing Redis instead of a container.
+
+Set `TESTCONTAINERS_POSTGRES_IMAGE` or `TESTCONTAINERS_REDIS_IMAGE` to pull the images from a registry mirror when Docker Hub is rate-limited. Collect coverage with `dotnet test --no-build --collect:"XPlat Code Coverage"` (coverlet, Cobertura output; add `--results-directory <dir>` to keep it outside the repository).
 
 BillingService checks:
 
