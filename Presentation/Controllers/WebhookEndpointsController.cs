@@ -1,3 +1,4 @@
+using Application.Services;
 using Domain.Authorization;
 using Domain.DTOs;
 using Domain.Interfaces;
@@ -24,12 +25,14 @@ public class WebhookEndpointsController : ControllerBase
     [Authorize(Policy = RbacPolicyNames.BillingManage)]
     public async Task<IActionResult> Create([FromBody] CreateWebhookEndpointRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.CallbackUrl))
+        var name = request.Name?.Trim();
+        var callbackUrl = request.CallbackUrl?.Trim();
+        if (!WebhookEndpointRequestValidator.TryValidate(name, callbackUrl, request.SubscribedEventTypes, out var error))
         {
-            return BadRequest(new { error = "Name and callbackUrl are required" });
+            return BadRequest(new { error });
         }
 
-        var created = await _managementService.CreateEndpointAsync(_tenantContext.TenantId, request.Name.Trim(), request.CallbackUrl.Trim(), request.SubscribedEventTypes ?? "*", cancellationToken);
+        var created = await _managementService.CreateEndpointAsync(_tenantContext.TenantId, name!, callbackUrl!, request.SubscribedEventTypes ?? "*", cancellationToken);
         return Created($"/api/v1/tenant/webhook-endpoints/{created.Endpoint.Id}", new
         {
             endpoint = created.Endpoint,
@@ -46,12 +49,14 @@ public class WebhookEndpointsController : ControllerBase
     [Authorize(Policy = RbacPolicyNames.BillingManage)]
     public async Task<IActionResult> Update(Guid endpointId, [FromBody] UpdateWebhookEndpointRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.CallbackUrl))
+        var name = request.Name?.Trim();
+        var callbackUrl = request.CallbackUrl?.Trim();
+        if (!WebhookEndpointRequestValidator.TryValidate(name, callbackUrl, request.SubscribedEventTypes, out var error))
         {
-            return BadRequest(new { error = "Name and callbackUrl are required" });
+            return BadRequest(new { error });
         }
 
-        var updated = await _managementService.UpdateEndpointAsync(_tenantContext.TenantId, endpointId, request.Name.Trim(), request.CallbackUrl.Trim(), request.SubscribedEventTypes ?? "*", cancellationToken);
+        var updated = await _managementService.UpdateEndpointAsync(_tenantContext.TenantId, endpointId, name!, callbackUrl!, request.SubscribedEventTypes ?? "*", cancellationToken);
         return updated is null ? NotFound(new { error = "Webhook endpoint not found" }) : Ok(updated);
     }
 
