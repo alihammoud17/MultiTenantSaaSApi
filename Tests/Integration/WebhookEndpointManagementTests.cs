@@ -88,4 +88,93 @@ public class WebhookEndpointManagementTests : IClassFixture<ApiWebApplicationFac
         create.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         list.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+
+    [Theory]
+    [InlineData("not a url")]
+    [InlineData("/relative/path")]
+    [InlineData("ftp://example.com/webhooks")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("http://[not-a-host")]
+    public async Task CreateAndUpdate_ShouldRejectCallbackUrlsTheDispatcherCannotPostTo(string callbackUrl)
+    {
+        using var client = await CreateAdminClientAsync();
+
+        var create = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new { name = "invalid-url", callbackUrl });
+        create.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var endpointId = await CreateEndpointAsync(client, "valid");
+        var update = await client.PutAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}", new { name = "valid", callbackUrl });
+        update.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var listed = await (await client.GetAsync("/api/v1/tenant/webhook-endpoints")).Content.ReadFromJsonAsync<JsonElement>();
+        listed.EnumerateArray().Select(e => e.GetProperty("callbackUrl").GetString()).Should().Equal("https://example.com/webhooks/valid");
+    }
+
+    [Fact]
+    public async Task Create_ShouldRejectValuesLongerThanTheirColumns()
+    {
+        using var client = await CreateAdminClientAsync();
+
+        var longName = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new
+        {
+            name = new string('n', 121),
+            callbackUrl = "https://example.com/webhooks"
+        });
+        var longUrl = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new
+        {
+            name = "long-url",
+            callbackUrl = "https://example.com/" + new string('p', 500)
+        });
+        var longEventTypes = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new
+        {
+            name = "long-events",
+            callbackUrl = "https://example.com/webhooks",
+            subscribedEventTypes = new string('e', 501)
+        });
+
+        longName.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        longUrl.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        longEventTypes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Create_WithHttpCallbackAndNoEventTypes_ShouldSubscribeToAllEvents()
+    {
+        using var client = await CreateAdminClientAsync();
+
+        var create = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new { name = "  padded  ", callbackUrl = "  http://hooks.internal.test:8080/in  " });
+
+        create.StatusCode.Should().Be(HttpStatusCode.Created);
+        var endpoint = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("endpoint");
+        endpoint.GetProperty("name").GetString().Should().Be("padded");
+        endpoint.GetProperty("callbackUrl").GetString().Should().Be("http://hooks.internal.test:8080/in");
+        endpoint.GetProperty("subscribedEventTypes").GetString().Should().Be("*");
+    }
+
+    [Fact]
+    public async Task RotateSecret_ForUnknownEndpoint_ShouldReturnNotFound()
+    {
+        using var client = await CreateAdminClientAsync();
+
+        var rotate = await client.PostAsync($"/api/v1/tenant/webhook-endpoints/{Guid.NewGuid()}/rotate-secret", null);
+        var update = await client.PutAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{Guid.NewGuid()}", new { name = "x", callbackUrl = "https://example.com/x" });
+
+        rotate.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        update.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    private async Task<HttpClient> CreateAdminClientAsync()
+    {
+        var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"wh-validate-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
+        return client;
+    }
+
+    private static async Task<Guid> CreateEndpointAsync(HttpClient client, string name)
+    {
+        var response = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new { name, callbackUrl = $"https://example.com/webhooks/{name}" });
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("endpoint").GetProperty("id").GetGuid();
+    }
 }
