@@ -13,6 +13,10 @@ public class EntitlementEvaluator : IEntitlementEvaluator
     private readonly ApplicationDbContext _dbContext;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
+    // Results already resolved in this HTTP request, keyed by tenant and entitlement key. The evaluator is scoped, so
+    // this lives for one request; outside a request (no HttpContext) nothing is memoized and every call re-reads.
+    private readonly Dictionary<(Guid TenantId, string EntitlementKey), EntitlementEvaluationResult> _requestResults = new();
+
     public EntitlementEvaluator(ApplicationDbContext dbContext, IHttpContextAccessor httpContextAccessor)
     {
         _dbContext = dbContext;
@@ -36,6 +40,38 @@ public class EntitlementEvaluator : IEntitlementEvaluator
             return new Dictionary<string, EntitlementEvaluationResult>();
         }
 
+        if (_httpContextAccessor.HttpContext is null)
+        {
+            return await EvaluateFromDatabaseAsync(tenantId, keys, cancellationToken);
+        }
+
+        var results = new Dictionary<string, EntitlementEvaluationResult>(keys.Length, StringComparer.Ordinal);
+        var missingKeys = new List<string>();
+        foreach (var key in keys)
+        {
+            if (_requestResults.TryGetValue((tenantId, key), out var cached))
+                results[key] = cached;
+            else
+                missingKeys.Add(key);
+        }
+
+        if (missingKeys.Count > 0)
+        {
+            foreach (var (key, result) in await EvaluateFromDatabaseAsync(tenantId, missingKeys.ToArray(), cancellationToken))
+            {
+                _requestResults[(tenantId, key)] = result;
+                results[key] = result;
+            }
+        }
+
+        return results;
+    }
+
+    private async Task<IReadOnlyDictionary<string, EntitlementEvaluationResult>> EvaluateFromDatabaseAsync(
+        Guid tenantId,
+        string[] keys,
+        CancellationToken cancellationToken)
+    {
         var evaluatedAtUtc = DateTime.UtcNow;
         var correlationId = _httpContextAccessor.HttpContext?.TraceIdentifier;
 

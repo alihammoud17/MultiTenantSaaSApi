@@ -152,6 +152,75 @@ public class EntitlementEvaluatorQueryCountTests : IAsyncLifetime
         other[key].IsAllowed.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task RepeatedEvaluationInOneRequest_ShouldReuseTheFirstResult()
+    {
+        var tenantId = await SeedTenantAsync(withSubscription: true, "query.count.memo");
+        var sut = new EntitlementEvaluator(_db, RequestAccessor());
+        var first = await sut.EvaluateAsync(tenantId, "query.count.memo", TestContext.Current.CancellationToken);
+        _queries.Reset();
+
+        var second = await sut.EvaluateAsync(tenantId, "query.count.memo", TestContext.Current.CancellationToken);
+        var batched = await sut.EvaluateManyAsync(tenantId, ["query.count.memo"], TestContext.Current.CancellationToken);
+
+        _queries.Count.Should().Be(0);
+        second.Should().BeSameAs(first);
+        batched["query.count.memo"].Should().BeSameAs(first);
+    }
+
+    [Fact]
+    public async Task BatchInOneRequest_ShouldOnlyQueryKeysNotResolvedYet()
+    {
+        var tenantId = await SeedTenantAsync(withSubscription: true, "query.count.memo.seen", "query.count.memo.new");
+        var sut = new EntitlementEvaluator(_db, RequestAccessor());
+        var seen = await sut.EvaluateAsync(tenantId, "query.count.memo.seen", TestContext.Current.CancellationToken);
+        _queries.Reset();
+
+        var results = await sut.EvaluateManyAsync(tenantId, ["query.count.memo.seen", "query.count.memo.new"], TestContext.Current.CancellationToken);
+
+        _queries.Count.Should().Be(3, "one batch for the unseen key only");
+        results["query.count.memo.seen"].Should().BeSameAs(seen);
+        results["query.count.memo.new"].ResolvedFrom.Should().Be("Override");
+    }
+
+    [Fact]
+    public async Task RequestMemo_ShouldBeKeyedByTenant()
+    {
+        const string key = "query.count.memo.tenant";
+        var tenantWithOverride = await SeedTenantAsync(withSubscription: true, key);
+        var otherTenant = await SeedSubscribedTenantWithoutSourcesAsync();
+        var sut = new EntitlementEvaluator(_db, RequestAccessor());
+
+        var own = await sut.EvaluateAsync(tenantWithOverride, key, TestContext.Current.CancellationToken);
+        var other = await sut.EvaluateAsync(otherTenant, key, TestContext.Current.CancellationToken);
+
+        own.IsAllowed.Should().BeTrue();
+        other.TenantId.Should().Be(otherTenant);
+        other.IsAllowed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OutsideAnHttpRequest_EveryEvaluationShouldReadTheDatabase()
+    {
+        const string key = "query.count.memo.background";
+        var tenantId = await SeedTenantAsync(withSubscription: true, key);
+        var sut = new EntitlementEvaluator(_db, new HttpContextAccessor());
+        var before = await sut.EvaluateAsync(tenantId, key, TestContext.Current.CancellationToken);
+
+        _db.TenantEntitlementOverrides.RemoveRange(_db.TenantEntitlementOverrides.Where(o => o.TenantId == tenantId));
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _queries.Reset();
+
+        var after = await sut.EvaluateAsync(tenantId, key, TestContext.Current.CancellationToken);
+
+        _queries.Count.Should().Be(3);
+        before.IsAllowed.Should().BeTrue();
+        after.IsAllowed.Should().BeFalse("the override was removed and nothing is memoized without a request");
+    }
+
+    private static IHttpContextAccessor RequestAccessor()
+        => new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
+
     private async Task<Guid> SeedSubscribedTenantWithoutSourcesAsync()
     {
         var baseline = EntitlementMatrixFixtureBuilder.BaselineUtc;
