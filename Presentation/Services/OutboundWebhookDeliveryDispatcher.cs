@@ -139,8 +139,14 @@ public sealed class OutboundWebhookDeliveryDispatcher : BackgroundService
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    // Matches the LastError column length. A longer value fails the batch save on PostgreSQL, losing every result in it.
+    private const int MaxLastErrorLength = 1000;
+
     private static void ScheduleRetry(OutboundWebhookDelivery delivery, string error)
     {
+        if (error.Length > MaxLastErrorLength)
+            error = error[..MaxLastErrorLength];
+
         const int maxAttempts = 6;
         if (delivery.AttemptCount >= maxAttempts)
         {
