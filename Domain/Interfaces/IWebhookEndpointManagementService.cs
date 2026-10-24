@@ -26,6 +26,13 @@ public interface IWebhookEndpointManagementService
         string subscribedEventTypes,
         CancellationToken cancellationToken = default);
 
+    // Endpoint names are unique per tenant; exceptEndpointId lets an update keep its own name.
+    Task<bool> IsNameTakenAsync(
+        Guid tenantId,
+        string name,
+        Guid? exceptEndpointId = null,
+        CancellationToken cancellationToken = default);
+
     Task<bool> DeleteEndpointAsync(Guid tenantId, Guid endpointId, CancellationToken cancellationToken = default);
 
     Task<WebhookEndpointManagementView?> SetEndpointActiveStateAsync(

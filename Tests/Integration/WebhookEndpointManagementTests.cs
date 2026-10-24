@@ -163,6 +163,43 @@ public class WebhookEndpointManagementTests : IClassFixture<ApiWebApplicationFac
         update.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task Create_WithDuplicateName_ShouldReturnConflict()
+    {
+        using var client = await CreateAdminClientAsync();
+        await CreateEndpointAsync(client, "duplicate");
+
+        var second = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new { name = "duplicate", callbackUrl = "https://example.com/webhooks/other" });
+
+        second.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Update_ShouldKeepItsOwnName_ButNotTakeAnotherEndpointsName()
+    {
+        using var client = await CreateAdminClientAsync();
+        var first = await CreateEndpointAsync(client, "first");
+        await CreateEndpointAsync(client, "second");
+
+        var keepName = await client.PutAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{first}", new { name = "first", callbackUrl = "https://example.com/webhooks/moved" });
+        var takeName = await client.PutAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{first}", new { name = "second", callbackUrl = "https://example.com/webhooks/moved" });
+
+        keepName.StatusCode.Should().Be(HttpStatusCode.OK);
+        takeName.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task SameName_InAnotherTenant_ShouldNotConflict()
+    {
+        using var tenantA = await CreateAdminClientAsync();
+        using var tenantB = await CreateAdminClientAsync();
+        await CreateEndpointAsync(tenantA, "shared-name");
+
+        var response = await tenantB.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new { name = "shared-name", callbackUrl = "https://example.com/webhooks/b" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
     private async Task<HttpClient> CreateAdminClientAsync()
     {
         var client = SecurityTestHelpers.CreateHttpsClient(_factory);

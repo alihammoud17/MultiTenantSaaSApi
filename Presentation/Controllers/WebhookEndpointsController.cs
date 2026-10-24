@@ -32,6 +32,11 @@ public class WebhookEndpointsController : ControllerBase
             return BadRequest(new { error });
         }
 
+        if (await _managementService.IsNameTakenAsync(_tenantContext.TenantId, name!, cancellationToken: cancellationToken))
+        {
+            return Conflict(new { error = "A webhook endpoint with this name already exists" });
+        }
+
         var created = await _managementService.CreateEndpointAsync(_tenantContext.TenantId, name!, callbackUrl!, request.SubscribedEventTypes ?? "*", cancellationToken);
         return Created($"/api/v1/tenant/webhook-endpoints/{created.Endpoint.Id}", new
         {
@@ -54,6 +59,11 @@ public class WebhookEndpointsController : ControllerBase
         if (!WebhookEndpointRequestValidator.TryValidate(name, callbackUrl, request.SubscribedEventTypes, out var error))
         {
             return BadRequest(new { error });
+        }
+
+        if (await _managementService.IsNameTakenAsync(_tenantContext.TenantId, name!, endpointId, cancellationToken))
+        {
+            return Conflict(new { error = "A webhook endpoint with this name already exists" });
         }
 
         var updated = await _managementService.UpdateEndpointAsync(_tenantContext.TenantId, endpointId, name!, callbackUrl!, request.SubscribedEventTypes ?? "*", cancellationToken);
