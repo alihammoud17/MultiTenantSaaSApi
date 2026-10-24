@@ -28,15 +28,18 @@ public sealed class RedisContainerFixture : IAsyncLifetime
             return;
         }
 
-        var container = new RedisBuilder(Image).Build();
+        RedisContainer? container = null;
         try
         {
+            // Build() already fails when no Docker endpoint is reachable.
+            container = new RedisBuilder(Image).Build();
             await container.StartAsync();
         }
         catch (Exception ex)
         {
             _unavailableReason = $"{ConnectionStringVariable} is not set and a Redis container could not start (is Docker running?): {ex.GetBaseException().Message}";
-            await container.DisposeAsync();
+            if (container is not null)
+                await container.DisposeAsync();
             return;
         }
 

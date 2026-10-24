@@ -24,15 +24,18 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        var container = new PostgreSqlBuilder(Image).Build();
+        PostgreSqlContainer? container = null;
         try
         {
+            // Build() already fails when no Docker endpoint is reachable.
+            container = new PostgreSqlBuilder(Image).Build();
             await container.StartAsync();
         }
         catch (Exception ex)
         {
             _unavailableReason = $"PostgreSQL container could not start (is Docker running?): {ex.GetBaseException().Message}";
-            await container.DisposeAsync();
+            if (container is not null)
+                await container.DisposeAsync();
             return;
         }
 
