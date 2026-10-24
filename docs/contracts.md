@@ -143,6 +143,10 @@ Each endpoint delivery has a stable delivery ID and idempotency key. Non-success
 
 Source-event and event identity uniqueness prevent duplicate materialization in the API. Endpoint and delivery access remain tenant-scoped. Signing secrets must never be logged or committed.
 
+### Endpoint management
+
+`POST /api/v1/tenant/webhook-endpoints` and `PUT /api/v1/tenant/webhook-endpoints/{id}` require a name of at most 120 characters and an absolute `http` or `https` callback URL of at most 500 characters; `subscribedEventTypes` (comma-separated, default `*`) is at most 500 characters. Invalid input returns `400`; a name already used by another endpoint of the same tenant returns `409`.
+
 ### Rotation limitation
 
 Endpoint management can initiate rotation and issue pending signing material. The current documentation does not claim a complete automated active-secret cutover/finalization procedure; operators must not assume rotation is complete merely because a pending secret was issued.

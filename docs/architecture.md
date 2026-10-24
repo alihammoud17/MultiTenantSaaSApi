@@ -43,7 +43,7 @@ Registration does not reveal whether an email has an account. The subdomain is c
 
 Tenant-scoped RBAC uses roles, permissions, policy handlers, and service-layer authorization. Sensitive controllers combine authenticated identity, tenant context, RBAC, and entitlement checks as applicable.
 
-Unauthenticated auth routes use in-process fixed-window per-client limiters: register and login share a budget of 10 requests per minute, and refresh has its own budget of 30 per minute so login or register floods cannot block session renewal. Clients are keyed by IPv4 address or IPv6 /64 prefix. Behind a reverse proxy, the client address comes from `X-Forwarded-For` only when the proxy is listed in `ForwardedHeaders:KnownNetworks`/`KnownProxies` (see `docs/operations.md`). Authenticated tenant traffic also passes through a plan-aware Redis-backed limiter. The two controls are independent.
+Unauthenticated auth routes use in-process fixed-window per-client limiters: register and login share a budget of 10 requests per minute, and refresh has its own budget of 30 per minute so login or register floods cannot block session renewal. The anonymous account-recovery routes (`verification/request`, `verification/complete`, `password-reset/request`, `password-reset/complete`, `invites/accept`) share a separate budget of 10 per minute, which limits both mail flooding and token guessing. Clients are keyed by IPv4 address or IPv6 /64 prefix. Behind a reverse proxy, the client address comes from `X-Forwarded-For` only when the proxy is listed in `ForwardedHeaders:KnownNetworks`/`KnownProxies` (see `docs/operations.md`). MFA code checks (`mfa/enroll/verify` and `mfa/step-up`) share a budget of 5 attempts per 5 minutes per user, keyed by the JWT's tenant and subject rather than the client address, so a stolen access token cannot be used to enumerate TOTP codes. The rate limiter runs after authentication so that policy can see the caller. There is no account lockout. Authenticated tenant traffic also passes through a plan-aware Redis-backed monthly limiter, which counts with an atomic increment so concurrent requests cannot exceed the plan limit, and fails open when Redis is unavailable. The controls are independent.
 
 ## Plans, subscriptions, and entitlements
 
@@ -70,7 +70,7 @@ The default runtime is intentionally incomplete: all configured provider names s
 
 The API owns outbound tenant-event publication. Tenant-scoped endpoint management supports creation, listing, update, activation/deactivation, deletion, and signing-secret rotation initiation. Events and deliveries are persisted, delivery requests are signed, and a hosted dispatcher applies retry and terminal-status behavior.
 
-Endpoint lookup and management are tenant-scoped. Delivery identifiers and source-event keys provide replay and duplicate protection. Rotation initiation issues pending secret material; active cutover/finalization remains a future operational phase.
+Endpoint lookup and management are tenant-scoped. Callback URLs must be absolute `http` or `https` URLs, field lengths are checked against their columns (`400` otherwise), and endpoint names are unique per tenant (`409`). The dispatcher fails a delivery whose URL cannot be used without affecting the rest of the batch, and stores at most 1000 characters of the last error. Delivery identifiers and source-event keys provide replay and duplicate protection. Rotation initiation issues pending secret material; active cutover/finalization remains a future operational phase.
 
 ## Usage analytics and audit
 
