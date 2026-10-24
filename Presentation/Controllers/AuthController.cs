@@ -338,6 +338,7 @@ namespace Presentation.Controllers
 
         [HttpPost("mfa/enroll/verify")]
         [Authorize]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.MfaCodeVerification)]
         public async Task<IActionResult> CompleteMfaEnrollment([FromBody] CompleteMfaEnrollmentRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request.EnrollmentToken))
@@ -369,6 +370,7 @@ namespace Presentation.Controllers
 
         [HttpPost("mfa/step-up")]
         [Authorize]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.MfaCodeVerification)]
         public async Task<IActionResult> StepUpAuthentication([FromBody] StepUpAuthenticationRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request.Code))
