@@ -24,7 +24,7 @@ Files in this directory are retained for project history and due-diligence trace
 | `V4-Entitlement-Matrix-Test-Design.md` | [`../architecture.md`](../architecture.md), [`../CHANGELOG.md`](../CHANGELOG.md) | Implemented test-design snapshot. |
 | `V4-Implementation-Backlog.md` | [`../architecture.md`](../architecture.md), [`../operations.md`](../operations.md), [`../CHANGELOG.md`](../CHANGELOG.md) | Historical execution ledger, not an active source of truth. |
 | `V4-Local-Observability-Contract.md` | [`../operations.md`](../operations.md) | Local observability guarantees and limitations consolidated. |
-| `V4-TechDebt-Planning.md` | [`../CHANGELOG.md`](../CHANGELOG.md), [`../decisions.md`](../decisions.md) | Completed planning ledger and residual decisions. |
+| `V4-TechDebt-Planning.md` | [`../plans/2026-10-24-v4-tech-debt-status.md`](../plans/2026-10-24-v4-tech-debt-status.md), [`../CHANGELOG.md`](../CHANGELOG.md) | Completed planning ledger; current status and open follow-ups are in the status plan. |
 | `versioning.md` | [`../decisions.md`](../decisions.md) | Versioning policy consolidated. |
 
 Archive files should not be edited to keep them synchronized with code. If historical context is inaccurate or ambiguous, clarify the active replacement rather than rewriting history.
