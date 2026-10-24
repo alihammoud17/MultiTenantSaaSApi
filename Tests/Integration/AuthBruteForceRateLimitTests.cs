@@ -171,6 +171,34 @@ public class AuthBruteForceRateLimitTests
         otherUsersGuess.StatusCode.Should().NotBe(HttpStatusCode.TooManyRequests, "the budget is per user, not per client address");
     }
 
+    [Fact]
+    public async Task AccountRecoveryRequests_ShouldBeLimitedPerClient_WithoutSpendingTheLoginBudget()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var client = CreateClient(factory);
+        var tenantId = Guid.NewGuid();
+
+        for (var attempt = 1; attempt <= PermitLimit; attempt++)
+        {
+            var reset = await client.PostAsJsonAsync("/api/v1/auth/password-reset/request", new { tenantId, email = "victim@example.com" });
+            reset.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        var anotherReset = await client.PostAsJsonAsync("/api/v1/auth/password-reset/request", new { tenantId, email = "victim@example.com" });
+        var verificationRequest = await client.PostAsJsonAsync("/api/v1/auth/verification/request", new { tenantId, email = "victim@example.com" });
+        var verificationGuess = await client.PostAsJsonAsync("/api/v1/auth/verification/complete", new { tenantId, verificationToken = "guess" });
+        var resetGuess = await client.PostAsJsonAsync("/api/v1/auth/password-reset/complete", new { tenantId, resetToken = "guess", newPassword = "Passw0rd!" });
+        var inviteGuess = await client.PostAsJsonAsync("/api/v1/auth/invites/accept", new { tenantId, inviteToken = "guess", password = "Passw0rd!" });
+        var login = await SendLoginAsync(client, forwardedFor: null);
+
+        anotherReset.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        verificationRequest.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        verificationGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        resetGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        inviteGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        login.StatusCode.Should().Be(HttpStatusCode.Unauthorized, "recovery traffic has its own budget");
+    }
+
     private static HttpClient CreateClient(AuthRateLimitWebApplicationFactory factory) =>
         factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
 

@@ -128,6 +128,10 @@ builder.Services.AddRateLimiter(options =>
         CreateAuthPartition(httpContext, permitLimit: 10));
     options.AddPolicy(AuthRateLimitPolicyNames.AuthRefreshEndpoint, httpContext =>
         CreateAuthPartition(httpContext, permitLimit: 30));
+    // Email-sending requests (verification, password reset) and token redemption (verification, reset, invite) are
+    // anonymous; their own budget stops mail flooding and token guessing without eating into the login budget.
+    options.AddPolicy(AuthRateLimitPolicyNames.AccountRecoveryEndpoints, httpContext =>
+        CreateAuthPartition(httpContext, permitLimit: 10));
     // TOTP codes are 6 digits, so guesses are budgeted per user (not per address, which an attacker holding a stolen
     // access token can rotate). Enrollment and step-up share the budget.
     options.AddPolicy(AuthRateLimitPolicyNames.MfaCodeVerification, httpContext =>
