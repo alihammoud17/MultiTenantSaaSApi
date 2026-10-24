@@ -64,17 +64,18 @@ namespace Application.Services
                 var month = now.ToString("yyyy-MM");
                 var key = $"ratelimit:{tenantId}:{month}";
 
-                // Get current usage
-                var currentUsage = (int)(await db.StringGetAsync(key));
+                // Increment first and check the returned count: INCR is atomic, so concurrent requests each get a
+                // distinct count and no more than the limit can pass. Reading the count before incrementing let every
+                // request in a burst see the same value and all pass.
+                var usage = await db.StringIncrementAsync(key);
 
-                // Check if limit exceeded
-                if (currentUsage >= limit.Value)
+                if (usage > limit.Value)
                 {
+                    // Undo the rejected request's increment so the counter keeps counting accepted calls only, e.g. so
+                    // a mid-month plan upgrade is not eaten up by calls that were turned away.
+                    await db.StringDecrementAsync(key);
                     return new RateLimitResult(false, limit.Value, 0, resetDate);
                 }
-
-                // Increment usage
-                await db.StringIncrementAsync(key);
 
                 // Set expiration to end of next month (if not already set)
                 var ttl = await db.KeyTimeToLiveAsync(key);
@@ -85,7 +86,7 @@ namespace Application.Services
                     await db.KeyExpireAsync(key, expirationUtc);
                 }
 
-                var remaining = limit.Value - currentUsage - 1;
+                var remaining = limit.Value - (int)usage;
                 return new RateLimitResult(true, limit.Value, remaining, resetDate);
             }
             catch (RedisConnectionException ex)
