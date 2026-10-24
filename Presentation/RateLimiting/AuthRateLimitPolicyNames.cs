@@ -4,4 +4,5 @@ public static class AuthRateLimitPolicyNames
 {
     public const string UnauthenticatedAuthEndpoints = "UnauthenticatedAuthEndpoints";
     public const string AuthRefreshEndpoint = "AuthRefreshEndpoint";
+    public const string MfaCodeVerification = "MfaCodeVerification";
 }

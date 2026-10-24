@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using FluentAssertions;
 using Presentation.RateLimiting;
 
@@ -36,4 +37,29 @@ public class AuthRateLimitPartitionKeyTests
         sameSlash64.Should().Be(first);
         otherSlash64.Should().NotBe(first);
     }
+
+    [Fact]
+    public void FromUser_ShouldKeyByTenantAndUser()
+    {
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        AuthRateLimitPartitionKey.FromUser(Authenticated(("tenant_id", tenantId.ToString()), (ClaimTypes.NameIdentifier, userId.ToString())))
+            .Should().Be($"user:{tenantId}:{userId}");
+        AuthRateLimitPartitionKey.FromUser(Authenticated(("tenant_id", tenantId.ToString()), ("sub", userId.ToString())))
+            .Should().Be($"user:{tenantId}:{userId}", "an unmapped sub claim is accepted too");
+    }
+
+    [Fact]
+    public void FromUser_ShouldReturnNull_ForAnonymousOrIncompleteIdentities()
+    {
+        AuthRateLimitPartitionKey.FromUser(null).Should().BeNull();
+        AuthRateLimitPartitionKey.FromUser(new ClaimsPrincipal(new ClaimsIdentity([new Claim("tenant_id", "t"), new Claim("sub", "u")])))
+            .Should().BeNull("an identity without an authentication type is anonymous");
+        AuthRateLimitPartitionKey.FromUser(Authenticated(("sub", "u"))).Should().BeNull();
+        AuthRateLimitPartitionKey.FromUser(Authenticated(("tenant_id", "t"))).Should().BeNull();
+    }
+
+    private static ClaimsPrincipal Authenticated(params (string Type, string Value)[] claims) =>
+        new(new ClaimsIdentity(claims.Select(c => new Claim(c.Type, c.Value)), authenticationType: "Bearer"));
 }

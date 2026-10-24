@@ -21,6 +21,7 @@ namespace Tests.Integration;
 public class AuthBruteForceRateLimitTests
 {
     private const int PermitLimit = 10;
+    private const int MfaCodePermitLimit = 5;
 
     [Fact]
     public async Task RepeatedLoginAttempts_ShouldReturn429_AfterPermitLimit()
@@ -143,6 +144,50 @@ public class AuthBruteForceRateLimitTests
         forgedResponse.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
     }
 
+    [Fact]
+    public async Task MfaCodeGuesses_ShouldBeLimitedPerUser_AcrossEnrollmentAndStepUp()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var attacker = CreateClient(factory);
+        using var bystander = CreateClient(factory);
+        await AuthenticateNewUserAsync(attacker);
+        await AuthenticateNewUserAsync(bystander);
+
+        var enrollmentToken = await InitiateMfaEnrollmentAsync(attacker);
+        var statuses = new List<HttpStatusCode>();
+        for (var attempt = 0; attempt < MfaCodePermitLimit; attempt++)
+        {
+            var guess = await attacker.PostAsJsonAsync("/api/v1/auth/mfa/enroll/verify", new { enrollmentToken, code = $"{attempt:D6}" });
+            statuses.Add(guess.StatusCode);
+        }
+
+        var nextEnrollmentGuess = await attacker.PostAsJsonAsync("/api/v1/auth/mfa/enroll/verify", new { enrollmentToken, code = "999999" });
+        var stepUpGuess = await attacker.PostAsJsonAsync("/api/v1/auth/mfa/step-up", new { code = "999999" });
+        var otherUsersGuess = await bystander.PostAsJsonAsync("/api/v1/auth/mfa/step-up", new { code = "999999" });
+
+        statuses.Should().AllSatisfy(status => status.Should().Be(HttpStatusCode.BadRequest));
+        nextEnrollmentGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        stepUpGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        otherUsersGuess.StatusCode.Should().NotBe(HttpStatusCode.TooManyRequests, "the budget is per user, not per client address");
+    }
+
+    private static HttpClient CreateClient(AuthRateLimitWebApplicationFactory factory) =>
+        factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+
+    private static async Task AuthenticateNewUserAsync(HttpClient client)
+    {
+        var (token, _, _) = await SecurityTestHelpers.RegisterTenantAsync(client, $"rl-mfa-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+    }
+
+    private static async Task<string> InitiateMfaEnrollmentAsync(HttpClient client)
+    {
+        var response = await client.PostAsync("/api/v1/auth/mfa/enroll/initiate", null);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        return body.GetProperty("enrollmentToken").GetString()!;
+    }
+
     private static async Task ExhaustLoginBudgetAsync(HttpClient client, string? forwardedFor)
     {
         for (var attempt = 1; attempt <= PermitLimit; attempt++)
@@ -209,6 +254,8 @@ public sealed class AuthRateLimitWebApplicationFactory : WebApplicationFactory<P
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<IStartupFilter, TrustedProxyRemoteAddressStartupFilter>();
+            services.RemoveAll<Domain.Interfaces.IIdentityNotificationService>();
+            services.AddSingleton<Domain.Interfaces.IIdentityNotificationService, CapturingIdentityNotificationService>();
             services.RemoveAll<ApplicationDbContext>();
             services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();

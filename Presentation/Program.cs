@@ -128,8 +128,20 @@ builder.Services.AddRateLimiter(options =>
         CreateAuthPartition(httpContext, permitLimit: 10));
     options.AddPolicy(AuthRateLimitPolicyNames.AuthRefreshEndpoint, httpContext =>
         CreateAuthPartition(httpContext, permitLimit: 30));
+    // TOTP codes are 6 digits, so guesses are budgeted per user (not per address, which an attacker holding a stolen
+    // access token can rotate). Enrollment and step-up share the budget.
+    options.AddPolicy(AuthRateLimitPolicyNames.MfaCodeVerification, httpContext =>
+        CreateAuthPartition(
+            httpContext,
+            permitLimit: 5,
+            window: TimeSpan.FromMinutes(5),
+            partitionKey: AuthRateLimitPartitionKey.FromUser(httpContext.User)));
 
-    static RateLimitPartition<string> CreateAuthPartition(HttpContext httpContext, int permitLimit)
+    static RateLimitPartition<string> CreateAuthPartition(
+        HttpContext httpContext,
+        int permitLimit,
+        TimeSpan? window = null,
+        string? partitionKey = null)
     {
         var hostEnvironment = httpContext.RequestServices.GetRequiredService<IHostEnvironment>();
         if (hostEnvironment.IsEnvironment("Testing"))
@@ -138,11 +150,11 @@ builder.Services.AddRateLimiter(options =>
         }
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: AuthRateLimitPartitionKey.From(httpContext.Connection.RemoteIpAddress),
+            partitionKey: partitionKey ?? AuthRateLimitPartitionKey.From(httpContext.Connection.RemoteIpAddress),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = permitLimit,
-                Window = TimeSpan.FromMinutes(1),
+                Window = window ?? TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
             });
@@ -199,8 +211,9 @@ app.UseMiddleware<RequestObservabilityMiddleware>();
 
 app.UseRouting();
 app.UseCors(ApiCorsPolicy.PolicyName);
-app.UseRateLimiter();
 app.UseAuthentication();
+// After authentication so per-user policies (MFA code verification) can partition on the caller's identity.
+app.UseRateLimiter();
 app.UseAuthorization();
 app.UseMiddleware<TenantMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
