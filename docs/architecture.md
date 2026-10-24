@@ -49,6 +49,8 @@ Unauthenticated auth routes use in-process fixed-window per-client limiters: reg
 
 The API owns the plan catalog and internal subscription lifecycle. Entitlements are assembled from plan mappings, active add-ons, and tenant overrides with deterministic precedence. Current enforcement covers selected billing reads and mutations, plan upgrades, advanced tenant administration, tenant CORS origin management, and audit-log analytics; enforcement is not claimed for every possible API surface.
 
+Evaluating an entitlement takes three queries (subscription with plan values and overrides, definitions, add-on contributions), whether for one key or several (`EvaluateManyAsync`). Within an HTTP request, each tenant and key is evaluated once and the result is reused, so a change made later in the same request is not seen; outside a request nothing is cached.
+
 Subscription state changes can originate from tenant actions or the authenticated internal billing callback. Provider state never directly becomes authoritative without tenant/subscription mapping validation.
 
 ## BillingService
