@@ -219,6 +219,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("invites/accept")]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.AccountRecoveryEndpoints)]
         public async Task<IActionResult> AcceptInvite([FromBody] AcceptInviteRequest request, CancellationToken cancellationToken)
         {
             if (request.TenantId == Guid.Empty)
@@ -242,6 +243,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("verification/request")]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.AccountRecoveryEndpoints)]
         public async Task<IActionResult> RequestVerification([FromBody] RequestVerificationRequest request, CancellationToken cancellationToken)
         {
             if (request.TenantId == Guid.Empty)
@@ -255,6 +257,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("verification/complete")]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.AccountRecoveryEndpoints)]
         public async Task<IActionResult> CompleteVerification([FromBody] CompleteVerificationRequest request, CancellationToken cancellationToken)
         {
             if (request.TenantId == Guid.Empty)
@@ -271,6 +274,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("password-reset/request")]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.AccountRecoveryEndpoints)]
         public async Task<IActionResult> RequestPasswordReset([FromBody] RequestPasswordResetRequest request, CancellationToken cancellationToken)
         {
             if (request.TenantId == Guid.Empty)
@@ -289,6 +293,7 @@ namespace Presentation.Controllers
         }
 
         [HttpPost("password-reset/complete")]
+        [EnableRateLimiting(AuthRateLimitPolicyNames.AccountRecoveryEndpoints)]
         public async Task<IActionResult> CompletePasswordReset([FromBody] CompletePasswordResetRequest request, CancellationToken cancellationToken)
         {
             if (request.TenantId == Guid.Empty)
