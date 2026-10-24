@@ -2,16 +2,23 @@ using Application.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using StackExchange.Redis;
+using Tests.Containers;
 
 namespace Tests.UnitTests;
 
 /// <summary>
-/// Runs against a real Redis when <c>REDIS_TEST_CONNECTION_STRING</c> is set (e.g. <c>localhost:6379</c>) and is
-/// skipped otherwise, so <c>dotnet test</c> keeps working without local services.
+/// Runs against a real Redis: <c>REDIS_TEST_CONNECTION_STRING</c> when set (e.g. <c>localhost:6379</c>), otherwise a
+/// Testcontainers Redis. Skipped when neither is available, so <c>dotnet test</c> keeps working without Docker.
 /// </summary>
+[Collection(RedisCollection.Name)]
 public class RedisCorsOriginCacheTests
 {
-    private const string ConnectionStringVariable = "REDIS_TEST_CONNECTION_STRING";
+    private readonly RedisContainerFixture _redisFixture;
+
+    public RedisCorsOriginCacheTests(RedisContainerFixture redisFixture)
+    {
+        _redisFixture = redisFixture;
+    }
 
     [Fact]
     public async Task CachedList_ShouldBeServedUntilInvalidated()
@@ -78,10 +85,5 @@ public class RedisCorsOriginCacheTests
         await invalidate.Should().NotThrowAsync();
     }
 
-    private static async Task<ConnectionMultiplexer> ConnectOrSkipAsync()
-    {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionStringVariable);
-        Assert.SkipWhen(string.IsNullOrWhiteSpace(connectionString), $"{ConnectionStringVariable} is not set.");
-        return await ConnectionMultiplexer.ConnectAsync(connectionString!);
-    }
+    private Task<ConnectionMultiplexer> ConnectOrSkipAsync() => _redisFixture.ConnectAsync();
 }
