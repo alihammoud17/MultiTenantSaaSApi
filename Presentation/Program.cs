@@ -17,6 +17,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using Presentation.Mcp;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -102,6 +103,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddRbacAuthorization();
+builder.Services.AddTenantMcpServer();
+
 builder.Services.Configure<TenantResolutionOptions>(
     builder.Configuration.GetSection(TenantResolutionOptions.SectionName));
 
@@ -223,6 +226,7 @@ app.UseMiddleware<TenantMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
 
 app.MapControllers();
+app.MapTenantMcpServer();
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     ResponseWriter = async (context, report) =>

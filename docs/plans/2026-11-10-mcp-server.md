@@ -75,7 +75,7 @@ Tutor mode: I type the commands and write the code. Claude explains each step, r
 dotnet add Presentation package ModelContextProtocol.AspNetCore --version 2.4.0
 dotnet build
 ```
-- [ ] Build passes
+- [x] Build passes
 
 ### 2.2 Register and map
 Keep `Program.cs` tidy with a registration extension, in the same style as `RbacAuthorizationRegistrationExtensions` (e.g. `Presentation/Mcp/McpServerRegistrationExtensions.cs` with `AddTenantMcpServer()` and `MapTenantMcp()`). The shape:
@@ -89,9 +89,9 @@ builder.Services.AddMcpServer()
 // endpoints, next to MapControllers()
 app.MapMcp("/api/v1/mcp").RequireAuthorization();
 ```
-- [ ] `RequireAuthorization()`: a request with no valid JWT gets **401** at the HTTP level, before it reaches MCP
-- [ ] Start with an empty `TenantReadTools` class (or one trivial `whoami_tenant` tool that returns `ITenantContext.TenantId`, to check the scope; delete it before the end)
-- [ ] Build passes, existing tests still pass: `dotnet test --no-build`
+- [x] `RequireAuthorization()`: a request with no valid JWT gets **401** at the HTTP level, before it reaches MCP
+- [x] Start with an empty `TenantReadTools` class (or one trivial `whoami_tenant` tool that returns `ITenantContext.TenantId`, to check the scope; delete it before the end)
+- [x] Build passes, existing tests still pass: `dotnet test --no-build`
 
 ---
 
