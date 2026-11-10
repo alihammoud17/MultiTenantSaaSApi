@@ -6,7 +6,7 @@
 - Node.js 22 or later and npm
 - PostgreSQL 16 or later
 - Redis 7 or later
-- EF Core CLI at `/tmp/dotnet-tools/dotnet-ef` for repository scripts, or a working `dotnet ef` command for manual operations
+- EF Core CLI at `/tmp/dotnet-tools/dotnet-ef` (or `DOTNET_EF_BIN`) for repository scripts, or a working `dotnet ef` command for manual operations. Scripts skip their EF steps with a warning when it is missing.
 
 ## Standard local workflow
 
@@ -32,9 +32,9 @@ Use `scripts/dev.sh reset` before `seed` for a clean database and BillingService
 - `bootstrap`: restores/builds .NET, applies migrations when the configured EF tool is available, and installs BillingService dependencies with `npm ci`.
 - `reset`: removes local service logs and BillingService state, drops the local database, and reapplies migrations.
 - `seed`: reapplies migrations and reports the current manual boundary for scenario/demo data.
-- `run`: starts both services in the foreground and captures local logs.
-- `smoke`: checks API and BillingService health/metrics and placeholder webhook acceptance.
-- `test`: runs the required .NET and BillingService validation suites.
+- `run`: checks that PostgreSQL (`POSTGRES_HOST`/`POSTGRES_PORT`, default `localhost:5432`) and Redis (`REDIS_HOST`/`REDIS_PORT`, default `localhost:6379`) accept connections, then starts both services in the foreground and captures local logs. The API is started with `--urls "$API_URL"` (default `http://localhost:5000`), which overrides the launch profile's port. `SKIP_DEPENDENCY_CHECK=1` skips the dependency check.
+- `smoke`: checks API and BillingService health/metrics and that `POST /webhooks/provider` answers `202`. The placeholder adapter rejects every event, so this is reachability only.
+- `test`: runs the required .NET and BillingService validation suites, including `npm run typecheck`. It warns, rather than fails, when dotnet-ef is missing or Docker is unreachable (the Testcontainers tests then skip).
 
 Smoke success does not prove provider signature verification, authenticated callback delivery, production telemetry, or external dependency readiness.
 
@@ -226,7 +226,7 @@ npm run typecheck
 npm test
 ```
 
-The repository wrapper `scripts/dev.sh test` performs the standardized cross-service sequence.
+The repository wrapper `scripts/dev.sh test` performs the standardized cross-service sequence, including the BillingService typecheck.
 
 ## Health, metrics, and logs
 
@@ -381,6 +381,6 @@ If Redis is unreachable, every cross-origin request with an unlisted origin read
 1. **Restore/install:** rerun the failing `dotnet restore` or `npm ci` directly.
 2. **EF tooling/migration:** verify the EF tool path and PostgreSQL connection, then rerun database update.
 3. **Startup:** inspect `.local-api.log` and `.local-billing.log`; fix the first exception.
-4. **Port mismatch:** keep `API_URL` and `BILLING_URL` overrides consistent between run and smoke shells.
+4. **Port mismatch:** keep `API_URL` and `BILLING_URL` overrides consistent between run and smoke shells. A plain `dotnet run --project Presentation` uses the launch profile port (`5238`), not `API_URL`.
 5. **Health/smoke:** verify both processes remain running and query their health endpoints directly.
 6. **Tests:** rerun the exact failing service command before rerunning the full wrapper.

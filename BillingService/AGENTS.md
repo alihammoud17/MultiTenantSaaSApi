@@ -108,7 +108,7 @@ npm run typecheck
 npm test
 ```
 
-Use Node.js 22 or later. From the repository root, `scripts/dev.sh test` runs the .NET and BillingService build/test sequence; it currently does not include the separate BillingService typecheck, so run that explicitly. For cross-service contract changes, validate both producer and consumer suites. `scripts/dev.sh smoke` only proves local endpoint reachability and placeholder acceptance.
+Use Node.js 22 or later. From the repository root, `scripts/dev.sh test` runs the .NET and BillingService build/typecheck/test sequence. For cross-service contract changes, validate both producer and consumer suites. `scripts/dev.sh smoke` only proves local endpoint reachability; the placeholder adapter rejects every webhook.
 
 For documentation-only changes, follow the root documentation validation guidance. If package scripts change, update the README.
 

@@ -26,14 +26,7 @@ check_json_endpoint() {
     return 1
   fi
 
-  python3 - "$tmp_body" <<'PY'
-import json
-import pathlib
-import sys
-
-raw = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-json.loads(raw)
-PY
+  node -e 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"))' "$tmp_body"
 
   rm -f "$tmp_body"
 }
@@ -50,9 +43,15 @@ check_json_endpoint "$BILLING_URL/health"
 echo "[local-smoke] Checking BillingService metrics at $BILLING_URL/metrics"
 check_json_endpoint "$BILLING_URL/metrics"
 
-echo "[local-smoke] Checking BillingService provider webhook acceptance"
-curl -fsS -X POST "$BILLING_URL/webhooks/provider" \
+# The placeholder adapter answers every webhook with 202 and accepted:false,
+# so this proves the endpoint is reachable, not that events are processed.
+echo "[local-smoke] Checking BillingService provider webhook endpoint reachability (placeholder rejects; expects 202)"
+webhook_status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BILLING_URL/webhooks/provider" \
   -H 'Content-Type: application/json' \
-  -d '{"eventId":"local-smoke-event","eventType":"subscription.renewed"}' >/dev/null
+  -d '{"eventId":"local-smoke-event","eventType":"subscription.renewed"}')"
+if [[ "$webhook_status" != "202" ]]; then
+  echo "[local-smoke] Expected 202 from $BILLING_URL/webhooks/provider, got $webhook_status"
+  exit 1
+fi
 
 echo "[local-smoke] Smoke checks passed."

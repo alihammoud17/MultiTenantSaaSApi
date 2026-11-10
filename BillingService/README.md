@@ -50,7 +50,7 @@ npm run typecheck
 npm test
 ```
 
-From the repository root, `scripts/dev.sh run`, `scripts/dev.sh smoke`, and `scripts/dev.sh test` provide the standardized cross-service path. Smoke checks placeholder acceptance only.
+From the repository root, `scripts/dev.sh run`, `scripts/dev.sh smoke`, and `scripts/dev.sh test` provide the standardized cross-service path. Smoke only checks that the webhook endpoint answers `202`; the placeholder adapter rejects every event.
 
 ## Environment variables
 

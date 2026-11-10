@@ -14,12 +14,12 @@ Standard local workflow (wraps `scripts/local/*.sh`):
 scripts/dev.sh bootstrap   # deps, build, migrations
 scripts/dev.sh seed        # re-apply migrations
 scripts/dev.sh run         # API + BillingService in foreground
-scripts/dev.sh smoke       # reachability + placeholder webhook acceptance only
+scripts/dev.sh smoke       # reachability only; placeholder webhook rejects (202)
 scripts/dev.sh test        # full .NET + BillingService validation
 scripts/dev.sh reset       # DROPS the local DB and workflow state — only when in scope
 ```
 
-`scripts/dev.sh test` hard-requires `/tmp/dotnet-tools/dotnet-ef`, which may not exist on this machine; if it doesn't, run the steps directly. It also skips BillingService typecheck.
+`scripts/dev.sh test` skips the dotnet-ef version check with a warning when `/tmp/dotnet-tools/dotnet-ef` (or `DOTNET_EF_BIN`) is missing, and warns when Docker is unreachable because the Testcontainers tests then skip. `scripts/dev.sh run` needs PostgreSQL and Redis reachable first.
 
 .NET (solution `MultiTenantSaaSApi.sln`):
 

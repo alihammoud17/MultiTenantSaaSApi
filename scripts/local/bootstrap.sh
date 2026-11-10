@@ -29,7 +29,7 @@ printf '[local-bootstrap] [4/4] Installing BillingService dependencies (npm ci).
 
 printf '[local-bootstrap] Bootstrap complete.\n\n'
 printf 'Next steps:\n'
-printf '  1) scripts/local/seed.sh      # explicit seed/migration refresh step\n'
-printf '  2) scripts/local/run.sh\n'
-printf '  3) scripts/local/smoke.sh\n'
-printf '  4) scripts/local/test.sh      # full verification path\n\n'
+printf '  1) scripts/dev.sh seed       # explicit seed/migration refresh step\n'
+printf '  2) scripts/dev.sh run\n'
+printf '  3) scripts/dev.sh smoke      # in a second shell\n'
+printf '  4) scripts/dev.sh test       # full verification path\n\n'
