@@ -4,6 +4,7 @@ This is a milestone-level implementation history, not a release promise or activ
 
 ## Unreleased
 
+- Local dev script fixes. `scripts/dev.sh run` now binds the API to `API_URL` (`--urls`); before, the launch profile put it on `5238` while `smoke` checked `5000`. `run` also fails early when PostgreSQL or Redis is unreachable. `test` no longer exits when `/tmp/dotnet-tools/dotnet-ef` is missing, now runs the BillingService typecheck, and warns when Docker is unreachable. `smoke` parses JSON with Node instead of Python and requires `202` from the placeholder webhook endpoint.
 - Test coverage for the critical paths (tenant resolution, entitlement evaluation, auth brute-force protection, outbound webhooks and secret rotation), with Testcontainers PostgreSQL and Redis fixtures; see [Operations](operations.md#validation-and-tests). Fixes found along the way:
   - The plan-aware monthly limiter read the Redis counter before incrementing it, so concurrent requests could all pass the limit. It now increments atomically and undoes the increment of a rejected call.
   - One outbound-webhook endpoint with an unparsable callback URL aborted the dispatcher's whole batch, so other tenants' deliveries in it were re-sent every pass. A delivery error longer than the 1000-character `LastError` column made the batch save fail on PostgreSQL with the same effect. Both now fail only their own delivery.

@@ -37,7 +37,7 @@ deploy/          Dockerfiles, NGINX and env templates for Compose; Terraform and
 - Node.js 22 or later and npm
 - PostgreSQL 16 or later
 - Redis 7 or later
-- EF Core CLI at `/tmp/dotnet-tools/dotnet-ef` for the repository scripts, or an equivalent `dotnet ef` installation for manual use
+- EF Core CLI at `/tmp/dotnet-tools/dotnet-ef` (or `DOTNET_EF_BIN`) for the repository scripts' migration steps, or an equivalent `dotnet ef` installation for manual use; scripts skip those steps with a warning without it
 
 Docker Compose can provide PostgreSQL, Redis, both services, and NGINX on a local Ubuntu VM. It expects runtime env files outside the repository under `/etc/multitenant-saas-api/`; see [Operations](docs/operations.md#docker-compose-local-vm-profile).
 
@@ -58,7 +58,7 @@ scripts/dev.sh smoke
 scripts/dev.sh test
 ```
 
-Use `scripts/dev.sh reset` before `seed` when a clean local database and workflow state are required. Run `scripts/dev.sh help` for the command index. The smoke check proves local endpoint reachability and placeholder webhook acceptance; it does not prove a live provider-to-API flow.
+Use `scripts/dev.sh reset` before `seed` when a clean local database and workflow state are required. Run `scripts/dev.sh help` for the command index. `run` expects PostgreSQL and Redis to be reachable already. The smoke check proves local endpoint reachability, including the placeholder webhook endpoint (which rejects every event with `202`); it does not prove a live provider-to-API flow.
 
 Detailed setup, migration, configuration, direct test commands, troubleshooting, Compose ingress, and workflow recovery are in [Operations](docs/operations.md).
 

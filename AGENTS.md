@@ -157,7 +157,7 @@ Run:
 - run the project-specific install/build/test commands documented in BillingService
 - if commands change, update BillingService/README.md
 
-The current prerequisites are .NET 10, Node.js 22 or later, PostgreSQL 16 or later, and Redis 7 or later. The full test wrapper currently expects `/tmp/dotnet-tools/dotnet-ef`; do not assume this temporary installation exists on the local machine. The bootstrap/reset/seed scripts support `DOTNET_EF_BIN`; manual EF commands can use an available `dotnet ef` installation.
+The current prerequisites are .NET 10, Node.js 22 or later, PostgreSQL 16 or later, and Redis 7 or later. Do not assume the temporary `/tmp/dotnet-tools/dotnet-ef` installation exists on the local machine. All `scripts/local/` scripts read `DOTNET_EF_BIN` and skip the EF step with a warning when it is missing; manual EF commands can use an available `dotnet ef` installation.
 
 ## EF Core
 When a schema/model change requires a migration, you may use:

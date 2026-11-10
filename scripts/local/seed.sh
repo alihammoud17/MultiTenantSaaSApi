@@ -16,5 +16,5 @@ else
   printf '[local-seed] Manual step: dotnet ef database update --project Infrastructure --startup-project Presentation\n'
 fi
 
-printf '[local-seed] [2/2] Manual boundary: scenario/demo tenant seed packs are not automated in P1.2.\n'
+printf '[local-seed] [2/2] Manual boundary: scenario/demo tenant seed packs are not automated.\n'
 printf '[local-seed] Manual step: create tenant/demo data through existing API flows (register/login/admin) when needed.\n'
