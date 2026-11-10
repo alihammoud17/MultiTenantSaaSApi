@@ -60,11 +60,11 @@ Tutor mode: I type the commands and write the code. Claude explains each step, r
 
 ## Block 1: Read and plan (30 min)
 
-- [ ] Read the SDK pages: Transports, Stateless and stateful, Tools, Identity and roles (the links above)
-- [ ] Read `Presentation/Program.cs` pipeline order: `UseAuthentication` → `UseRateLimiter` → `UseAuthorization` → `TenantMiddleware` → `RateLimitMiddleware` → endpoints. Note that `UseAuthorization` runs **before** `TenantMiddleware`: the endpoint-level `RequireAuthorization()` 401 happens before tenant resolution, while the tool-level `[Authorize(Policy)]` runs inside the MCP endpoint, after `TenantMiddleware`. Both are safe because `PermissionAuthorizationHandler` reads `tenant_id` from the JWT, not from `ITenantContext`.
-- [ ] Confirm in `TenantMiddleware` and `RateLimitMiddleware` that `/api/v1/mcp` is **not** skipped, so the tenant is resolved and the request is rate-limited
-- [ ] Open the 4 controller actions in the table and note their parameters, limits, policies and entitlement checks
-- [ ] Explain decision 3 (why stateless) in your own words before moving on
+- [x] Read the SDK pages: Transports, Stateless and stateful, Tools, Identity and roles (the links above)
+- [x] Read `Presentation/Program.cs` pipeline order: `UseAuthentication` → `UseRateLimiter` → `UseAuthorization` → `TenantMiddleware` → `RateLimitMiddleware` → endpoints. Note that `UseAuthorization` runs **before** `TenantMiddleware`: the endpoint-level `RequireAuthorization()` 401 happens before tenant resolution, while the tool-level `[Authorize(Policy)]` runs inside the MCP endpoint, after `TenantMiddleware`. Both are safe because `PermissionAuthorizationHandler` reads `tenant_id` from the JWT, not from `ITenantContext`.
+- [x] Confirm in `TenantMiddleware` and `RateLimitMiddleware` that `/api/v1/mcp` is **not** skipped, so the tenant is resolved and the request is rate-limited
+- [x] Open the 4 controller actions in the table and note their parameters, limits, policies and entitlement checks
+- [x] Explain decision 3 (why stateless) in your own words before moving on
 
 ---
 
