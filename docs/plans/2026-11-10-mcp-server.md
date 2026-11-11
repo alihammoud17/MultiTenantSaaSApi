@@ -122,14 +122,14 @@ internal sealed class TenantReadTools(
 }
 ```
 
-- [ ] **3.1** `get_usage_summary`
-- [ ] **3.2** `list_audit_logs`, with the controller's paging limits
-- [ ] **3.3** `list_webhook_endpoints`. Output is `WebhookEndpointManagementView` (no secret)
-- [ ] **3.4** `list_cors_origins`
-- [ ] **3.5** Entitlement denial: report it as a **tool error** (the model sees it and can explain it), not as an HTTP error: `throw new McpException(enforcement.DenialReason)`. Per the Tools page, an `McpException` thrown by a tool becomes a `CallToolResult` with `IsError = true` and its message; `McpProtocolException` would become a JSON-RPC error instead, and any other exception gives only a generic message.
-- [ ] **3.6** Descriptions: write each one for a model. Say what it returns, the units, the defaults and bounds, and that results are limited to the caller's tenant. Mark every tool `ReadOnly = true` (`McpServerToolAttribute.ReadOnly` exists in 2.4.0, next to `Destructive`, `Idempotent` and `OpenWorld`).
-- [ ] **3.7** No `tenantId` parameter anywhere; no `ApplicationDbContext` in the tool class
-- [ ] Build passes
+- [x] **3.1** `get_usage_summary`
+- [x] **3.2** `list_audit_logs`, with the controller's paging limits
+- [x] **3.3** `list_webhook_endpoints`. Output is `WebhookEndpointManagementView` (no secret)
+- [x] **3.4** `list_cors_origins`
+- [x] **3.5** Entitlement denial: report it as a **tool error** (the model sees it and can explain it), not as an HTTP error: `throw new McpException(enforcement.DenialReason)`. Per the Tools page, an `McpException` thrown by a tool becomes a `CallToolResult` with `IsError = true` and its message; `McpProtocolException` would become a JSON-RPC error instead, and any other exception gives only a generic message.
+- [x] **3.6** Descriptions: write each one for a model. Say what it returns, the units, the defaults and bounds, and that results are limited to the caller's tenant. Mark every tool `ReadOnly = true` (`McpServerToolAttribute.ReadOnly` exists in 2.4.0, next to `Destructive`, `Idempotent` and `OpenWorld`).
+- [x] **3.7** No `tenantId` parameter anywhere; no `ApplicationDbContext` in the tool class
+- [x] Build passes
 
 ---
 
