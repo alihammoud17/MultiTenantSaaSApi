@@ -121,6 +121,52 @@ Responses: `200 { tenantId, status }`, `400` invalid body or missing reason, `40
 
 Integration coverage: `Tests/Integration/TenantSuspensionTests.cs`.
 
+## MCP endpoint
+
+### Endpoint and transport
+
+```http
+POST /api/v1/mcp
+```
+
+A [Model Context Protocol](https://modelcontextprotocol.io) server for AI clients such as Claude Code, served by the API host (`Presentation/Mcp/`, `ModelContextProtocol.AspNetCore` 2.4.0). It uses the Streamable HTTP transport in **stateless** mode: every JSON-RPC message is its own `POST`, there is no `Mcp-Session-Id`, and `GET`/`DELETE` (server-to-client streams, session teardown) are not served. There is no stdio transport. Requests must send `Accept: application/json, text/event-stream`; MCP client libraries do this.
+
+### Authentication and tenant
+
+- `Authorization: Bearer <access token>`: the same JWT as the REST API, from `POST /api/v1/auth/login`. There is no MCP OAuth discovery (protected-resource metadata); clients are given the token.
+- The tenant is the token's `tenant_id` claim, resolved by `TenantMiddleware` as for every `/api/v1` route. No tool takes a tenant identifier, so a client cannot ask for another tenant's data. An `X-Tenant-ID` or subdomain hint that disagrees with the token is rejected.
+- Every MCP request counts against the tenant's plan-aware monthly limit, like a REST request.
+
+### Tools
+
+All four tools are read-only (`readOnlyHint: true`) and mirror a REST action: same Application service, same RBAC policy, same entitlement check, same defaults and bounds.
+
+| Tool | Inputs | Mirrors | RBAC permission | Entitlement | Returns |
+| --- | --- | --- | --- | --- | --- |
+| `get_usage_summary` | `days` (default 30, clamped to 1–90), `action` (exact, optional) | `GET /api/v1/tenant/analytics/usage` | `auditlogs.read` | `feature.analytics.audit_logs.read` | UTC window, total events, distinct users, events per UTC day, top 10 actions |
+| `list_audit_logs` | `page` (default 1, at least 1), `pageSize` (default 50, clamped to 1–200), `action`, `fromUtc`, `toUtc` (inclusive, optional) | `GET /api/v1/tenant/audit-logs` | `auditlogs.read` | `feature.analytics.audit_logs.read` | Audit entries, newest first |
+| `list_webhook_endpoints` | none | `GET /api/v1/tenant/webhook-endpoints` | `billing.manage` | none (the REST action has none) | Endpoints sorted by name; **no signing secrets** |
+| `list_cors_origins` | none | `GET /api/v1/admin/tenant/cors-origins` | `tenants.read` | `feature.security.cors_origins.manage` | Tenant-registered origins sorted by origin (not `Cors:AllowedOrigins`) |
+
+Results are JSON in a text content block.
+
+### Failure modes
+
+| Condition | Result |
+| --- | --- |
+| Missing or invalid token | `401` before MCP runs, including when an `X-Tenant-ID` hint names a real tenant |
+| Tenant not `Active` (suspended or pending verification) | `403` `TenantSuspended` from `TenantMiddleware` |
+| Tenant hint disagrees with the token | `403` `TenantMismatch` |
+| Monthly plan limit reached | `429` `RateLimitExceeded` |
+| Caller lacks the tool's RBAC permission | The tool is left out of `tools/list`; calling it anyway returns a JSON-RPC error (`-32600` InvalidRequest, "Access forbidden: This tool requires authorization.") |
+| Entitlement disabled for the tenant | A tool result with `isError: true` whose text includes the denial reason and entitlement key, so the model can explain it |
+
+### Auditing
+
+Each tool call that passes the RBAC check writes one audit entry for the caller's tenant and user: action `MCP_TOOL_CALLED`, entity type `McpTool`, entity id the tool name, changes `{"isError": true|false}`. Arguments and results are not recorded. These entries appear in the tenant's audit log and usage analytics like any other activity.
+
+Integration coverage: `Tests/Integration/McpServerTests.cs`. The JSON-RPC error for an RBAC denial and the `isError` result for an entitlement denial are observed SDK 2.4.0 behavior, pinned there.
+
 ## Outbound tenant webhooks
 
 ### Envelope

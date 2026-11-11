@@ -190,19 +190,19 @@ claude mcp add --transport http saas-api http://localhost:5238/api/v1/mcp \
 ## Block 6: Docs and PR (30 min)
 
 Per `AGENTS.md`, docs change in the same PR:
-- [ ] `docs/decisions.md`: ADR "MCP endpoint is an in-process, stateless transport in Presentation" (decisions 1–7)
-- [ ] `docs/contracts.md`: the MCP endpoint (`/api/v1/mcp`, Streamable HTTP, bearer JWT, the 4 tools with inputs, policies, entitlements)
-- [ ] `docs/architecture.md`: MCP as a presentation transport next to the controllers
-- [ ] `README.md`: capability line + "Using the MCP endpoint from Claude Code" (the `claude mcp add` command, with a placeholder token)
-- [ ] `docs/features.md`: add the MCP endpoint to the entry-point inventory and counts
-- [ ] `docs/CHANGELOG.md` entry
-- [ ] Run and report the AGENTS.md .NET validation commands and their results: `dotnet --info`, `/tmp/dotnet-tools/dotnet-ef --version` (or `DOTNET_EF_BIN`; report it if missing), `dotnet restore`, `dotnet build --no-restore`, `dotnet test --no-build --verbosity normal`
+- [x] `docs/decisions.md`: ADR "MCP endpoint is an in-process, stateless transport in Presentation" (decisions 1–7)
+- [x] `docs/contracts.md`: the MCP endpoint (`/api/v1/mcp`, Streamable HTTP, bearer JWT, the 4 tools with inputs, policies, entitlements)
+- [x] `docs/architecture.md`: MCP as a presentation transport next to the controllers
+- [x] `README.md`: capability line + "Using the MCP endpoint from Claude Code" (the `claude mcp add` command, with a placeholder token)
+- [x] `docs/features.md`: add the MCP endpoint to the entry-point inventory and counts
+- [x] `docs/CHANGELOG.md` entry
+- [x] Run and report the AGENTS.md .NET validation commands and their results: `dotnet --info`, `/tmp/dotnet-tools/dotnet-ef --version` (or `DOTNET_EF_BIN`; report it if missing), `dotnet restore`, `dotnet build --no-restore`, `dotnet test --no-build --verbosity normal`
 - [ ] Commit, push, open the PR
 
 ---
 
 ## End of day
-- [ ] Both deliverables checked
+- [x] Both deliverables checked
 - [ ] Tick week 6 Tuesday in ai-labs' `CLAUDE.md` (outside this repo)
 - [ ] Ask Claude for today's recap PDF (for OneDrive; written outside this repo)
 

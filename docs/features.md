@@ -3,6 +3,7 @@
 ## Entry-Point Counts
 - Controller actions: 39
 - Minimal API endpoints: 2
+- MCP endpoints: 1 (`POST /api/v1/mcp`, 4 tools)
 - Hosted/background services: 1
 - Scheduled jobs: 0
 - Event/message handlers: 0
@@ -11,7 +12,7 @@
 - gRPC services: 0
 - Custom middleware: 3
 - Startup tasks: 0
-- Total distinct entry points: 45
+- Total distinct entry points: 46
 
 ## Identity & Access
 - F-001 Tenant self-registration
@@ -47,6 +48,9 @@
 - F-021 Plan-aware tenant rate limiting
 - F-022 Request observability and metrics
 - F-023 Health checks
+
+## AI Integration
+- F-024 MCP endpoint with tenant-scoped read tools
 
 ## Unmapped
 - None
