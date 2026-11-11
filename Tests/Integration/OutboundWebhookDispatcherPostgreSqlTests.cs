@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Tests.Containers;
+using Tests.TestDoubles;
 
 namespace Tests.Integration;
 
@@ -50,7 +51,7 @@ public sealed class OutboundWebhookDispatcherPostgreSqlTests : IAsyncLifetime
         string pendingSecret;
         await using (var scope = _services.CreateAsyncScope())
         {
-            var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer());
+            var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer(), new NoOpAuditService());
             pendingSecret = (await manager.RotateSigningSecretAsync(tenantId, endpointId))!.SigningSecret;
         }
 
@@ -78,7 +79,7 @@ public sealed class OutboundWebhookDispatcherPostgreSqlTests : IAsyncLifetime
         var (endpointId, activeSecret) = await CreateEndpointAsync(tenantId, "https://hooks.example.test/rotate");
 
         await using var scope = _services.CreateAsyncScope();
-        var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer());
+        var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer(), new NoOpAuditService());
         var first = await manager.RotateSigningSecretAsync(tenantId, endpointId);
         var second = await manager.RotateSigningSecretAsync(tenantId, endpointId);
 
@@ -97,7 +98,7 @@ public sealed class OutboundWebhookDispatcherPostgreSqlTests : IAsyncLifetime
         var (endpointId, activeSecret) = await CreateEndpointAsync(owner, "https://hooks.example.test/owner");
 
         await using var scope = _services.CreateAsyncScope();
-        var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer());
+        var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer(), new NoOpAuditService());
 
         (await manager.RotateSigningSecretAsync(attacker, endpointId)).Should().BeNull();
         (await manager.GetEndpointAsync(attacker, endpointId)).Should().BeNull();
@@ -197,7 +198,7 @@ public sealed class OutboundWebhookDispatcherPostgreSqlTests : IAsyncLifetime
 
         await using (var scope = _services.CreateAsyncScope())
         {
-            var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer());
+            var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer(), new NoOpAuditService());
             await manager.SetEndpointActiveStateAsync(tenantId, endpointId, false);
         }
 
@@ -242,7 +243,7 @@ public sealed class OutboundWebhookDispatcherPostgreSqlTests : IAsyncLifetime
     private async Task<(Guid EndpointId, string SigningSecret)> CreateEndpointAsync(Guid tenantId, string url, string eventTypes = "*")
     {
         await using var scope = _services.CreateAsyncScope();
-        var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer());
+        var manager = new WebhookEndpointManagementService(Db(scope), new WebhookEndpointSecretIssuer(), new NoOpAuditService());
         var created = await manager.CreateEndpointAsync(tenantId, $"endpoint-{Guid.NewGuid():N}", url, eventTypes);
         return (created.Endpoint.Id, created.SigningSecret);
     }

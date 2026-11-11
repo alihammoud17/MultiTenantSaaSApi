@@ -5,6 +5,7 @@ using FluentAssertions;
 using Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Tests.TestDoubles;
 
 namespace Tests.UnitTests;
 
@@ -91,7 +92,7 @@ public class OutboundWebhookInfrastructureTests
         dbContext.TenantWebhookEndpoints.Add(endpoint);
         await dbContext.SaveChangesAsync();
 
-        var manager = new WebhookEndpointManagementService(dbContext, new WebhookEndpointSecretIssuer());
+        var manager = new WebhookEndpointManagementService(dbContext, new WebhookEndpointSecretIssuer(), new NoOpAuditService());
         var result = await manager.RotateSigningSecretAsync(tenantId, endpoint.Id);
 
         result.Should().NotBeNull();
@@ -116,7 +117,7 @@ public class OutboundWebhookInfrastructureTests
         dbContext.Tenants.Add(new Tenant { Id = tenantId, Name = "Tenant", Subdomain = "tenant", Status = TenantStatus.Active });
         await dbContext.SaveChangesAsync();
 
-        var manager = new WebhookEndpointManagementService(dbContext, new WebhookEndpointSecretIssuer());
+        var manager = new WebhookEndpointManagementService(dbContext, new WebhookEndpointSecretIssuer(), new NoOpAuditService());
         var created = await manager.CreateEndpointAsync(tenantId, "managed", "https://example.com/managed", "*");
         var rotate = await manager.RotateSigningSecretAsync(tenantId, created.Endpoint.Id);
 
