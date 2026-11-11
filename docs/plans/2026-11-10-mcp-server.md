@@ -3,7 +3,7 @@
 - **Date:** Wed 11 Nov 2026 (week 6, Tuesday's plan, done on day 3)
 - **Repo:** MultiTenantSaaSApi
 - **Branch:** `feat/mcp-tenant-read-tools` (from `master`)
-- **Status:** planned
+- **Status:** done (PR #156)
 - **Focus:** Expose real capabilities over MCP
 - **Time:** ~4–5 h (Blocks 1–4 are the minimum; Block 5 is optional)
 
@@ -197,7 +197,7 @@ Per `AGENTS.md`, docs change in the same PR:
 - [x] `docs/features.md`: add the MCP endpoint to the entry-point inventory and counts
 - [x] `docs/CHANGELOG.md` entry
 - [x] Run and report the AGENTS.md .NET validation commands and their results: `dotnet --info`, `/tmp/dotnet-tools/dotnet-ef --version` (or `DOTNET_EF_BIN`; report it if missing), `dotnet restore`, `dotnet build --no-restore`, `dotnet test --no-build --verbosity normal`
-- [ ] Commit, push, open the PR
+- [x] Commit, push, open the PR (#156)
 
 ---
 
