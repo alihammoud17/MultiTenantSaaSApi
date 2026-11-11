@@ -3,7 +3,7 @@
 - **Date:** found Wed 11 Nov 2026, while trying the MCP read tools (see [the MCP server plan](2026-11-10-mcp-server.md))
 - **Repo:** MultiTenantSaaSApi
 - **Branch:** `feat/webhook-endpoint-audit` (from `master`, after the MCP branch is merged)
-- **Status:** implemented on `feat/webhook-endpoint-audit`; PR not opened yet
+- **Status:** done (PR #157)
 - **Focus:** Close an audit gap on a security-relevant tenant surface
 - **Time:** ~1.5–2 h
 
