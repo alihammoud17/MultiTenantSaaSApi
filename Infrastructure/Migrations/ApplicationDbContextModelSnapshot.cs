@@ -17,12 +17,12 @@ namespace Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.3")
+                .HasAnnotation("ProductVersion", "10.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Domain.Entites.AddOnDefinition", b =>
+            modelBuilder.Entity("Domain.Entities.AddOnDefinition", b =>
                 {
                     b.Property<string>("Id")
                         .HasMaxLength(120)
@@ -55,7 +55,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("AddOnDefinitions");
                 });
 
-            modelBuilder.Entity("Domain.Entites.AddOnEntitlement", b =>
+            modelBuilder.Entity("Domain.Entities.AddOnEntitlement", b =>
                 {
                     b.Property<string>("AddOnId")
                         .HasColumnType("character varying(120)");
@@ -85,7 +85,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("AddOnEntitlements");
                 });
 
-            modelBuilder.Entity("Domain.Entites.AuditLog", b =>
+            modelBuilder.Entity("Domain.Entities.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -121,10 +121,14 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId", "Timestamp");
+
+                    b.HasIndex("TenantId", "Action", "Timestamp");
+
                     b.ToTable("AuditLogs");
                 });
 
-            modelBuilder.Entity("Domain.Entites.BillingEventInbox", b =>
+            modelBuilder.Entity("Domain.Entities.BillingEventInbox", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -189,10 +193,12 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "SubscriptionId");
 
+                    b.HasIndex("TenantId", "EventType", "OccurredAtUtc");
+
                     b.ToTable("BillingEventInboxes");
                 });
 
-            modelBuilder.Entity("Domain.Entites.EntitlementDefinition", b =>
+            modelBuilder.Entity("Domain.Entities.EntitlementDefinition", b =>
                 {
                     b.Property<string>("Key")
                         .HasMaxLength(160)
@@ -305,6 +311,18 @@ namespace Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "feature.security.cors_origins.manage",
+                            Category = 0,
+                            CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DefaultValue = "false",
+                            Description = "Allows tenant administrators to register the browser origins allowed to call the API cross-origin.",
+                            DisplayName = "Tenant CORS origin management",
+                            IsActive = true,
+                            UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            ValueType = 0
+                        },
+                        new
+                        {
                             Key = "quota.api.calls.monthly",
                             Category = 1,
                             CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, 0, DateTimeKind.Utc),
@@ -329,7 +347,7 @@ namespace Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Domain.Entites.OutboundWebhookDelivery", b =>
+            modelBuilder.Entity("Domain.Entities.OutboundWebhookDelivery", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -381,7 +399,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("OutboundWebhookDeliveries");
                 });
 
-            modelBuilder.Entity("Domain.Entites.OutboundWebhookEvent", b =>
+            modelBuilder.Entity("Domain.Entities.OutboundWebhookEvent", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -437,7 +455,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("OutboundWebhookEvents");
                 });
 
-            modelBuilder.Entity("Domain.Entites.PasswordResetToken", b =>
+            modelBuilder.Entity("Domain.Entities.PasswordResetToken", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -479,7 +497,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("PasswordResetTokens");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Permission", b =>
+            modelBuilder.Entity("Domain.Entities.Permission", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -540,7 +558,7 @@ namespace Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Domain.Entites.Plan", b =>
+            modelBuilder.Entity("Domain.Entities.Plan", b =>
                 {
                     b.Property<string>("Id")
                         .HasColumnType("text");
@@ -592,7 +610,7 @@ namespace Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Domain.Entites.PlanEntitlement", b =>
+            modelBuilder.Entity("Domain.Entities.PlanEntitlement", b =>
                 {
                     b.Property<string>("PlanId")
                         .HasColumnType("text");
@@ -733,6 +751,24 @@ namespace Infrastructure.Migrations
                         new
                         {
                             PlanId = "plan-free",
+                            EntitlementKey = "feature.security.cors_origins.manage",
+                            CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Source = 0,
+                            UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Value = "true"
+                        },
+                        new
+                        {
+                            PlanId = "plan-pro",
+                            EntitlementKey = "feature.security.cors_origins.manage",
+                            CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Source = 0,
+                            UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Value = "true"
+                        },
+                        new
+                        {
+                            PlanId = "plan-free",
                             EntitlementKey = "quota.api.calls.monthly",
                             CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, 0, DateTimeKind.Utc),
                             Source = 0,
@@ -768,7 +804,7 @@ namespace Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Domain.Entites.RefreshToken", b =>
+            modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -821,7 +857,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("RefreshTokens");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Role", b =>
+            modelBuilder.Entity("Domain.Entities.Role", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -856,7 +892,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("Roles");
                 });
 
-            modelBuilder.Entity("Domain.Entites.RolePermission", b =>
+            modelBuilder.Entity("Domain.Entities.RolePermission", b =>
                 {
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uuid");
@@ -874,7 +910,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("RolePermissions");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Subscription", b =>
+            modelBuilder.Entity("Domain.Entities.Subscription", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -922,7 +958,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("Subscriptions");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Tenant", b =>
+            modelBuilder.Entity("Domain.Entities.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -939,10 +975,17 @@ namespace Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("StatusChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Subdomain")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("SuspensionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -955,7 +998,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("Tenants");
                 });
 
-            modelBuilder.Entity("Domain.Entites.TenantAddOnAssignment", b =>
+            modelBuilder.Entity("Domain.Entities.TenantAddOnAssignment", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -999,7 +1042,32 @@ namespace Infrastructure.Migrations
                     b.ToTable("TenantAddOnAssignments");
                 });
 
-            modelBuilder.Entity("Domain.Entites.TenantEntitlementOverride", b =>
+            modelBuilder.Entity("Domain.Entities.TenantAllowedOrigin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Origin")
+                        .IsUnique();
+
+                    b.ToTable("TenantAllowedOrigins");
+                });
+
+            modelBuilder.Entity("Domain.Entities.TenantEntitlementOverride", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1047,7 +1115,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("TenantEntitlementOverrides");
                 });
 
-            modelBuilder.Entity("Domain.Entites.TenantWebhookEndpoint", b =>
+            modelBuilder.Entity("Domain.Entities.TenantWebhookEndpoint", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1069,10 +1137,20 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
+                    b.Property<string>("NextSigningSecret")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("NextSigningSecretIssuedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("SigningSecret")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("SigningSecretIssuedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("SubscribedEventTypes")
                         .IsRequired()
@@ -1093,7 +1171,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("TenantWebhookEndpoints");
                 });
 
-            modelBuilder.Entity("Domain.Entites.User", b =>
+            modelBuilder.Entity("Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1141,13 +1219,16 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Email")
+                        .IsUnique();
+
                     b.HasIndex("TenantId", "Email")
                         .IsUnique();
 
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("Domain.Entites.UserInvite", b =>
+            modelBuilder.Entity("Domain.Entities.UserInvite", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1197,7 +1278,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("UserInvites");
                 });
 
-            modelBuilder.Entity("Domain.Entites.UserMfaEnrollmentChallenge", b =>
+            modelBuilder.Entity("Domain.Entities.UserMfaEnrollmentChallenge", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1238,7 +1319,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("UserMfaEnrollmentChallenges");
                 });
 
-            modelBuilder.Entity("Domain.Entites.UserRole", b =>
+            modelBuilder.Entity("Domain.Entities.UserRole", b =>
                 {
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -1261,7 +1342,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("UserRoles");
                 });
 
-            modelBuilder.Entity("Domain.Entites.UserStepUpSession", b =>
+            modelBuilder.Entity("Domain.Entities.UserStepUpSession", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1299,7 +1380,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("UserStepUpSessions");
                 });
 
-            modelBuilder.Entity("Domain.Entites.UserVerificationToken", b =>
+            modelBuilder.Entity("Domain.Entities.UserVerificationToken", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1337,15 +1418,15 @@ namespace Infrastructure.Migrations
                     b.ToTable("UserVerificationTokens");
                 });
 
-            modelBuilder.Entity("Domain.Entites.AddOnEntitlement", b =>
+            modelBuilder.Entity("Domain.Entities.AddOnEntitlement", b =>
                 {
-                    b.HasOne("Domain.Entites.AddOnDefinition", "AddOn")
+                    b.HasOne("Domain.Entities.AddOnDefinition", "AddOn")
                         .WithMany("Entitlements")
                         .HasForeignKey("AddOnId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.EntitlementDefinition", "EntitlementDefinition")
+                    b.HasOne("Domain.Entities.EntitlementDefinition", "EntitlementDefinition")
                         .WithMany()
                         .HasForeignKey("EntitlementKey")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1356,30 +1437,30 @@ namespace Infrastructure.Migrations
                     b.Navigation("EntitlementDefinition");
                 });
 
-            modelBuilder.Entity("Domain.Entites.OutboundWebhookDelivery", b =>
+            modelBuilder.Entity("Domain.Entities.OutboundWebhookDelivery", b =>
                 {
-                    b.HasOne("Domain.Entites.TenantWebhookEndpoint", null)
+                    b.HasOne("Domain.Entities.TenantWebhookEndpoint", null)
                         .WithMany()
                         .HasForeignKey("EndpointId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.OutboundWebhookEvent", null)
+                    b.HasOne("Domain.Entities.OutboundWebhookEvent", null)
                         .WithMany()
                         .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Domain.Entites.PasswordResetToken", b =>
+            modelBuilder.Entity("Domain.Entities.PasswordResetToken", b =>
                 {
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.User", "User")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1390,15 +1471,15 @@ namespace Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Domain.Entites.PlanEntitlement", b =>
+            modelBuilder.Entity("Domain.Entities.PlanEntitlement", b =>
                 {
-                    b.HasOne("Domain.Entites.EntitlementDefinition", "EntitlementDefinition")
+                    b.HasOne("Domain.Entities.EntitlementDefinition", "EntitlementDefinition")
                         .WithMany("PlanEntitlements")
                         .HasForeignKey("EntitlementKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.Plan", "Plan")
+                    b.HasOne("Domain.Entities.Plan", "Plan")
                         .WithMany()
                         .HasForeignKey("PlanId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1409,15 +1490,15 @@ namespace Infrastructure.Migrations
                     b.Navigation("Plan");
                 });
 
-            modelBuilder.Entity("Domain.Entites.RefreshToken", b =>
+            modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
                 {
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithMany("RefreshTokens")
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.User", "User")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany("RefreshTokens")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1428,9 +1509,9 @@ namespace Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Role", b =>
+            modelBuilder.Entity("Domain.Entities.Role", b =>
                 {
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithMany("Roles")
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1439,15 +1520,15 @@ namespace Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Domain.Entites.RolePermission", b =>
+            modelBuilder.Entity("Domain.Entities.RolePermission", b =>
                 {
-                    b.HasOne("Domain.Entites.Permission", "Permission")
+                    b.HasOne("Domain.Entities.Permission", "Permission")
                         .WithMany("RolePermissions")
                         .HasForeignKey("PermissionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.Role", "Role")
+                    b.HasOne("Domain.Entities.Role", "Role")
                         .WithMany("RolePermissions")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1458,17 +1539,17 @@ namespace Infrastructure.Migrations
                     b.Navigation("Role");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Subscription", b =>
+            modelBuilder.Entity("Domain.Entities.Subscription", b =>
                 {
-                    b.HasOne("Domain.Entites.Plan", "Plan")
+                    b.HasOne("Domain.Entities.Plan", "Plan")
                         .WithMany()
                         .HasForeignKey("PlanId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithOne("Subscription")
-                        .HasForeignKey("Domain.Entites.Subscription", "TenantId")
+                        .HasForeignKey("Domain.Entities.Subscription", "TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -1477,15 +1558,15 @@ namespace Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Domain.Entites.TenantAddOnAssignment", b =>
+            modelBuilder.Entity("Domain.Entities.TenantAddOnAssignment", b =>
                 {
-                    b.HasOne("Domain.Entites.AddOnDefinition", "AddOn")
+                    b.HasOne("Domain.Entities.AddOnDefinition", "AddOn")
                         .WithMany()
                         .HasForeignKey("AddOnId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1496,15 +1577,24 @@ namespace Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Domain.Entites.TenantEntitlementOverride", b =>
+            modelBuilder.Entity("Domain.Entities.TenantAllowedOrigin", b =>
                 {
-                    b.HasOne("Domain.Entites.EntitlementDefinition", "EntitlementDefinition")
+                    b.HasOne("Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.Entities.TenantEntitlementOverride", b =>
+                {
+                    b.HasOne("Domain.Entities.EntitlementDefinition", "EntitlementDefinition")
                         .WithMany()
                         .HasForeignKey("EntitlementKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1515,9 +1605,9 @@ namespace Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Domain.Entites.User", b =>
+            modelBuilder.Entity("Domain.Entities.User", b =>
                 {
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithMany("Users")
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1526,9 +1616,9 @@ namespace Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Domain.Entites.UserInvite", b =>
+            modelBuilder.Entity("Domain.Entities.UserInvite", b =>
                 {
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1537,21 +1627,21 @@ namespace Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Domain.Entites.UserRole", b =>
+            modelBuilder.Entity("Domain.Entities.UserRole", b =>
                 {
-                    b.HasOne("Domain.Entites.Role", "Role")
+                    b.HasOne("Domain.Entities.Role", "Role")
                         .WithMany("UserRoles")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithMany("UserRoles")
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.User", "User")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany("UserRoles")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1564,15 +1654,15 @@ namespace Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Domain.Entites.UserVerificationToken", b =>
+            modelBuilder.Entity("Domain.Entities.UserVerificationToken", b =>
                 {
-                    b.HasOne("Domain.Entites.Tenant", "Tenant")
+                    b.HasOne("Domain.Entities.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entites.User", "User")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1583,29 +1673,29 @@ namespace Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Domain.Entites.AddOnDefinition", b =>
+            modelBuilder.Entity("Domain.Entities.AddOnDefinition", b =>
                 {
                     b.Navigation("Entitlements");
                 });
 
-            modelBuilder.Entity("Domain.Entites.EntitlementDefinition", b =>
+            modelBuilder.Entity("Domain.Entities.EntitlementDefinition", b =>
                 {
                     b.Navigation("PlanEntitlements");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Permission", b =>
+            modelBuilder.Entity("Domain.Entities.Permission", b =>
                 {
                     b.Navigation("RolePermissions");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Role", b =>
+            modelBuilder.Entity("Domain.Entities.Role", b =>
                 {
                     b.Navigation("RolePermissions");
 
                     b.Navigation("UserRoles");
                 });
 
-            modelBuilder.Entity("Domain.Entites.Tenant", b =>
+            modelBuilder.Entity("Domain.Entities.Tenant", b =>
                 {
                     b.Navigation("RefreshTokens");
 
@@ -1618,7 +1708,7 @@ namespace Infrastructure.Migrations
                     b.Navigation("Users");
                 });
 
-            modelBuilder.Entity("Domain.Entites.User", b =>
+            modelBuilder.Entity("Domain.Entities.User", b =>
                 {
                     b.Navigation("RefreshTokens");
 

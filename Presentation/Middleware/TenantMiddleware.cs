@@ -1,7 +1,8 @@
-﻿using Domain.Entites;
+﻿using Domain.Entities;
 using Domain.Interfaces;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Presentation.Middleware
 {
@@ -9,22 +10,49 @@ namespace Presentation.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<TenantMiddleware> _logger;
+        private readonly IOptionsMonitor<TenantResolutionOptions> _resolutionOptions;
 
-        public TenantMiddleware(RequestDelegate next, ILogger<TenantMiddleware> logger)
+        public TenantMiddleware(
+            RequestDelegate next,
+            ILogger<TenantMiddleware> logger,
+            IOptionsMonitor<TenantResolutionOptions> resolutionOptions)
         {
             _next = next;
             _logger = logger;
+            _resolutionOptions = resolutionOptions;
         }
 
         public async Task InvokeAsync(
             HttpContext context,
             ITenantContext tenantContext,
+            IRequestTenantResolutionCache tenantResolutionCache,
             ApplicationDbContext dbContext)
         {
-            // Skip tenant resolution for public endpoints
             var path = context.Request.Path.Value?.ToLower() ?? "";
-            if (ApiVersionedRouteMatcher.IsAuthPath(path) ||
-                path.StartsWith("/api/internal/billing") ||
+
+            // Auth routes run before a tenant context exists (register, login, refresh), so they skip resolution.
+            // An authenticated caller still belongs to a tenant, and that tenant must be active: otherwise a token
+            // issued before a suspension would keep working on invites, MFA, step-up and session routes.
+            if (ApiVersionedRouteMatcher.IsAuthPath(path))
+            {
+                var authenticatedTenantId = GetJwtTenantId(context);
+                if (authenticatedTenantId != null)
+                {
+                    var authenticatedTenant = await dbContext.Tenants
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(t => t.Id == authenticatedTenantId.Value);
+
+                    if (!await EnsureTenantIsActiveAsync(context, authenticatedTenant))
+                        return;
+                }
+
+                await _next(context);
+                return;
+            }
+
+            // Skip tenant resolution for public endpoints
+            if (path.StartsWith("/api/internal/billing") ||
+                path.StartsWith("/api/internal/tenants") ||
                 path.StartsWith("/health") ||
                 path.StartsWith("/metrics") ||
                 path.StartsWith("/swagger") ||
@@ -35,17 +63,19 @@ namespace Presentation.Middleware
             }
 
             Guid? requestTenantHint = null;
+            Tenant? resolvedTenant = null;
 
-            // Strategy 1: Extract from subdomain (e.g., acme.yourapi.com)
-            var host = context.Request.Host.Host;
-            if (host.Contains('.'))
+            // Strategy 1: Extract from subdomain, only for hosts of the form <subdomain>.<TenantResolution:BaseDomain>
+            if (TenantResolutionOptions.TryGetTenantSubdomain(
+                    context.Request.Host.Host,
+                    _resolutionOptions.CurrentValue.BaseDomain,
+                    out var subdomain))
             {
-                var subdomain = host.Split('.')[0];
-                var tenant = await dbContext.Tenants
+                resolvedTenant = await dbContext.Tenants
                     .FirstOrDefaultAsync(t => t.Subdomain == subdomain);
 
-                if (tenant != null)
-                    requestTenantHint = tenant.Id;
+                if (resolvedTenant != null)
+                    requestTenantHint = resolvedTenant.Id;
             }
 
             // Strategy 2: Extract from custom header (fallback)
@@ -56,13 +86,7 @@ namespace Presentation.Middleware
             }
 
             // Strategy 3: Resolve from JWT claim when user is authenticated (authoritative for authenticated requests)
-            Guid? jwtTenantId = null;
-            if (context.User.Identity?.IsAuthenticated == true)
-            {
-                var claim = context.User.FindFirst("tenant_id");
-                if (claim != null && Guid.TryParse(claim.Value, out var parsedId))
-                    jwtTenantId = parsedId;
-            }
+            var jwtTenantId = GetJwtTenantId(context);
 
             if (jwtTenantId != null && requestTenantHint != null && jwtTenantId != requestTenantHint)
             {
@@ -89,10 +113,34 @@ namespace Presentation.Middleware
             }
 
             // Verify tenant is active
-            var activeTenant = await dbContext.Tenants
-                .FirstOrDefaultAsync(t => t.Id == tenantId.Value);
+            var activeTenant = resolvedTenant?.Id == tenantId.Value
+                ? resolvedTenant
+                : await dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId.Value);
 
-            if (activeTenant == null)
+            if (!await EnsureTenantIsActiveAsync(context, activeTenant))
+                return;
+
+            // Set tenant context for this request
+            tenantContext.SetTenantId(tenantId.Value);
+            tenantResolutionCache.SetResolvedTenant(activeTenant!); // non-null: checked by EnsureTenantIsActiveAsync
+            _logger.LogInformation("Request tenant identified: {TenantId}", tenantId);
+
+            await _next(context);
+        }
+
+        private static Guid? GetJwtTenantId(HttpContext context)
+        {
+            if (context.User.Identity?.IsAuthenticated != true)
+                return null;
+
+            var claim = context.User.FindFirst("tenant_id");
+            return claim != null && Guid.TryParse(claim.Value, out var parsedId) ? parsedId : null;
+        }
+
+        // Writes the 404/403 response and returns false unless the tenant exists and is active.
+        private static async Task<bool> EnsureTenantIsActiveAsync(HttpContext context, Tenant? tenant)
+        {
+            if (tenant == null)
             {
                 context.Response.StatusCode = 404;
                 await context.Response.WriteAsJsonAsync(new
@@ -100,10 +148,10 @@ namespace Presentation.Middleware
                     error = "TenantNotFound",
                     message = "Tenant does not exist"
                 });
-                return;
+                return false;
             }
 
-            if (activeTenant.Status != TenantStatus.Active)
+            if (tenant.Status != TenantStatus.Active)
             {
                 context.Response.StatusCode = 403;
                 await context.Response.WriteAsJsonAsync(new
@@ -111,14 +159,10 @@ namespace Presentation.Middleware
                     error = "TenantSuspended",
                     message = "This tenant account is suspended"
                 });
-                return;
+                return false;
             }
 
-            // Set tenant context for this request
-            tenantContext.SetTenantId(tenantId.Value);
-            _logger.LogInformation("Request tenant identified: {TenantId}", tenantId);
-
-            await _next(context);
+            return true;
         }
     }
 }

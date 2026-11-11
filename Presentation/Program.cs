@@ -2,15 +2,21 @@ using Application.Services;
 using Domain.Interfaces;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Presentation.Authorization;
+using Presentation.Cors;
 using Presentation.Middleware;
+using Presentation.RateLimiting;
 using Presentation.Observability;
 using StackExchange.Redis;
+using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,15 +33,23 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // Tenant Context (scoped per request)
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddScoped<IRequestTenantResolutionCache, RequestTenantResolutionCache>();
+builder.Services.AddScoped<IRequestTenantAccessContext, RequestTenantAccessContext>();
 builder.Services.AddHttpContextAccessor();
 // JWT Service
 builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IAuthOrchestrationService, AuthOrchestrationService>();
 
 // Refresh Token Service
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 builder.Services.AddScoped<IIdentityLifecycleService, IdentityLifecycleService>();
 builder.Services.AddScoped<IIdentityNotificationService, IdentityNotificationService>();
 builder.Services.AddScoped<IMfaService, MfaService>();
+builder.Services.AddScoped<IWebhookEndpointSecretIssuer, WebhookEndpointSecretIssuer>();
+builder.Services.AddScoped<IWebhookEndpointManagementService, WebhookEndpointManagementService>();
+builder.Services.AddScoped<ITenantLifecycleService, TenantLifecycleService>();
+builder.Services.AddScoped<ITenantCorsOriginService, TenantCorsOriginService>();
+builder.Services.AddSingleton<ICorsOriginCache, RedisCorsOriginCache>();
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
@@ -60,6 +74,7 @@ builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IBillingCallbackProcessor, BillingCallbackProcessor>();
 builder.Services.AddSingleton<IInternalRequestSignatureValidator, InternalRequestSignatureValidator>();
+builder.Services.AddSingleton<ITenantOperationsSignatureValidator, TenantOperationsSignatureValidator>();
 builder.Services.AddScoped<IEntitlementEvaluator, EntitlementEvaluator>();
 builder.Services.AddScoped<IEntitlementEnforcer, EntitlementEnforcer>();
 builder.Services.AddScoped<IUsageAnalyticsService, UsageAnalyticsService>();
@@ -87,8 +102,71 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddRbacAuthorization();
+builder.Services.Configure<TenantResolutionOptions>(
+    builder.Configuration.GetSection(TenantResolutionOptions.SectionName));
+
+// Trust X-Forwarded-For/Proto only from configured reverse proxies (e.g. the Compose NGINX subnet).
+// ForwardLimit = 1 means only the entry appended by the trusted proxy is used, so clients cannot spoof it.
+// With nothing configured, the framework default trusts loopback only.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+
+    foreach (var network in builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+
+    foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+        options.KnownProxies.Add(IPAddress.Parse(proxy));
+});
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Register and login share one budget; refresh has its own so login/register floods cannot block session renewal.
+    options.AddPolicy(AuthRateLimitPolicyNames.UnauthenticatedAuthEndpoints, httpContext =>
+        CreateAuthPartition(httpContext, permitLimit: 10));
+    options.AddPolicy(AuthRateLimitPolicyNames.AuthRefreshEndpoint, httpContext =>
+        CreateAuthPartition(httpContext, permitLimit: 30));
+    // Email-sending requests (verification, password reset) and token redemption (verification, reset, invite) are
+    // anonymous; their own budget stops mail flooding and token guessing without eating into the login budget.
+    options.AddPolicy(AuthRateLimitPolicyNames.AccountRecoveryEndpoints, httpContext =>
+        CreateAuthPartition(httpContext, permitLimit: 10));
+    // TOTP codes are 6 digits, so guesses are budgeted per user (not per address, which an attacker holding a stolen
+    // access token can rotate). Enrollment and step-up share the budget.
+    options.AddPolicy(AuthRateLimitPolicyNames.MfaCodeVerification, httpContext =>
+        CreateAuthPartition(
+            httpContext,
+            permitLimit: 5,
+            window: TimeSpan.FromMinutes(5),
+            partitionKey: AuthRateLimitPartitionKey.FromUser(httpContext.User)));
+
+    static RateLimitPartition<string> CreateAuthPartition(
+        HttpContext httpContext,
+        int permitLimit,
+        TimeSpan? window = null,
+        string? partitionKey = null)
+    {
+        var hostEnvironment = httpContext.RequestServices.GetRequiredService<IHostEnvironment>();
+        if (hostEnvironment.IsEnvironment("Testing"))
+        {
+            return RateLimitPartition.GetNoLimiter("testing-auth-rate-limit-bypass");
+        }
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: partitionKey ?? AuthRateLimitPartitionKey.From(httpContext.Connection.RemoteIpAddress),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = permitLimit,
+                Window = window ?? TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    }
+});
 
 builder.Services.AddControllers();
+builder.Services.AddApiCors();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -120,6 +198,9 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+// Must run first so the rate limiter, audit and refresh-token IP fields see the real client address.
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 {
     app.UseSwagger();
@@ -132,7 +213,11 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 app.UseHttpsRedirection();
 app.UseMiddleware<RequestObservabilityMiddleware>();
 
+app.UseRouting();
+app.UseCors(ApiCorsPolicy.PolicyName);
 app.UseAuthentication();
+// After authentication so per-user policies (MFA code verification) can partition on the caller's identity.
+app.UseRateLimiter();
 app.UseAuthorization();
 app.UseMiddleware<TenantMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();

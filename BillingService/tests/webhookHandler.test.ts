@@ -78,3 +78,48 @@ test('SubscriptionWebhookHandler accepts normalized webhooks and reports duplica
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('SubscriptionWebhookHandler rejection responses remain diagnosable while sanitizing unsafe reason values', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'billing-webhook-reject-test-'));
+
+  try {
+    const adapter: BillingProviderAdapter = {
+      name: 'placeholder',
+      async verifyAndNormalizeWebhook() {
+        return {
+          accepted: false,
+          reason: 'Invalid provider signature. authorization=Bearer eyJhbGciOiJIUzI1NiJ9 callback-secret=callback-secret-raw rawPayload={"token":"tok_abc"}'
+        };
+      }
+    };
+
+    const syncJob = new SubscriptionSyncJob(undefined, {
+      storagePath: join(dir, 'state.json'),
+      maxAttempts: 2,
+      initialBackoffMs: 1,
+      maxBackoffMs: 5
+    });
+
+    const handler = new SubscriptionWebhookHandler(adapter, syncJob);
+    const response = await handler.handle({
+      rawBody: '{"type":"subscription.updated","token":"tok_abc"}',
+      signature: 'sig_invalid',
+      headers: {
+        authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9',
+        'x-provider-signature': 'sig_invalid'
+      }
+    });
+
+    assert.equal(response.status, 202);
+    assert.equal(response.body.accepted, false);
+    assert.equal(typeof response.body.reason, 'string');
+    assert.match(String(response.body.reason), /Invalid provider signature\./);
+
+    const serialized = JSON.stringify(response.body).toLowerCase();
+    assert.equal(serialized.includes('bearer ey'), false);
+    assert.equal(serialized.includes('callback-secret-raw'), false);
+    assert.equal(serialized.includes('tok_abc'), false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

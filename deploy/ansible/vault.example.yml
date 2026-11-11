@@ -1,0 +1,20 @@
+---
+# Copy to inventories/<floci|aws>/group_vars/all/vault.yml, replace every value, then run
+#   ansible-vault encrypt inventories/<env>/group_vars/all/vault.yml
+# The real file is git-ignored. Generate values with `openssl rand -base64 48`.
+# These map to the keys in deploy/env-examples/*.env.example.
+
+# POSTGRES_PASSWORD / the password in ConnectionStrings__DefaultConnection
+vault_db_password: CHANGE_ME_DB_PASSWORD
+# REDIS_PASSWORD / the password in Redis__ConnectionString
+vault_redis_password: CHANGE_ME_REDIS_PASSWORD
+# Jwt__Secret (at least 32 characters)
+vault_jwt_secret: CHANGE_ME_WITH_A_LONG_RANDOM_256_BIT_SECRET
+# BillingIntegration__SharedSecret and INTERNAL_BILLING_SHARED_SECRET (same value on both sides)
+vault_billing_shared_secret: CHANGE_ME_INTERNAL_BILLING_SHARED_SECRET
+# TenantOperations__SharedSecret. Empty disables the operator suspend/reactivate endpoints.
+vault_tenant_operations_shared_secret: ""
+# WEBHOOK_SIGNING_SECRET (placeholder provider adapter; not verified yet)
+vault_webhook_signing_secret: CHANGE_ME_PROVIDER_WEBHOOK_SECRET
+# STRIPE_API_KEY. Only used when billing_provider is stripe.
+vault_stripe_api_key: ""

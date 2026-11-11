@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Domain.Entites;
+using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;

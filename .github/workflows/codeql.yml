@@ -11,11 +11,13 @@
 #
 name: "CodeQL Advanced"
 
+# Version branches (v4.1, ...) are covered by the same code-scanning ruleset as master,
+# which refuses commits that CodeQL has not analysed, so they need scans too.
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "v[0-9]*" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "v[0-9]*" ]
   schedule:
     - cron: '35 9 * * 6'
 

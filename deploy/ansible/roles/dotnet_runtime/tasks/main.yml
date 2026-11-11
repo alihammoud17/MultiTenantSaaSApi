@@ -1,0 +1,20 @@
+---
+- name: Add the Microsoft signing key
+  ansible.builtin.get_url:
+    url: "{{ dotnet_runtime_repo_key_url }}"
+    dest: /etc/apt/keyrings/microsoft.asc
+    mode: "0644"
+
+- name: Add the Microsoft package repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.asc]
+      https://packages.microsoft.com/debian/{{ ansible_distribution_major_version }}/prod
+      {{ ansible_distribution_release }} main
+    filename: microsoft-prod
+    state: present
+
+- name: Install the ASP.NET Core runtime
+  ansible.builtin.apt:
+    name: "{{ dotnet_runtime_package }}"
+    state: present

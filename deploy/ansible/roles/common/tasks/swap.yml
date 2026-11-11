@@ -1,0 +1,39 @@
+---
+- name: Check for the swap file
+  ansible.builtin.stat:
+    path: "{{ common_swap_file }}"
+  register: common_swap_stat
+
+- name: Create the swap file
+  when: not common_swap_stat.stat.exists
+  block:
+    - name: Allocate the swap file
+      ansible.builtin.command: fallocate -l {{ common_swap_size_mb }}M {{ common_swap_file }}
+      changed_when: true
+
+    - name: Restrict the swap file permissions
+      ansible.builtin.file:
+        path: "{{ common_swap_file }}"
+        mode: "0600"
+
+    - name: Format the swap file
+      ansible.builtin.command: mkswap {{ common_swap_file }}
+      changed_when: true
+
+- name: Register the swap file in fstab
+  ansible.posix.mount:
+    src: "{{ common_swap_file }}"
+    path: none
+    fstype: swap
+    opts: sw
+    state: present
+
+- name: Check active swap
+  ansible.builtin.command: swapon --show=NAME --noheadings
+  register: common_swap_active
+  changed_when: false
+
+- name: Enable the swap file
+  ansible.builtin.command: swapon {{ common_swap_file }}
+  when: common_swap_file not in common_swap_active.stdout_lines
+  changed_when: true

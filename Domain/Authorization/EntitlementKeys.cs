@@ -8,4 +8,5 @@ public static class EntitlementKeys
     public const string AnalyticsAuditLogsRead = "feature.analytics.audit_logs.read";
     public const string AdminAdvancedUserManagement = "feature.admin.advanced.user_management";
     public const string ModulesFutureHook = "feature.modules.future.hooks";
+    public const string SecurityCorsOriginsManage = "feature.security.cors_origins.manage";
 }

@@ -1,11 +1,10 @@
 using BCrypt.Net;
-using Domain.Entites;
+using Domain.Entities;
+using Domain.Identity;
 using Domain.Interfaces;
 using Domain.Outputs;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Application.Services
 {
@@ -24,9 +23,10 @@ namespace Application.Services
 
         public async Task<CreatedInviteResult> CreateInviteAsync(Guid tenantId, Guid actorUserId, string email, string? role, string? rbacRoleName, int? expiresInHours, CancellationToken cancellationToken = default)
         {
-            if (await _dbContext.Users.AnyAsync(u => u.TenantId == tenantId && u.Email == email, cancellationToken))
+            var normalizedEmail = EmailAddress.Normalize(email);
+            if (await _dbContext.Users.AnyAsync(u => u.Email == normalizedEmail, cancellationToken))
             {
-                throw new InvalidOperationException("User already exists for tenant.");
+                throw new InvalidOperationException("User already exists.");
             }
 
             var token = GenerateToken();
@@ -34,7 +34,7 @@ namespace Application.Services
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
-                Email = email.Trim(),
+                Email = normalizedEmail,
                 Role = string.IsNullOrWhiteSpace(role) ? "MEMBER" : role.Trim().ToUpperInvariant(),
                 RbacRoleName = string.IsNullOrWhiteSpace(rbacRoleName) ? null : rbacRoleName.Trim(),
                 TokenHash = ComputeHash(token),
@@ -57,12 +57,12 @@ namespace Application.Services
             var invite = await _dbContext.UserInvites
                 .FirstOrDefaultAsync(i => i.TenantId == tenantId && i.TokenHash == tokenHash && i.AcceptedAt == null && i.ExpiresAt > DateTime.UtcNow, cancellationToken);
 
-            if (invite == null)
+            if (invite == null || !await IsTenantActiveAsync(tenantId, cancellationToken))
             {
                 return null;
             }
 
-            if (await _dbContext.Users.AnyAsync(u => u.TenantId == tenantId && u.Email == invite.Email, cancellationToken))
+            if (await _dbContext.Users.AnyAsync(u => u.Email == invite.Email, cancellationToken))
             {
                 return null;
             }
@@ -119,10 +119,12 @@ namespace Application.Services
 
         public async Task RequestVerificationAsync(Guid tenantId, string email, CancellationToken cancellationToken = default)
         {
+            var normalizedEmail = EmailAddress.Normalize(email);
             var user = await _dbContext.Users
-                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == email.Trim(), cancellationToken);
+                .Include(u => u.Tenant)
+                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == normalizedEmail, cancellationToken);
 
-            if (user == null || user.EmailVerifiedAt.HasValue)
+            if (user == null || user.EmailVerifiedAt.HasValue || !AllowsVerification(user.Tenant.Status))
             {
                 return;
             }
@@ -148,25 +150,38 @@ namespace Application.Services
             var tokenHash = ComputeHash(verificationToken);
             var record = await _dbContext.UserVerificationTokens
                 .Include(x => x.User)
+                .Include(x => x.Tenant)
                 .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.TokenHash == tokenHash && x.UsedAt == null && x.ExpiresAt > DateTime.UtcNow, cancellationToken);
 
-            if (record == null)
+            // A suspended tenant must not be able to complete identity flows; verification never changes that status.
+            if (record == null || !AllowsVerification(record.Tenant.Status))
             {
                 return false;
             }
 
-            record.UsedAt = DateTime.UtcNow;
-            record.User.EmailVerifiedAt = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            record.UsedAt = now;
+            record.User.EmailVerifiedAt = now;
+
+            // A self-registered tenant becomes usable once its admin proves they own the email address.
+            if (record.Tenant.Status == TenantStatus.PendingVerification)
+            {
+                record.Tenant.Status = TenantStatus.Active;
+                record.Tenant.UpdatedAt = now;
+            }
+
             await _dbContext.SaveChangesAsync(cancellationToken);
             return true;
         }
 
         public async Task RequestPasswordResetAsync(Guid tenantId, string email, string? requestIp, CancellationToken cancellationToken = default)
         {
+            var normalizedEmail = EmailAddress.Normalize(email);
             var user = await _dbContext.Users
-                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == email.Trim(), cancellationToken);
+                .Include(u => u.Tenant)
+                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == normalizedEmail, cancellationToken);
 
-            if (user == null)
+            if (user == null || user.Tenant.Status != TenantStatus.Active)
             {
                 return;
             }
@@ -194,9 +209,10 @@ namespace Application.Services
             var tokenHash = ComputeHash(resetToken);
             var record = await _dbContext.PasswordResetTokens
                 .Include(x => x.User)
+                .Include(x => x.Tenant)
                 .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.TokenHash == tokenHash && x.UsedAt == null && x.ExpiresAt > DateTime.UtcNow, cancellationToken);
 
-            if (record == null)
+            if (record == null || record.Tenant.Status != TenantStatus.Active)
             {
                 return false;
             }
@@ -207,16 +223,17 @@ namespace Application.Services
             return true;
         }
 
-        private static string GenerateToken()
+        // Email verification also serves self-registered tenants that are waiting to be activated.
+        private static bool AllowsVerification(TenantStatus status) =>
+            status is TenantStatus.Active or TenantStatus.PendingVerification;
+
+        private Task<bool> IsTenantActiveAsync(Guid tenantId, CancellationToken cancellationToken)
         {
-            var bytes = RandomNumberGenerator.GetBytes(48);
-            return Convert.ToBase64String(bytes);
+            return _dbContext.Tenants.AnyAsync(t => t.Id == tenantId && t.Status == TenantStatus.Active, cancellationToken);
         }
 
-        private static string ComputeHash(string token)
-        {
-            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
-            return Convert.ToHexString(bytes);
-        }
+        private static string GenerateToken() => IdentityTokenGenerator.GenerateToken();
+
+        private static string ComputeHash(string token) => IdentityTokenGenerator.ComputeHash(token);
     }
 }

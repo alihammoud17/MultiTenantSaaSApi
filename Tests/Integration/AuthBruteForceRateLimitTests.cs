@@ -1,0 +1,337 @@
+using System.Data.Common;
+using System.Net;
+using Microsoft.AspNetCore.Builder;
+using System.Net.Http.Json;
+using FluentAssertions;
+using Infrastructure.Data;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+
+namespace Tests.Integration;
+
+public class AuthBruteForceRateLimitTests
+{
+    private const int PermitLimit = 10;
+    private const int MfaCodePermitLimit = 5;
+
+    [Fact]
+    public async Task RepeatedLoginAttempts_ShouldReturn429_AfterPermitLimit()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        for (var attempt = 1; attempt <= PermitLimit; attempt++)
+        {
+            var allowedResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new
+            {
+                email = $"unknown-{attempt}-{Guid.NewGuid():N}@example.com",
+                password = "wrong-pass"
+            });
+
+            allowedResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        var rateLimitedResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            email = $"unknown-final-{Guid.NewGuid():N}@example.com",
+            password = "wrong-pass"
+        });
+
+        rateLimitedResponse.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+    }
+
+    [Fact]
+    public async Task RepeatedRegistrationAttempts_ShouldReturn429_AfterPermitLimit()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        for (var attempt = 1; attempt <= PermitLimit; attempt++)
+        {
+            var allowedResponse = await client.PostAsJsonAsync("/api/v1/auth/register", new
+            {
+                companyName = $"Rate Limit Co {attempt}",
+                subdomain = $"rate-limit-{attempt}-{Guid.NewGuid():N}",
+                adminEmail = $"rl-register-{attempt}-{Guid.NewGuid():N}@example.com",
+                adminPassword = "Passw0rd!"
+            });
+
+            allowedResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        }
+
+        var rateLimitedResponse = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Rate Limit Co Final",
+            subdomain = $"rate-limit-final-{Guid.NewGuid():N}",
+            adminEmail = $"rl-register-final-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        rateLimitedResponse.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+    }
+
+    [Fact]
+    public async Task RefreshEndpoint_ShouldNotBeRateLimited_WhenLoginRateLimitBudgetIsExhausted()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        await ExhaustLoginBudgetAsync(client, forwardedFor: null);
+
+        var refreshResponse = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
+        {
+            tenantId = Guid.NewGuid(),
+            refreshToken = "non-existent-refresh-token"
+        });
+
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ClientsBehindTrustedProxy_ShouldGetIndependentBuckets_ByForwardedFor()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        await ExhaustLoginBudgetAsync(client, forwardedFor: "198.51.100.1");
+
+        var sameClient = await SendLoginAsync(client, "198.51.100.1");
+        var otherClient = await SendLoginAsync(client, "198.51.100.2");
+
+        sameClient.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        otherClient.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ClientForgedForwardedForHops_ShouldNotEscapeTheirBucket()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        // The trusted proxy appends the real client (198.51.100.7); everything before it is client-supplied.
+        for (var attempt = 1; attempt <= PermitLimit; attempt++)
+        {
+            var response = await SendLoginAsync(client, $"203.0.113.{attempt}, 198.51.100.7");
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        var forgedResponse = await SendLoginAsync(client, "203.0.113.200, 198.51.100.7");
+
+        forgedResponse.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+    }
+
+    [Fact]
+    public async Task MfaCodeGuesses_ShouldBeLimitedPerUser_AcrossEnrollmentAndStepUp()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var attacker = CreateClient(factory);
+        using var bystander = CreateClient(factory);
+        await AuthenticateNewUserAsync(attacker);
+        await AuthenticateNewUserAsync(bystander);
+
+        var enrollmentToken = await InitiateMfaEnrollmentAsync(attacker);
+        var statuses = new List<HttpStatusCode>();
+        for (var attempt = 0; attempt < MfaCodePermitLimit; attempt++)
+        {
+            var guess = await attacker.PostAsJsonAsync("/api/v1/auth/mfa/enroll/verify", new { enrollmentToken, code = $"{attempt:D6}" });
+            statuses.Add(guess.StatusCode);
+        }
+
+        var nextEnrollmentGuess = await attacker.PostAsJsonAsync("/api/v1/auth/mfa/enroll/verify", new { enrollmentToken, code = "999999" });
+        var stepUpGuess = await attacker.PostAsJsonAsync("/api/v1/auth/mfa/step-up", new { code = "999999" });
+        var otherUsersGuess = await bystander.PostAsJsonAsync("/api/v1/auth/mfa/step-up", new { code = "999999" });
+
+        statuses.Should().AllSatisfy(status => status.Should().Be(HttpStatusCode.BadRequest));
+        nextEnrollmentGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        stepUpGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        otherUsersGuess.StatusCode.Should().NotBe(HttpStatusCode.TooManyRequests, "the budget is per user, not per client address");
+    }
+
+    [Fact]
+    public async Task AccountRecoveryRequests_ShouldBeLimitedPerClient_WithoutSpendingTheLoginBudget()
+    {
+        using var factory = new AuthRateLimitWebApplicationFactory();
+        using var client = CreateClient(factory);
+        var tenantId = Guid.NewGuid();
+
+        for (var attempt = 1; attempt <= PermitLimit; attempt++)
+        {
+            var reset = await client.PostAsJsonAsync("/api/v1/auth/password-reset/request", new { tenantId, email = "victim@example.com" });
+            reset.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        var anotherReset = await client.PostAsJsonAsync("/api/v1/auth/password-reset/request", new { tenantId, email = "victim@example.com" });
+        var verificationRequest = await client.PostAsJsonAsync("/api/v1/auth/verification/request", new { tenantId, email = "victim@example.com" });
+        var verificationGuess = await client.PostAsJsonAsync("/api/v1/auth/verification/complete", new { tenantId, verificationToken = "guess" });
+        var resetGuess = await client.PostAsJsonAsync("/api/v1/auth/password-reset/complete", new { tenantId, resetToken = "guess", newPassword = "Passw0rd!" });
+        var inviteGuess = await client.PostAsJsonAsync("/api/v1/auth/invites/accept", new { tenantId, inviteToken = "guess", password = "Passw0rd!" });
+        var login = await SendLoginAsync(client, forwardedFor: null);
+
+        anotherReset.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        verificationRequest.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        verificationGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        resetGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        inviteGuess.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        login.StatusCode.Should().Be(HttpStatusCode.Unauthorized, "recovery traffic has its own budget");
+    }
+
+    private static HttpClient CreateClient(AuthRateLimitWebApplicationFactory factory) =>
+        factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+
+    private static async Task AuthenticateNewUserAsync(HttpClient client)
+    {
+        var (token, _, _) = await SecurityTestHelpers.RegisterTenantAsync(client, $"rl-mfa-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+    }
+
+    private static async Task<string> InitiateMfaEnrollmentAsync(HttpClient client)
+    {
+        var response = await client.PostAsync("/api/v1/auth/mfa/enroll/initiate", null);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        return body.GetProperty("enrollmentToken").GetString()!;
+    }
+
+    private static async Task ExhaustLoginBudgetAsync(HttpClient client, string? forwardedFor)
+    {
+        for (var attempt = 1; attempt <= PermitLimit; attempt++)
+        {
+            var loginResponse = await SendLoginAsync(client, forwardedFor);
+            loginResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+    }
+
+    private static async Task<HttpResponseMessage> SendLoginAsync(HttpClient client, string? forwardedFor)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login")
+        {
+            Content = JsonContent.Create(new
+            {
+                email = $"unknown-{Guid.NewGuid():N}@example.com",
+                password = "wrong-pass"
+            })
+        };
+
+        if (forwardedFor is not null)
+            request.Headers.TryAddWithoutValidation("X-Forwarded-For", forwardedFor);
+
+        return await client.SendAsync(request);
+    }
+}
+
+public sealed class AuthRateLimitWebApplicationFactory : WebApplicationFactory<Program>
+{
+    // Every test request arrives from this address, as it would from NGINX in the Compose profile.
+    public static readonly IPAddress TrustedProxyAddress = IPAddress.Parse("10.0.0.5");
+
+    private readonly string _connectionString = $"Data Source=file:auth-rate-limit-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
+    private readonly SqliteConnection _keepAliveConnection;
+
+    public AuthRateLimitWebApplicationFactory()
+    {
+        _keepAliveConnection = new SqliteConnection(_connectionString);
+        _keepAliveConnection.Open();
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Development");
+
+        builder.ConfigureAppConfiguration((_, configBuilder) =>
+        {
+            var settings = new Dictionary<string, string?>
+            {
+                ["Jwt:Secret"] = "super_secret_key_for_tests_only_1234567890",
+                ["Jwt:Issuer"] = "MultiTenantSaasApi",
+                ["Jwt:Audience"] = "MultiTenantSaasApi",
+                ["Jwt:ExpirationMinutes"] = "60",
+                ["BillingIntegration:SharedSecret"] = "billing-integration-test-secret",
+                ["BillingIntegration:AllowedClockSkewMinutes"] = "5",
+                ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=unused;Username=unused;Password=unused",
+                ["Redis:ConnectionString"] = "localhost:6379",
+                ["ForwardedHeaders:KnownProxies:0"] = TrustedProxyAddress.ToString()
+            };
+
+            configBuilder.AddInMemoryCollection(settings);
+        });
+
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<IStartupFilter, TrustedProxyRemoteAddressStartupFilter>();
+            services.RemoveAll<Domain.Interfaces.IIdentityNotificationService>();
+            services.AddSingleton<Domain.Interfaces.IIdentityNotificationService, CapturingIdentityNotificationService>();
+            services.RemoveAll<ApplicationDbContext>();
+            services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
+            services.RemoveAll<IConfigureOptions<DbContextOptions<ApplicationDbContext>>>();
+            services.RemoveAll<DbConnection>();
+
+            services.AddScoped<DbConnection>(_ =>
+            {
+                var connection = new SqliteConnection(_connectionString);
+                connection.Open();
+                return connection;
+            });
+            services.AddDbContext<ApplicationDbContext>((sp, options) =>
+                options.UseSqlite(sp.GetRequiredService<DbConnection>()));
+        });
+    }
+
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+
+        using var scope = host.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        dbContext.Database.EnsureCreated();
+
+        return host;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        if (disposing)
+        {
+            _keepAliveConnection.Dispose();
+        }
+    }
+
+    private sealed class TrustedProxyRemoteAddressStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use((context, nextMiddleware) =>
+            {
+                context.Connection.RemoteIpAddress = TrustedProxyAddress;
+                return nextMiddleware(context);
+            });
+            next(app);
+        };
+    }
+}

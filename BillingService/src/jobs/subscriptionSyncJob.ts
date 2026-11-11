@@ -102,8 +102,10 @@ export class SubscriptionSyncJob {
       logger.info('subscription-sync-job.queued', {
         eventId: event.eventId,
         eventType: event.eventType,
+        correlationId: event.correlationId,
         tenantId: event.tenantId,
         subscriptionId: event.subscriptionId,
+        status: result.item.status,
         attempts: result.item.attempts
       });
 
@@ -117,6 +119,7 @@ export class SubscriptionSyncJob {
 
     logger.info('subscription-sync-job.duplicate', {
       eventId: event.eventId,
+      correlationId: event.correlationId,
       tenantId: event.tenantId,
       subscriptionId: event.subscriptionId,
       status: result.item.status
@@ -141,4 +144,3 @@ export class SubscriptionSyncJob {
     return this.queue;
   }
 }
-

@@ -1,6 +1,7 @@
 using Domain.Authorization;
 using Domain.DTOs;
-using Domain.Entites;
+using Domain.Entities;
+using Domain.Identity;
 using Domain.Interfaces;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -126,15 +127,16 @@ namespace Presentation.Controllers
                 return deniedResult;
             }
 
-            var exists = await _dbContext.Users.AnyAsync(u => u.TenantId == tenantId && u.Email == request.Email);
+            var normalizedEmail = EmailAddress.Normalize(request.Email);
+            var exists = await _dbContext.Users.AnyAsync(u => u.Email == normalizedEmail);
             if (exists)
-                return BadRequest(new { error = "User already exists for tenant" });
+                return BadRequest(new { error = "Email is already in use" });
 
             var user = new User
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
-                Email = request.Email,
+                Email = normalizedEmail,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                 EmailVerifiedAt = DateTime.UtcNow,
                 Role = string.IsNullOrWhiteSpace(request.Role) ? "MEMBER" : request.Role.Trim().ToUpperInvariant(),

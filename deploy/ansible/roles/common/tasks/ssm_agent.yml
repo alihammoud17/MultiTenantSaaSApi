@@ -1,0 +1,11 @@
+---
+- name: Install the SSM agent from the regional bucket
+  ansible.builtin.apt:
+    deb: "https://s3.{{ common_aws_region }}.amazonaws.com/amazon-ssm-{{ common_aws_region }}/latest/debian_amd64/amazon-ssm-agent.deb"
+    state: present
+
+- name: Start the SSM agent
+  ansible.builtin.systemd_service:
+    name: amazon-ssm-agent
+    enabled: true
+    state: started

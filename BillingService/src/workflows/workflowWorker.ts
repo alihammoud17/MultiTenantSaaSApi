@@ -1,4 +1,5 @@
 import { logger } from '../observability/logger.ts';
+import { sanitizeDiagnosticText } from '../observability/safeDiagnostics.ts';
 import type { InternalSubscriptionEvent } from '../shared/types.ts';
 import type { RetryPolicy } from './retryPolicy.ts';
 import type { WorkflowItem, WorkflowQueue } from './workflowQueue.ts';
@@ -70,19 +71,24 @@ export class WorkflowWorker {
 
       logger.info('workflow-worker.processed', {
         eventId: item.eventId,
+        correlationId: item.event.correlationId,
         attempts: item.attempts,
+        status: 'completed',
         tenantId: item.event.tenantId,
         subscriptionId: item.event.subscriptionId
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown processing failure';
+      const rawMessage = error instanceof Error ? error.message : 'Unknown processing failure';
+      const message = sanitizeDiagnosticText(rawMessage);
       const decision = this.retryPolicy.next(item.attempts, new Date());
 
       if (!decision.shouldRetry || !decision.retryAtUtc) {
         await this.queue.markDeadLetter(item.eventId, message, new Date());
         logger.error('workflow-worker.dead-lettered', {
           eventId: item.eventId,
+          correlationId: item.event.correlationId,
           attempts: item.attempts,
+          status: 'dead_letter',
           tenantId: item.event.tenantId,
           subscriptionId: item.event.subscriptionId,
           message
@@ -93,7 +99,9 @@ export class WorkflowWorker {
       await this.queue.markForRetry(item.eventId, decision.retryAtUtc, message, new Date());
       logger.warn('workflow-worker.retry-scheduled', {
         eventId: item.eventId,
+        correlationId: item.event.correlationId,
         attempts: item.attempts,
+        status: 'retry_scheduled',
         retryAtUtc: decision.retryAtUtc,
         tenantId: item.event.tenantId,
         subscriptionId: item.event.subscriptionId,

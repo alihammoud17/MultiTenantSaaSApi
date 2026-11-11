@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -6,9 +7,13 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Domain.Authorization;
-using Domain.Entites;
+using Domain.Entities;
+using Domain.Interfaces;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Tests.Integration;
@@ -63,27 +68,357 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
-    public async Task Register_ShouldCreateTenantAndReturnToken()
+    public async Task Health_ShouldReturnStableShape_WithoutSensitiveFields()
     {
         using var client = CreateClient();
 
+        var response = await client.GetAsync("/health");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.TryGetProperty("status", out _).Should().BeTrue();
+        body.TryGetProperty("service", out _).Should().BeTrue();
+        body.TryGetProperty("correlationId", out _).Should().BeTrue();
+        body.TryGetProperty("totalDuration", out _).Should().BeTrue();
+        body.TryGetProperty("checks", out _).Should().BeTrue();
+
+        var serialized = body.GetRawText().ToLowerInvariant();
+        serialized.Should().NotContain("connectionstring");
+        serialized.Should().NotContain("password");
+        serialized.Should().NotContain("secret");
+        serialized.Should().NotContain("token");
+    }
+
+    [Fact]
+    public async Task Metrics_ShouldReturnStableShape_WithoutSensitiveFields()
+    {
+        using var client = CreateClient();
+
+        var response = await client.GetAsync("/metrics");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.TryGetProperty("correlationId", out _).Should().BeTrue();
+        body.TryGetProperty("generatedAtUtc", out _).Should().BeTrue();
+        body.TryGetProperty("metrics", out var metrics).Should().BeTrue();
+        metrics.TryGetProperty("service", out _).Should().BeTrue();
+        metrics.TryGetProperty("activeRequests", out _).Should().BeTrue();
+        metrics.TryGetProperty("requestsByRoute", out _).Should().BeTrue();
+        metrics.TryGetProperty("requestsByStatus", out _).Should().BeTrue();
+
+        var serialized = body.GetRawText().ToLowerInvariant();
+        serialized.Should().NotContain("connectionstring");
+        serialized.Should().NotContain("password");
+        serialized.Should().NotContain("secret");
+        serialized.Should().NotContain("token");
+    }
+
+    [Fact]
+    public async Task Register_ShouldCreatePendingTenant_AndReturnAcceptedWithoutTokens()
+    {
+        using var client = CreateClient();
+        var subdomain = $"acme-{Guid.NewGuid():N}";
         var payload = new
         {
             companyName = $"Acme {Guid.NewGuid():N}",
-            subdomain = $"acme-{Guid.NewGuid():N}",
+            subdomain,
             adminEmail = $"admin-{Guid.NewGuid():N}@example.com",
             adminPassword = "Passw0rd!"
         };
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", payload);
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("status").GetString().Should().Be("pending_verification");
+        body.GetProperty("verificationExpiresAt").GetDateTime().Should().BeAfter(DateTime.UtcNow.AddHours(47));
+        body.TryGetProperty("token", out _).Should().BeFalse();
+        body.TryGetProperty("refreshToken", out _).Should().BeFalse();
+        var tenantId = body.GetProperty("tenantId").GetGuid();
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var tenant = await dbContext.Tenants.SingleAsync(t => t.Id == tenantId);
+        tenant.Status.Should().Be(TenantStatus.PendingVerification);
+        var admin = await dbContext.Users.SingleAsync(u => u.TenantId == tenantId);
+        admin.EmailVerifiedAt.Should().BeNull();
+        (await dbContext.UserVerificationTokens.CountAsync(t => t.TenantId == tenantId && t.UserId == admin.Id)).Should().Be(1);
+        (await dbContext.RefreshTokens.IgnoreQueryFilters().AnyAsync(t => t.TenantId == tenantId)).Should().BeFalse();
+        (await dbContext.AuditLogs.IgnoreQueryFilters().AnyAsync(a => a.TenantId == tenantId && a.Action == "TENANT_REGISTERED")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Login_ShouldBeRejected_UntilRegistrationIsVerified_ThenActivateTenant()
+    {
+        using var client = CreateClient();
+        var email = $"pending-{Guid.NewGuid():N}@example.com";
+        var tenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Passw0rd!", $"pending-{Guid.NewGuid():N}");
+
+        var beforeVerification = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "Passw0rd!" });
+
+        beforeVerification.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await beforeVerification.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("error").GetString().Should().Be("Email is not verified");
+
+        await SecurityTestHelpers.CompleteRegistrationVerificationAsync(client, tenantId);
+
+        var afterVerification = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "Passw0rd!" });
+
+        afterVerification.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await afterVerification.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("tenantId").GetGuid().Should().Be(tenantId);
         body.GetProperty("token").GetString().Should().NotBeNullOrWhiteSpace();
-        body.GetProperty("refreshToken").GetString().Should().NotBeNullOrWhiteSpace();
-        body.GetProperty("tenantId").GetGuid().Should().NotBe(Guid.Empty);
-        body.GetProperty("userId").GetGuid().Should().NotBe(Guid.Empty);
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await dbContext.Tenants.SingleAsync(t => t.Id == tenantId)).Status.Should().Be(TenantStatus.Active);
+    }
+
+    [Fact]
+    public async Task PendingTenant_ShouldRejectTenantScopedRequests_EvenWithAValidJwt()
+    {
+        using var client = CreateClient();
+        var email = $"pending-jwt-{Guid.NewGuid():N}@example.com";
+        var tenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Passw0rd!", $"pending-jwt-{Guid.NewGuid():N}");
+
+        string token;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var user = await dbContext.Users.Include(u => u.Tenant).SingleAsync(u => u.TenantId == tenantId);
+            token = scope.ServiceProvider.GetRequiredService<IJwtService>().GenerateToken(user, user.Tenant).Token;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/tenant");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Register_ShouldReclaimEmailAndSubdomain_FromExpiredPendingRegistration()
+    {
+        using var client = CreateClient();
+        var email = $"squatted-{Guid.NewGuid():N}@example.com";
+        var subdomain = $"squatted-{Guid.NewGuid():N}";
+        var squatterTenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Squatt3r!", subdomain);
+        await BackdateTenantCreationAsync(squatterTenantId, TimeSpan.FromHours(49));
+
+        var ownerTenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Passw0rd!", subdomain);
+
+        ownerTenantId.Should().NotBe(squatterTenantId);
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await dbContext.Tenants.AnyAsync(t => t.Id == squatterTenantId)).Should().BeFalse();
+        (await dbContext.Users.AnyAsync(u => u.TenantId == squatterTenantId)).Should().BeFalse();
+        (await dbContext.UserVerificationTokens.AnyAsync(t => t.TenantId == squatterTenantId)).Should().BeFalse();
+        (await dbContext.Subscriptions.AnyAsync(x => x.TenantId == squatterTenantId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Register_ShouldReclaimEmail_WhenExpiredPendingRegistrationUsedADifferentSubdomain()
+    {
+        using var client = CreateClient();
+        var email = $"squatted-email-{Guid.NewGuid():N}@example.com";
+        var squatterTenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Squatt3r!", $"squat-{Guid.NewGuid():N}");
+        await BackdateTenantCreationAsync(squatterTenantId, TimeSpan.FromHours(49));
+
+        var ownerTenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, email.ToUpperInvariant(), "Passw0rd!", $"owner-{Guid.NewGuid():N}");
+
+        await SecurityTestHelpers.CompleteRegistrationVerificationAsync(client, ownerTenantId);
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { email = email.ToUpperInvariant(), password = "Passw0rd!" });
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Register_ShouldStillBlockEmailAndSubdomain_WhilePendingRegistrationIsWithinItsWindow()
+    {
+        using var client = CreateClient();
+        var email = $"recent-{Guid.NewGuid():N}@example.com";
+        var subdomain = $"recent-{Guid.NewGuid():N}";
+        var pendingTenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Passw0rd!", subdomain);
+        await BackdateTenantCreationAsync(pendingTenantId, TimeSpan.FromHours(47));
+
+        var sameEmail = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Second Company",
+            subdomain = $"other-{Guid.NewGuid():N}",
+            adminEmail = email,
+            adminPassword = "Passw0rd!"
+        });
+        var sameSubdomain = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Third Company",
+            subdomain,
+            adminEmail = $"other-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        // The email answer is indistinguishable from a new registration, but the pending tenant keeps the email.
+        sameEmail.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        sameSubdomain.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await sameSubdomain.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().Should().Be("Subdomain already taken");
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await dbContext.Tenants.SingleAsync(t => t.Id == pendingTenantId)).Status.Should().Be(TenantStatus.PendingVerification);
+        (await dbContext.Users.Where(u => u.Email == email).Select(u => u.TenantId).ToListAsync())
+            .Should().Equal(pendingTenantId);
+    }
+
+    [Fact]
+    public async Task Register_ShouldNeverReclaim_AVerifiedTenant()
+    {
+        using var client = CreateClient();
+        var email = $"verified-{Guid.NewGuid():N}@example.com";
+        var subdomain = $"verified-{Guid.NewGuid():N}";
+        var (_, _, tenantId, _) = await SecurityTestHelpers.RegisterVerifiedTenantAsync(client, email, "Passw0rd!", subdomain);
+        await BackdateTenantCreationAsync(tenantId, TimeSpan.FromDays(30));
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Late Company",
+            subdomain,
+            adminEmail = email,
+            adminPassword = "Passw0rd!"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await dbContext.Tenants.SingleAsync(t => t.Id == tenantId)).Status.Should().Be(TenantStatus.Active);
+    }
+
+    [Fact]
+    public async Task AnonymousAuthFlows_ShouldRecordTheActingUserInAuditLog()
+    {
+        using var client = CreateClient();
+        var email = $"actor-{Guid.NewGuid():N}@example.com";
+        var tenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Passw0rd!", $"actor-{Guid.NewGuid():N}");
+        await SecurityTestHelpers.CompleteRegistrationVerificationAsync(client, tenantId);
+
+        var login = await (await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "Passw0rd!" }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        var adminId = login.GetProperty("userId").GetGuid();
+
+        var refresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
+        {
+            tenantId,
+            refreshToken = login.GetProperty("refreshToken").GetString()
+        });
+        refresh.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var inviteeEmail = $"invitee-{Guid.NewGuid():N}@example.com";
+        using (var inviteRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/invites"))
+        {
+            inviteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", login.GetProperty("token").GetString());
+            inviteRequest.Content = JsonContent.Create(new { email = inviteeEmail, role = "MEMBER" });
+            var invite = await client.SendAsync(inviteRequest);
+            invite.StatusCode.Should().Be(HttpStatusCode.OK);
+            var inviteToken = (await invite.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("inviteToken").GetString();
+
+            var accept = await client.PostAsJsonAsync("/api/v1/auth/invites/accept", new { tenantId, inviteToken, password = "Passw0rd!" });
+            accept.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var inviteeId = (await dbContext.Users.SingleAsync(u => u.Email == inviteeEmail)).Id;
+        var actors = await dbContext.AuditLogs.IgnoreQueryFilters()
+            .Where(a => a.TenantId == tenantId)
+            .ToListAsync();
+
+        actors.Single(a => a.Action == "TENANT_REGISTERED").UserId.Should().Be(adminId);
+        actors.Single(a => a.Action == "USER_LOGGED_IN").UserId.Should().Be(adminId);
+        actors.Single(a => a.Action == "USER_TOKEN_REFRESHED").UserId.Should().Be(adminId);
+        actors.Single(a => a.Action == "USER_INVITE_ACCEPTED").UserId.Should().Be(inviteeId);
+    }
+
+    [Fact]
+    public async Task LoginAndRefresh_ShouldReturnTheTokensRealExpiry_FromJwtExpirationMinutes()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, config) =>
+                config.AddInMemoryCollection(new Dictionary<string, string?> { ["Jwt:ExpirationMinutes"] = "15" })));
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        var email = $"expiry-{Guid.NewGuid():N}@example.com";
+        var (_, refreshToken, tenantId) = await SecurityTestHelpers.RegisterTenantAsync(client, email, "Passw0rd!");
+
+        var login = await (await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "Passw0rd!" }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        var refreshResponse = await client.PostAsJsonAsync("/api/v1/auth/refresh", new { tenantId, refreshToken });
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var refreshed = await refreshResponse.Content.ReadFromJsonAsync<JsonElement>();
+
+        foreach (var body in new[] { login, refreshed })
+        {
+            var expiresAt = body.GetProperty("expiresAt").GetDateTimeOffset();
+            var jwtExpiry = new DateTimeOffset(new JwtSecurityTokenHandler().ReadJwtToken(body.GetProperty("token").GetString()).ValidTo, TimeSpan.Zero);
+
+            expiresAt.Should().Be(jwtExpiry);
+            expiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddMinutes(15), TimeSpan.FromMinutes(1));
+        }
+    }
+
+    [Fact]
+    public async Task Register_ShouldStoreEmailLowercase_AndLoginShouldIgnoreCase()
+    {
+        using var client = CreateClient();
+        var id = Guid.NewGuid().ToString("N");
+        var tenantId = await SecurityTestHelpers.RegisterPendingTenantAsync(client, $"Bob-{id}@Example.COM", "Passw0rd!", $"case-{id}");
+        await SecurityTestHelpers.CompleteRegistrationVerificationAsync(client, tenantId);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            (await dbContext.Users.SingleAsync(u => u.TenantId == tenantId)).Email.Should().Be($"bob-{id}@example.com");
+        }
+
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { email = $"BOB-{id.ToUpperInvariant()}@example.com", password = "Passw0rd!" });
+
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("tenantId").GetGuid().Should().Be(tenantId);
+    }
+
+    [Fact]
+    public async Task InviteAndAddUser_ShouldNormalizeEmails_AndTreatCaseVariantsAsDuplicates()
+    {
+        using var client = CreateClient();
+        var (token, _, tenantId) = await RegisterTenant(client, $"case-admin-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var id = Guid.NewGuid().ToString("N");
+
+        var invite = await client.PostAsJsonAsync("/api/v1/auth/invites", new { email = $"  Mixed-{id}@Case.COM ", role = "MEMBER" });
+        invite.StatusCode.Should().Be(HttpStatusCode.OK);
+        var inviteToken = (await invite.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("inviteToken").GetString();
+
+        client.DefaultRequestHeaders.Authorization = null;
+        var accept = await client.PostAsJsonAsync("/api/v1/auth/invites/accept", new { tenantId, inviteToken, password = "Passw0rd!" });
+        accept.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            (await dbContext.UserInvites.SingleAsync(i => i.TenantId == tenantId)).Email.Should().Be($"mixed-{id}@case.com");
+            (await dbContext.Users.CountAsync(u => u.Email == $"mixed-{id}@case.com")).Should().Be(1);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var duplicate = await client.PostAsJsonAsync("/api/v1/admin/tenant/users", new
+        {
+            email = $"MIXED-{id.ToUpperInvariant()}@case.com",
+            password = "Passw0rd!",
+            role = "MEMBER"
+        });
+
+        duplicate.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().Should().Be("Email is already in use");
     }
 
     [Fact]
@@ -322,7 +657,7 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
             adminPassword = "Passw0rd!"
         });
 
-        first.StatusCode.Should().Be(HttpStatusCode.OK);
+        first.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         var second = await client.PostAsJsonAsync("/api/v1/auth/register", new
         {
@@ -335,6 +670,160 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         second.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await second.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("error").GetString().Should().Be("Subdomain already taken");
+    }
+
+    [Fact]
+    public async Task Register_ShouldNormalizeSubdomain_AndTreatCaseVariantsAsDuplicates()
+    {
+        using var client = CreateClient();
+        var subdomain = $"case-{Guid.NewGuid():N}";
+
+        var first = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "  Case Company  ",
+            subdomain = $"  {subdomain.ToUpperInvariant()} ",
+            adminEmail = $"case-first-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        first.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var tenantId = (await first.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("tenantId").GetGuid();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var tenant = await dbContext.Tenants.SingleAsync(t => t.Id == tenantId);
+            tenant.Subdomain.Should().Be(subdomain);
+            tenant.Name.Should().Be("Case Company");
+        }
+
+        var second = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Second Company",
+            subdomain,
+            adminEmail = $"case-second-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        second.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await second.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Subdomain already taken");
+    }
+
+    [Fact]
+    public async Task Register_WithAlreadyRegisteredEmail_ShouldBeIndistinguishableFromNewRegistration_AndCreateNothing()
+    {
+        using var client = CreateClient();
+        var email = $"dup-email-{Guid.NewGuid():N}@example.com";
+        var secondSubdomain = $"email-b-{Guid.NewGuid():N}";
+
+        var first = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "First Company",
+            subdomain = $"email-a-{Guid.NewGuid():N}",
+            adminEmail = email,
+            adminPassword = "Passw0rd!"
+        });
+
+        first.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var noticesBefore = CapturingIdentityNotificationService.GetExistingAccountNoticeCount(email);
+
+        var second = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Second Company",
+            subdomain = secondSubdomain,
+            adminEmail = $"  {email.ToUpperInvariant()} ",
+            adminPassword = "Passw0rd!"
+        });
+
+        second.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var firstBody = await first.Content.ReadFromJsonAsync<JsonElement>();
+        var secondBody = await second.Content.ReadFromJsonAsync<JsonElement>();
+        secondBody.EnumerateObject().Select(p => p.Name).Should().Equal(firstBody.EnumerateObject().Select(p => p.Name));
+        secondBody.GetProperty("status").GetString().Should().Be(firstBody.GetProperty("status").GetString());
+        var fakeTenantId = secondBody.GetProperty("tenantId").GetGuid();
+        fakeTenantId.Should().NotBe(firstBody.GetProperty("tenantId").GetGuid());
+
+        CapturingIdentityNotificationService.GetExistingAccountNoticeCount(email).Should().Be(noticesBefore + 1);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            (await dbContext.Tenants.AnyAsync(t => t.Id == fakeTenantId || t.Subdomain == secondSubdomain)).Should().BeFalse();
+            (await dbContext.Users.CountAsync(u => u.Email.ToLower() == email)).Should().Be(1);
+        }
+
+        var verify = await client.PostAsJsonAsync("/api/v1/auth/verification/complete", new
+        {
+            tenantId = fakeTenantId,
+            verificationToken = "not-a-real-token"
+        });
+        verify.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await verify.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().Should().Be("Invalid or expired verification token");
+    }
+
+    [Fact]
+    public async Task Register_WithTakenSubdomainAndRegisteredEmail_ShouldReportSubdomainOnly()
+    {
+        using var client = CreateClient();
+        var email = $"both-taken-{Guid.NewGuid():N}@example.com";
+        var subdomain = $"both-taken-{Guid.NewGuid():N}";
+        await SecurityTestHelpers.RegisterPendingTenantAsync(client, email, "Passw0rd!", subdomain);
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Both Taken Co",
+            subdomain,
+            adminEmail = email,
+            adminPassword = "Passw0rd!"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().Should().Be("Subdomain already taken");
+    }
+
+    [Theory]
+    [InlineData("www", "Subdomain is reserved")]
+    [InlineData("acme.corp", "Subdomain may only contain lowercase letters, digits and hyphens, and cannot start or end with a hyphen")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Subdomain must be between 3 and 50 characters")]
+    public async Task Register_ShouldReturnBadRequest_ForInvalidSubdomain(string subdomain, string expectedError)
+    {
+        using var client = CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Invalid Subdomain Co",
+            subdomain,
+            adminEmail = $"invalid-sub-{Guid.NewGuid():N}@example.com",
+            adminPassword = "Passw0rd!"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be(expectedError);
+    }
+
+    [Fact]
+    public async Task Register_ShouldReturnBadRequest_AndCreateNothing_WhenPasswordTooShort()
+    {
+        using var client = CreateClient();
+        var subdomain = $"weak-{Guid.NewGuid():N}";
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            companyName = "Weak Password Co",
+            subdomain,
+            adminEmail = $"weak-{Guid.NewGuid():N}@example.com",
+            adminPassword = "a"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("Admin password must be at least 8 characters");
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await dbContext.Tenants.AnyAsync(t => t.Subdomain == subdomain)).Should().BeFalse();
     }
 
     [Fact]
@@ -354,6 +843,24 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("error").GetString().Should().Be("Invalid credentials");
+    }
+
+    [Fact]
+    public async Task Login_UnknownEmail_ShouldMatchWrongPasswordResponse()
+    {
+        using var client = CreateClient();
+        var email = $"known-{Guid.NewGuid():N}@example.com";
+        await RegisterTenant(client, email, "Passw0rd!");
+
+        var wrongPassword = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "WrongPass123!" });
+        var unknownEmail = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            email = $"unknown-{Guid.NewGuid():N}@example.com",
+            password = "WrongPass123!"
+        });
+
+        unknownEmail.StatusCode.Should().Be(wrongPassword.StatusCode);
+        (await unknownEmail.Content.ReadAsStringAsync()).Should().Be(await wrongPassword.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -704,6 +1211,54 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task InternalBillingCallback_ShouldPreserveRequestCorrelationHeader_AndPersistCallbackCorrelationId()
+    {
+        using var client = CreateClient();
+        const string requestCorrelationId = "corr-internal-callback-quality-gate";
+        client.DefaultRequestHeaders.Add("X-Correlation-ID", requestCorrelationId);
+
+        var auth = await RegisterTenant(client, $"billing-corr-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        Guid subscriptionId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            subscriptionId = db.Subscriptions.Single(x => x.TenantId == auth.TenantId).Id;
+        }
+
+        var payloadCorrelationId = $"corr-payload-{Guid.NewGuid():N}";
+        var payload = new
+        {
+            contractVersion = "2026-03-18",
+            eventId = $"evt-{Guid.NewGuid():N}",
+            eventType = "subscription.renewed",
+            provider = "stripe",
+            providerEventId = $"stripe-{Guid.NewGuid():N}",
+            tenantId = auth.TenantId,
+            subscriptionId,
+            targetPlanId = (string?)null,
+            occurredAtUtc = DateTime.UtcNow,
+            effectiveAtUtc = DateTime.UtcNow.AddDays(30),
+            correlationId = payloadCorrelationId
+        };
+
+        var response = await PostSignedBillingEventAsync(client, payload);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.GetValues("X-Correlation-ID").Single().Should().Be(requestCorrelationId);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("eventId").GetString().Should().Be(payload.eventId);
+        body.GetProperty("tenantId").GetGuid().Should().Be(auth.TenantId);
+        body.GetProperty("subscriptionId").GetGuid().Should().Be(subscriptionId);
+        body.GetProperty("appliedStatus").GetString().Should().Be("Active");
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var inbox = verifyDb.BillingEventInboxes.Single(x => x.EventId == payload.eventId);
+        inbox.CorrelationId.Should().Be(payloadCorrelationId);
+    }
+
+    [Fact]
     public async Task InternalBillingCallback_ShouldRejectCrossTenantSubscriptionMapping()
     {
         using var client = CreateClient();
@@ -961,23 +1516,17 @@ public class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         return await client.SendAsync(request);
     }
 
-    private static async Task<(string Token, string RefreshToken, Guid TenantId)> RegisterTenant(HttpClient client, string email, string password)
+    private async Task BackdateTenantCreationAsync(Guid tenantId, TimeSpan age)
     {
-        var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", new
-        {
-            companyName = $"Company {Guid.NewGuid():N}",
-            subdomain = $"tenant-{Guid.NewGuid():N}",
-            adminEmail = email,
-            adminPassword = password
-        });
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var tenant = await dbContext.Tenants.SingleAsync(t => t.Id == tenantId);
+        tenant.CreatedAt = DateTime.UtcNow - age;
+        await dbContext.SaveChangesAsync();
+    }
 
-        registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var body = await registerResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var token = body.GetProperty("token").GetString()!;
-        var refreshToken = body.GetProperty("refreshToken").GetString()!;
-        var tenantId = body.GetProperty("tenantId").GetGuid();
-
-        return (token, refreshToken, tenantId);
+    private static Task<(string Token, string RefreshToken, Guid TenantId)> RegisterTenant(HttpClient client, string email, string password)
+    {
+        return SecurityTestHelpers.RegisterTenantAsync(client, email, password);
     }
 }

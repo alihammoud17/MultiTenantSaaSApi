@@ -1,0 +1,29 @@
+---
+# Debian 12's Redis 7.0 is sufficient for the API's rate-limit counters.
+- name: Install Redis
+  ansible.builtin.apt:
+    name: redis-server
+    state: present
+
+- name: Configure Redis
+  ansible.builtin.lineinfile:
+    path: "{{ redis_config_file }}"
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - regexp: '^bind\s'
+      line: bind 127.0.0.1 -::1
+    - regexp: '^port\s'
+      line: port {{ app_redis_port }}
+    - regexp: '^#?\s*requirepass\s'
+      line: requirepass {{ vault_redis_password }}
+  loop_control:
+    label: "{{ item.regexp }}"
+  no_log: true
+  notify: Restart redis
+
+- name: Start Redis
+  ansible.builtin.systemd_service:
+    name: redis-server
+    enabled: true
+    state: started

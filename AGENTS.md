@@ -6,19 +6,28 @@ This repository contains a multi-tenant SaaS platform with:
 - a Node.js BillingService as the provider-facing billing companion service
 
 ## Current project status
-V1, V2, and V3 are complete.
+V1, V2, and V3 are complete. V4 established the current pre-deployment, code-first engineering maturity baseline; historical phase plans are archived under `docs/archive/` and are not active sources of truth.
 
-## Active V4 direction (pre-deployment / code-first)
-V4 is the active execution phase and is focused on pre-deployment engineering maturity.
+Use `README.md`, `BillingService/README.md`, and the current architecture, operations, contracts, and decisions documents under `docs/` alongside the implementation to establish current behavior. Completed phases do not imply production readiness or live billing integration.
 
-### V4 north star
+## Agent working environment
+- The maintainer uses Codex in the desktop application and sometimes the Visual Studio Code extension; browser-hosted Codex is no longer the working environment.
+- Work from the active local checkout. Inspect the current branch and worktree before editing, and preserve unrelated local changes.
+- Do not assume a browser/cloud container, a Linux host, preinstalled tools, or access to local services. Check the available SDKs, tools, and connections before validation.
+- Local development and the Ubuntu deployment target are separate environments. Keep commands portable where practical and report environment-specific blockers.
+- Read `BillingService/AGENTS.md` as well when working under `BillingService/`.
+
+## Current direction (pre-deployment / code-first)
+Current work is focused on pre-deployment engineering maturity.
+
+### North star
 Build a production-like local platform that is:
 - code-first
 - pre-deployment
 - deterministic to validate locally
 - contract-safe and tenant-safe by default
 
-### V4 priorities
+### Priorities
 - deterministic local bootstrap and smoke validation workflows
 - cross-service contract conformance tests (.NET API <-> BillingService)
 - replay/idempotency fixture-driven billing validation
@@ -91,13 +100,13 @@ Build a production-like local platform that is:
 - If subscription or invoice data is mirrored across services, ownership and synchronization direction must be explicit in code and docs.
 - Avoid ambiguous write ownership.
 
-## V4 execution style
-For any non-trivial V4 task:
+## Execution style
+For any non-trivial task:
 1. Read this file and inspect the current implementation first.
 2. Review the relevant docs before coding.
 3. Plan the smallest safe thin vertical slice first.
 4. Implement only the requested scope.
-5. Add or update automated tests.
+5. Add or update automated tests when behavior changes; for documentation-only changes, verify instructions against code, scripts, and referenced paths.
 6. Run explicit local validation commands and record results.
 7. Update documentation for that completed iteration.
 8. Summarize changed files, assumptions, risks, and follow-up work.
@@ -105,10 +114,13 @@ For any non-trivial V4 task:
 ## Required documentation workflow
 Every completed iteration must update docs as applicable.
 
-Always review and update:
+Review the following and update those affected by the change; do not make unrelated documentation edits solely to touch each file:
 - README.md
-- docs/V4-Implementation-Backlog.md
-- docs/Internal-Billing-Contract.md if contracts changed
+- docs/architecture.md when system behavior or ownership changed
+- docs/operations.md when configuration or operating procedures changed
+- docs/contracts.md if contracts changed
+- docs/decisions.md when a durable decision or unresolved deployment choice changed
+- docs/CHANGELOG.md for completed milestone-level work
 - BillingService/README.md if BillingService changed
 - any feature-specific docs added under docs/
 
@@ -129,6 +141,10 @@ Add or update tests for:
 ## Validation
 Run the relevant commands after changes.
 
+For documentation-only changes, run `git diff --check` and verify referenced paths and commands against the repository. Application builds/tests are not required unless runtime code or configuration also changes. Report what was and was not run.
+
+The standardized local workflow is `scripts/dev.sh` (`bootstrap`, `seed`, `run`, `smoke`, `test`). `reset` drops the local database and clears workflow state; use it only when that reset is within the requested scope. Smoke checks cover placeholder billing acceptance, not live provider-to-API delivery.
+
 ### For .NET work
 Run:
 - dotnet --info
@@ -141,15 +157,17 @@ Run:
 - run the project-specific install/build/test commands documented in BillingService
 - if commands change, update BillingService/README.md
 
+The current prerequisites are .NET 10, Node.js 22 or later, PostgreSQL 16 or later, and Redis 7 or later. Do not assume the temporary `/tmp/dotnet-tools/dotnet-ef` installation exists on the local machine. All `scripts/local/` scripts read `DOTNET_EF_BIN` and skip the EF step with a warning when it is missing; manual EF commands can use an available `dotnet ef` installation.
+
 ## EF Core
 When a schema/model change requires a migration, you may use:
-- /tmp/dotnet-tools/dotnet-ef migrations add <MigrationName>
-- /tmp/dotnet-tools/dotnet-ef database update
+- /tmp/dotnet-tools/dotnet-ef migrations add <MigrationName> --project Infrastructure --startup-project Presentation
+- /tmp/dotnet-tools/dotnet-ef database update --project Infrastructure --startup-project Presentation
 
 If the DbContext is not in the startup project, specify:
 - --project <path-to-ef-project>
 - --startup-project <path-to-startup-project>
-<path-to-startup-project> is normally the Infrastructure project.
+The DbContext and migrations are in `Infrastructure`; the startup host is `Presentation`.
 
 If schema changes are introduced:
 - add the migration
@@ -166,7 +184,7 @@ If schema changes are introduced:
 - Keep local development and deterministic testability in mind.
 
 ## Observability expectations
-For V4 work:
+For pre-deployment work:
 - emit structured logs
 - include correlation or trace identifiers where possible
 - log lifecycle transitions and rejection reasons clearly
@@ -179,13 +197,27 @@ For V4 work:
 - Do not log secrets, raw tokens, or signing secrets.
 - Document any new configuration keys or environment variables.
 
+## Docker and deployment rules
+- Do not commit real secrets, passwords, tokens, API keys, JWT secrets, provider secrets, or database passwords.
+- Use .env.example files only for documentation.
+- Runtime secrets must stay outside the repository, preferably under /etc/multitenant-saas-api/.
+- Prefer Docker Compose for the local Ubuntu VM deployment.
+- Do not introduce Kubernetes yet.
+- Do not remove existing local scripts unless explicitly requested.
+- Do not change application behavior unless deployment requires it.
+- Keep Dockerfiles multi-stage where possible.
+- The existing Compose profile targets a local Ubuntu VM; Ubuntu 24.04 is the intended local VM target, not an assumption about the developer's host OS.
+- A future VPS may reuse this structure, but deployment topology, TLS/DNS, secret storage, and recovery choices remain open in `docs/decisions.md`.
+- Always report validation commands executed and their result.
+- If a command cannot be executed in the Codex environment, explain why.
+
 ## Done when
 A task is complete only when:
 - the requested behavior is implemented
 - the change respects system boundaries
 - thin-slice scope was maintained (no broad refactor)
 - explicit validation was executed and results were reported
-- tests pass, or failures are clearly explained
-- docs/readme are updated for that iteration
+- relevant tests pass, or failures/skipped checks are clearly explained
+- affected docs/readme are updated for that iteration
 - changed files are summarized
 - remaining risks, assumptions, and follow-up work are listed explicitly

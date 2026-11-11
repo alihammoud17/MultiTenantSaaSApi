@@ -18,11 +18,17 @@ namespace Tests.Integration;
 
 public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private readonly SqliteConnection _connection = new("DataSource=:memory:");
+    // Tenants resolve from hosts of the form <subdomain>.example.test in integration tests.
+    public const string TenantBaseDomain = "example.test";
+    public const string TenantOperationsSecret = "tenant-operations-test-secret";
+
+    private readonly string _connectionString = $"Data Source=file:api-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
+    private readonly SqliteConnection _keepAliveConnection;
 
     public ApiWebApplicationFactory()
     {
-        _connection.Open();
+        _keepAliveConnection = new SqliteConnection(_connectionString);
+        _keepAliveConnection.Open();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -40,7 +46,10 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 ["BillingIntegration:SharedSecret"] = "billing-integration-test-secret",
                 ["BillingIntegration:AllowedClockSkewMinutes"] = "5",
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=unused;Username=unused;Password=unused",
-                ["Redis:ConnectionString"] = "localhost:6379"
+                ["Redis:ConnectionString"] = "localhost:6379",
+                ["TenantResolution:BaseDomain"] = TenantBaseDomain,
+                ["TenantOperations:SharedSecret"] = TenantOperationsSecret,
+                ["TenantOperations:AllowedClockSkewMinutes"] = "5"
             };
 
             configBuilder.AddInMemoryCollection(settings);
@@ -55,11 +64,22 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<IRateLimitService>();
             services.RemoveAll<DbConnection>();
 
-            services.AddSingleton<DbConnection>(_connection);
+            services.AddScoped<DbConnection>(_ =>
+            {
+                var connection = new SqliteConnection(_connectionString);
+                connection.Open();
+                return connection;
+            });
             services.AddDbContext<ApplicationDbContext>((sp, options) =>
                 options.UseSqlite(sp.GetRequiredService<DbConnection>()));
 
             services.AddScoped<IRateLimitService, AlwaysAllowRateLimitService>();
+
+            services.RemoveAll<IIdentityNotificationService>();
+            services.AddSingleton<IIdentityNotificationService, CapturingIdentityNotificationService>();
+
+            services.RemoveAll<ICorsOriginCache>();
+            services.AddSingleton<ICorsOriginCache, InMemoryCorsOriginCache>();
         });
     }
 
@@ -80,7 +100,7 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 
         if (disposing)
         {
-            _connection.Dispose();
+            _keepAliveConnection.Dispose();
         }
     }
 

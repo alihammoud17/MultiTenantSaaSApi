@@ -1,5 +1,5 @@
 using System.Globalization;
-using Domain.Entites;
+using Domain.Entities;
 using Domain.Interfaces;
 using Domain.Outputs;
 using Infrastructure.Data;
@@ -13,6 +13,10 @@ public class EntitlementEvaluator : IEntitlementEvaluator
     private readonly ApplicationDbContext _dbContext;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
+    // Results already resolved in this HTTP request, keyed by tenant and entitlement key. The evaluator is scoped, so
+    // this lives for one request; outside a request (no HttpContext) nothing is memoized and every call re-reads.
+    private readonly Dictionary<(Guid TenantId, string EntitlementKey), EntitlementEvaluationResult> _requestResults = new();
+
     public EntitlementEvaluator(ApplicationDbContext dbContext, IHttpContextAccessor httpContextAccessor)
     {
         _dbContext = dbContext;
@@ -21,94 +25,163 @@ public class EntitlementEvaluator : IEntitlementEvaluator
 
     public async Task<EntitlementEvaluationResult> EvaluateAsync(Guid tenantId, string entitlementKey, CancellationToken cancellationToken = default)
     {
+        var results = await EvaluateManyAsync(tenantId, [entitlementKey], cancellationToken);
+        return results[entitlementKey];
+    }
+
+    public async Task<IReadOnlyDictionary<string, EntitlementEvaluationResult>> EvaluateManyAsync(
+        Guid tenantId,
+        IEnumerable<string> entitlementKeys,
+        CancellationToken cancellationToken = default)
+    {
+        var keys = entitlementKeys.Distinct(StringComparer.Ordinal).ToArray();
+        if (keys.Length == 0)
+        {
+            return new Dictionary<string, EntitlementEvaluationResult>();
+        }
+
+        if (_httpContextAccessor.HttpContext is null)
+        {
+            return await EvaluateFromDatabaseAsync(tenantId, keys, cancellationToken);
+        }
+
+        var results = new Dictionary<string, EntitlementEvaluationResult>(keys.Length, StringComparer.Ordinal);
+        var missingKeys = new List<string>();
+        foreach (var key in keys)
+        {
+            if (_requestResults.TryGetValue((tenantId, key), out var cached))
+                results[key] = cached;
+            else
+                missingKeys.Add(key);
+        }
+
+        if (missingKeys.Count > 0)
+        {
+            foreach (var (key, result) in await EvaluateFromDatabaseAsync(tenantId, missingKeys.ToArray(), cancellationToken))
+            {
+                _requestResults[(tenantId, key)] = result;
+                results[key] = result;
+            }
+        }
+
+        return results;
+    }
+
+    private async Task<IReadOnlyDictionary<string, EntitlementEvaluationResult>> EvaluateFromDatabaseAsync(
+        Guid tenantId,
+        string[] keys,
+        CancellationToken cancellationToken)
+    {
         var evaluatedAtUtc = DateTime.UtcNow;
         var correlationId = _httpContextAccessor.HttpContext?.TraceIdentifier;
 
-        var subscription = await _dbContext.Subscriptions
+        // One round trip for the subscription plus every requested key's plan value and active overrides. Both
+        // collections are correlated to the subscription row (x.PlanId, x.TenantId) so they translate to joins; an
+        // uncorrelated collection needs SQL APPLY, which SQLite (the test provider) cannot run.
+        var subscriptionSnapshot = await _dbContext.Subscriptions
             .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
-
-        if (subscription is null)
-        {
-            return new EntitlementEvaluationResult(
-                tenantId,
-                entitlementKey,
-                null,
-                false,
-                "DefaultDeny",
-                "MissingSubscription",
-                evaluatedAtUtc,
-                correlationId);
-        }
-
-        var definition = await _dbContext.EntitlementDefinitions
-            .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Key == entitlementKey && x.IsActive, cancellationToken);
-
-        string? resolvedValue = definition?.DefaultValue;
-        var resolvedFrom = definition?.DefaultValue is null ? "DefaultDeny" : "Default";
-
-        var planValue = await _dbContext.PlanEntitlements
-            .AsNoTracking()
-            .Where(x => x.PlanId == subscription.PlanId && x.EntitlementKey == entitlementKey)
-            .Select(x => x.Value)
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => new
+            {
+                x.Status,
+                PlanValues = _dbContext.PlanEntitlements
+                    .Where(pe => pe.PlanId == x.PlanId && keys.Contains(pe.EntitlementKey))
+                    .Select(pe => new { pe.EntitlementKey, pe.Value })
+                    .ToList(),
+                Overrides = _dbContext.TenantEntitlementOverrides
+                    .Where(o => o.TenantId == x.TenantId && keys.Contains(o.EntitlementKey))
+                    .Where(o => o.EffectiveFromUtc <= evaluatedAtUtc)
+                    .Where(o => o.EffectiveToUtc == null || o.EffectiveToUtc > evaluatedAtUtc)
+                    .Select(o => new { o.EntitlementKey, o.EffectiveFromUtc, o.Value })
+                    .ToList()
+            })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(planValue))
+        if (subscriptionSnapshot is null)
         {
-            resolvedValue = planValue;
-            resolvedFrom = "Plan";
+            return keys.ToDictionary(
+                key => key,
+                key => new EntitlementEvaluationResult(
+                    tenantId,
+                    key,
+                    null,
+                    false,
+                    "DefaultDeny",
+                    "MissingSubscription",
+                    evaluatedAtUtc,
+                    correlationId),
+                StringComparer.Ordinal);
         }
+
+        var definitions = await _dbContext.EntitlementDefinitions
+            .AsNoTracking()
+            .Where(x => keys.Contains(x.Key) && x.IsActive)
+            .ToDictionaryAsync(x => x.Key, StringComparer.Ordinal, cancellationToken);
 
         var addOnContributions = await _dbContext.TenantAddOnAssignments
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.Status == TenantAddOnAssignmentStatus.Active)
             .Where(x => x.EffectiveFromUtc <= evaluatedAtUtc)
             .Where(x => x.EffectiveToUtc == null || x.EffectiveToUtc > evaluatedAtUtc)
-            .Join(_dbContext.AddOnEntitlements.AsNoTracking().Where(x => x.EntitlementKey == entitlementKey),
+            .Join(_dbContext.AddOnEntitlements.AsNoTracking().Where(x => keys.Contains(x.EntitlementKey)),
                 assignment => assignment.AddOnId,
                 addOnEntitlement => addOnEntitlement.AddOnId,
                 (assignment, addOnEntitlement) => new
                 {
                     assignment.Id,
+                    addOnEntitlement.EntitlementKey,
                     addOnEntitlement.ValueMode,
                     addOnEntitlement.Value
                 })
             .OrderBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        foreach (var contribution in addOnContributions)
+        var subscriptionStatus = subscriptionSnapshot.Status.ToString();
+        var results = new Dictionary<string, EntitlementEvaluationResult>(keys.Length, StringComparer.Ordinal);
+        foreach (var key in keys)
         {
-            resolvedValue = ApplyAddOnContribution(resolvedValue, contribution.Value, contribution.ValueMode, definition?.ValueType);
-            resolvedFrom = "AddOn";
+            var definition = definitions.GetValueOrDefault(key);
+
+            string? resolvedValue = definition?.DefaultValue;
+            var resolvedFrom = definition?.DefaultValue is null ? "DefaultDeny" : "Default";
+
+            var planValue = subscriptionSnapshot.PlanValues.FirstOrDefault(x => x.EntitlementKey == key)?.Value;
+            if (!string.IsNullOrWhiteSpace(planValue))
+            {
+                resolvedValue = planValue;
+                resolvedFrom = "Plan";
+            }
+
+            // Ordered by assignment id in the query; filtering keeps that order per key.
+            foreach (var contribution in addOnContributions.Where(x => x.EntitlementKey == key))
+            {
+                resolvedValue = ApplyAddOnContribution(resolvedValue, contribution.Value, contribution.ValueMode, definition?.ValueType);
+                resolvedFrom = "AddOn";
+            }
+
+            // Only the most recent active override counts, even when its value is blank.
+            var overrideValue = subscriptionSnapshot.Overrides
+                .Where(x => x.EntitlementKey == key)
+                .MaxBy(x => x.EffectiveFromUtc)?
+                .Value;
+            if (!string.IsNullOrWhiteSpace(overrideValue))
+            {
+                resolvedValue = overrideValue;
+                resolvedFrom = "Override";
+            }
+
+            results[key] = new EntitlementEvaluationResult(
+                tenantId,
+                key,
+                resolvedValue,
+                IsAllowed(resolvedValue, definition?.ValueType),
+                resolvedFrom,
+                subscriptionStatus,
+                evaluatedAtUtc,
+                correlationId);
         }
 
-        var overrideValue = await _dbContext.TenantEntitlementOverrides
-            .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.EntitlementKey == entitlementKey)
-            .Where(x => x.EffectiveFromUtc <= evaluatedAtUtc)
-            .Where(x => x.EffectiveToUtc == null || x.EffectiveToUtc > evaluatedAtUtc)
-            .OrderByDescending(x => x.EffectiveFromUtc)
-            .Select(x => x.Value)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (!string.IsNullOrWhiteSpace(overrideValue))
-        {
-            resolvedValue = overrideValue;
-            resolvedFrom = "Override";
-        }
-
-        var isAllowed = IsAllowed(resolvedValue, definition?.ValueType);
-
-        return new EntitlementEvaluationResult(
-            tenantId,
-            entitlementKey,
-            resolvedValue,
-            isAllowed,
-            resolvedFrom,
-            subscription.Status.ToString(),
-            evaluatedAtUtc,
-            correlationId);
+        return results;
     }
 
     private static string? ApplyAddOnContribution(

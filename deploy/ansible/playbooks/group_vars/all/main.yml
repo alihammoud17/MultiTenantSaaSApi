@@ -1,0 +1,20 @@
+---
+# Settings shared by every inventory. Inventory group_vars hold only what differs per
+# environment (inventories/<env>/group_vars/all/main.yml) and the vault (vault.yml).
+# Playbook group_vars take precedence over inventory group_vars, so don't redefine these there.
+
+app_name: multitenant-saas-api
+# Releases and the `current` symlinks live here; runtime env files live outside it.
+app_root: /opt/multitenant-saas-api
+app_config_dir: /etc/multitenant-saas-api
+
+app_db_name: saasapi
+app_db_user: saasapi_user
+
+# Loopback ports. Only NGINX (80) listens on a public interface.
+app_api_port: 8080
+app_billing_port: 3001
+app_redis_port: 6379
+
+app_api_user: mtsaas-api
+app_billing_user: mtsaas-billing

@@ -1,4 +1,4 @@
-﻿using Domain.Entites;
+﻿using Domain.Entities;
 using Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -77,6 +77,7 @@ namespace Infrastructure.Data
         public DbSet<UserMfaEnrollmentChallenge> UserMfaEnrollmentChallenges => Set<UserMfaEnrollmentChallenge>();
         public DbSet<UserStepUpSession> UserStepUpSessions => Set<UserStepUpSession>();
         public DbSet<TenantWebhookEndpoint> TenantWebhookEndpoints => Set<TenantWebhookEndpoint>();
+        public DbSet<TenantAllowedOrigin> TenantAllowedOrigins => Set<TenantAllowedOrigin>();
         public DbSet<OutboundWebhookEvent> OutboundWebhookEvents => Set<OutboundWebhookEvent>();
         public DbSet<OutboundWebhookDelivery> OutboundWebhookDeliveries => Set<OutboundWebhookDelivery>();
 
@@ -91,6 +92,7 @@ namespace Infrastructure.Data
                 entity.HasIndex(e => e.Subdomain).IsUnique();
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.Subdomain).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.SuspensionReason).HasMaxLength(500);
             });
 
             // User
@@ -98,6 +100,7 @@ namespace Infrastructure.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.TenantId, e.Email }).IsUnique();
+                entity.HasIndex(e => e.Email).IsUnique();
                 entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
                 entity.Property(e => e.Role).IsRequired().HasMaxLength(32);
                 entity.Property(e => e.MfaSecret).HasMaxLength(128);
@@ -184,6 +187,7 @@ namespace Infrastructure.Data
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.EventId).IsUnique();
                 entity.HasIndex(e => new { e.TenantId, e.SubscriptionId });
+                entity.HasIndex(e => new { e.TenantId, e.EventType, e.OccurredAtUtc });
                 entity.Property(e => e.EventId).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.ContractVersion).IsRequired().HasMaxLength(32);
                 entity.Property(e => e.EventType).IsRequired().HasMaxLength(80);
@@ -201,7 +205,21 @@ namespace Infrastructure.Data
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(120);
                 entity.Property(e => e.CallbackUrl).IsRequired().HasMaxLength(500);
                 entity.Property(e => e.SigningSecret).IsRequired().HasMaxLength(256);
+                entity.Property(e => e.NextSigningSecret).HasMaxLength(256);
                 entity.Property(e => e.SubscribedEventTypes).IsRequired().HasMaxLength(500);
+            });
+
+            // Not tenant query-filtered: CORS evaluation matches origins across tenants before any tenant is resolved.
+            // Every tenant-facing query must filter on TenantId explicitly.
+            builder.Entity<TenantAllowedOrigin>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.Origin }).IsUnique();
+                entity.Property(e => e.Origin).IsRequired().HasMaxLength(255);
+                entity.HasOne<Tenant>()
+                    .WithMany()
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             builder.Entity<OutboundWebhookEvent>(entity =>
@@ -405,17 +423,17 @@ namespace Infrastructure.Data
             //});
 
             // AuditLog
-            if (_tenantContext != null)
-                builder.Entity<AuditLog>(entity =>
-                {
-                    entity.HasKey(e => e.Id);
-                    entity.HasIndex(e => new { e.TenantId, e.Timestamp });
-                    entity.HasIndex(e => e.UserId);
+            builder.Entity<AuditLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.TenantId, e.Timestamp });
+                entity.HasIndex(e => new { e.TenantId, e.Action, e.Timestamp });
 
-                    // Also filtered by tenant
-                    entity.HasQueryFilter(e =>
-                        _tenantContext == null || e.TenantId == _tenantContext.TenantId);
-                });
+                if (_tenantContext != null)
+                {
+                    entity.HasQueryFilter(e => e.TenantId == _tenantContext.TenantId);
+                }
+            });
 
             // Seed Plans
             builder.Entity<Plan>().HasData(
@@ -521,6 +539,18 @@ namespace Infrastructure.Data
                     DefaultValue = "false",
                     CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
                     UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new EntitlementDefinition
+                {
+                    Key = "feature.security.cors_origins.manage",
+                    DisplayName = "Tenant CORS origin management",
+                    Description = "Allows tenant administrators to register the browser origins allowed to call the API cross-origin.",
+                    ValueType = EntitlementValueType.Boolean,
+                    Category = EntitlementCategory.Feature,
+                    IsActive = true,
+                    DefaultValue = "false",
+                    CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc)
                 },
                 new EntitlementDefinition
                 {
@@ -655,6 +685,24 @@ namespace Infrastructure.Data
                     Source = EntitlementSourceType.PlanDefault,
                     CreatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc),
                     UpdatedUtc = new DateTime(2026, 4, 9, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-free",
+                    EntitlementKey = "feature.security.cors_origins.manage",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PlanEntitlement
+                {
+                    PlanId = "plan-pro",
+                    EntitlementKey = "feature.security.cors_origins.manage",
+                    Value = "true",
+                    Source = EntitlementSourceType.PlanDefault,
+                    CreatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedUtc = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc)
                 },
                 new PlanEntitlement
                 {

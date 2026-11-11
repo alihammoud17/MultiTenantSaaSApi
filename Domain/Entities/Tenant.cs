@@ -1,0 +1,38 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Domain.Entities
+{
+    public class Tenant
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Subdomain { get; set; } = string.Empty;
+        public TenantStatus Status { get; set; } = TenantStatus.Active;
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+
+        // When an operator last suspended or reactivated the tenant; signed operator requests older than this are rejected.
+        public DateTime? StatusChangedAtUtc { get; set; }
+        public string? SuspensionReason { get; set; }
+
+        // Navigation
+        public List<User> Users { get; set; } = [];
+        public List<RefreshToken> RefreshTokens { get; set; } = [];
+        public List<Role> Roles { get; set; } = [];
+        public List<UserRole> UserRoles { get; set; } = [];
+        public Subscription? Subscription { get; set; }
+    }
+
+    public enum TenantStatus
+    {
+        Active,
+        Suspended,
+        Deleted,
+        // Self-registered tenant whose admin has not verified their email yet. Stored as an int, so keep it last.
+        PendingVerification
+    }
+}

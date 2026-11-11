@@ -1,6 +1,6 @@
 using Application.Services;
 using Domain.DTOs;
-using Domain.Entites;
+using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Data;
 using Microsoft.Data.Sqlite;
@@ -63,4 +63,81 @@ public class OutboundWebhookInfrastructureTests
         dbContext.OutboundWebhookEvents.Count().Should().Be(1);
         dbContext.OutboundWebhookDeliveries.Count().Should().Be(1);
     }
+
+    [Fact]
+    public async Task RotateSigningSecretAsync_ShouldSetPendingSecretWithoutReplacingActive()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options;
+        await using var dbContext = new ApplicationDbContext(options);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var tenantId = Guid.NewGuid();
+        dbContext.Tenants.Add(new Tenant { Id = tenantId, Name = "Tenant", Subdomain = "tenant", Status = TenantStatus.Active });
+        var endpoint = new TenantWebhookEndpoint
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = "main",
+            CallbackUrl = "https://example.com/webhooks",
+            SigningSecret = "secret-current",
+            SigningSecretIssuedAtUtc = DateTime.UtcNow.AddDays(-3),
+            SubscribedEventTypes = "*",
+            IsActive = true,
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow
+        };
+        dbContext.TenantWebhookEndpoints.Add(endpoint);
+        await dbContext.SaveChangesAsync();
+
+        var manager = new WebhookEndpointManagementService(dbContext, new WebhookEndpointSecretIssuer());
+        var result = await manager.RotateSigningSecretAsync(tenantId, endpoint.Id);
+
+        result.Should().NotBeNull();
+        result!.HasPendingSecretRotation.Should().BeTrue();
+        result.SigningSecret.Should().NotBeNullOrWhiteSpace();
+        result.SigningSecret.Should().NotBe(endpoint.SigningSecret);
+        endpoint.SigningSecret.Should().Be("secret-current");
+        endpoint.NextSigningSecret.Should().Be(result.SigningSecret);
+        endpoint.NextSigningSecretIssuedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task PublishAsync_WithManagedEndpointAndPendingRotation_ShouldUseActiveEndpointAndCreateDelivery()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options;
+        await using var dbContext = new ApplicationDbContext(options);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var tenantId = Guid.NewGuid();
+        dbContext.Tenants.Add(new Tenant { Id = tenantId, Name = "Tenant", Subdomain = "tenant", Status = TenantStatus.Active });
+        await dbContext.SaveChangesAsync();
+
+        var manager = new WebhookEndpointManagementService(dbContext, new WebhookEndpointSecretIssuer());
+        var created = await manager.CreateEndpointAsync(tenantId, "managed", "https://example.com/managed", "*");
+        var rotate = await manager.RotateSigningSecretAsync(tenantId, created.Endpoint.Id);
+
+        rotate.Should().NotBeNull();
+        rotate!.HasPendingSecretRotation.Should().BeTrue();
+
+        var publisher = new OutboundWebhookPublisher(dbContext);
+        await publisher.PublishAsync(new OutboundWebhookPublishRequest(
+            tenantId,
+            "tenant.subscription.updated",
+            new { subscriptionId = Guid.NewGuid(), status = "Active" },
+            "corr-managed-1",
+            DateTime.UtcNow,
+            "source-managed-1"));
+
+        var delivery = dbContext.OutboundWebhookDeliveries.Single();
+        delivery.EndpointId.Should().Be(created.Endpoint.Id);
+
+        var endpoint = dbContext.TenantWebhookEndpoints.Single(x => x.Id == created.Endpoint.Id);
+        endpoint.SigningSecret.Should().Be(created.SigningSecret);
+        endpoint.NextSigningSecret.Should().Be(rotate.SigningSecret);
+    }
+
 }

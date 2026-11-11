@@ -1,0 +1,36 @@
+# {{ ansible_managed }}
+[Unit]
+Description=MultiTenantSaaSApi BillingService
+After=network-online.target mtsaas-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ app_billing_user }}
+Group={{ app_billing_user }}
+WorkingDirectory={{ billing_home }}/current
+EnvironmentFile={{ billing_env_file }}
+ExecStart=/usr/bin/node {{ billing_home }}/current/dist/src/index.js
+# The workflow queue is a JSON file; it must survive restarts and releases.
+StateDirectory={{ billing_state_directory }}
+StateDirectoryMode=0700
+Restart=always
+RestartSec=5
+SyslogIdentifier={{ billing_service }}
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

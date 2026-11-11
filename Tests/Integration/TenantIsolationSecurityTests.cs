@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Domain.Entites;
+using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +16,56 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
     public TenantIsolationSecurityTests(ApiWebApplicationFactory factory)
     {
         _factory = factory;
+    }
+
+    [Fact]
+    public async Task SuspendingTenantA_ShouldNotAffectTenantBSessions()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"suspend-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"suspend-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        (await SecurityTestHelpers.SuspendTenantAsync(client, tenantA.TenantId)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using (var sessions = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth/sessions"))
+        {
+            sessions.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tenantB.Token);
+            (await client.SendAsync(sessions)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        using (var admin = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/tenant"))
+        {
+            admin.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tenantB.Token);
+            (await client.SendAsync(admin)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        var refreshB = await client.PostAsJsonAsync("/api/v1/auth/refresh", new { tenantId = tenantB.TenantId, refreshToken = tenantB.RefreshToken });
+        refreshB.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.Tenants.Single(t => t.Id == tenantB.TenantId).Status.Should().Be(TenantStatus.Active);
+    }
+
+    [Fact]
+    public async Task RegistrationVerificationToken_ShouldNotActivateAnotherPendingTenant()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var tenantA = await SecurityTestHelpers.RegisterPendingTenantAsync(client, $"pending-a-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"pending-a-{Guid.NewGuid():N}");
+        var tenantB = await SecurityTestHelpers.RegisterPendingTenantAsync(client, $"pending-b-{Guid.NewGuid():N}@example.com", "Passw0rd!", $"pending-b-{Guid.NewGuid():N}");
+
+        var crossTenant = await client.PostAsJsonAsync("/api/v1/auth/verification/complete", new
+        {
+            tenantId = tenantB,
+            verificationToken = CapturingIdentityNotificationService.GetLatestVerificationToken(tenantA)
+        });
+
+        crossTenant.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.Tenants.Single(t => t.Id == tenantA).Status.Should().Be(TenantStatus.PendingVerification);
+        db.Tenants.Single(t => t.Id == tenantB).Status.Should().Be(TenantStatus.PendingVerification);
+        db.Users.Where(u => u.TenantId == tenantA || u.TenantId == tenantB).Should().OnlyContain(u => u.EmailVerifiedAt == null);
     }
 
     [Fact]
@@ -178,5 +228,37 @@ public class TenantIsolationSecurityTests : IClassFixture<ApiWebApplicationFacto
         tenantBSubscription.Status.Should().Be(SubscriptionStatus.Active);
 
         db.BillingEventInboxes.Any(x => x.EventId == crossTenantPayload.eventId).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task WebhookEndpointManagement_ShouldEnforceTenantIsolation()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-wh-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"iso-wh-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantB.Token);
+        var createResponse = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new
+        {
+            name = "billing",
+            callbackUrl = "https://example.com/webhooks/tenant-b",
+            subscribedEventTypes = "*"
+        });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var endpointId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("endpoint").GetProperty("id").GetGuid();
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantA.Token);
+        var updateResponse = await client.PutAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}", new
+        {
+            name = "hijack",
+            callbackUrl = "https://example.com/hijack",
+            subscribedEventTypes = "*"
+        });
+        var rotateResponse = await client.PostAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}/rotate-secret", null);
+        var deleteResponse = await client.DeleteAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}");
+
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        rotateResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

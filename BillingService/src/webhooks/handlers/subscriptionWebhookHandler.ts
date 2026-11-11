@@ -1,5 +1,6 @@
 import type { BillingProviderAdapter } from '../../shared/types.ts';
 import { SubscriptionSyncJob } from '../../jobs/subscriptionSyncJob.ts';
+import { sanitizeDiagnosticText } from '../../observability/safeDiagnostics.ts';
 
 export class SubscriptionWebhookHandler {
   private readonly adapter: BillingProviderAdapter;
@@ -18,12 +19,13 @@ export class SubscriptionWebhookHandler {
     const result = await this.adapter.verifyAndNormalizeWebhook(input);
 
     if (!result.accepted || !result.normalizedEvent) {
+      const reason = sanitizeDiagnosticText(result.reason ?? 'Webhook ignored.');
       return {
         status: 202,
         body: {
           accepted: false,
           provider: this.adapter.name,
-          reason: result.reason ?? 'Webhook ignored.'
+          reason
         }
       };
     }

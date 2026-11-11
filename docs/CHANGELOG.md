@@ -1,0 +1,55 @@
+# Changelog
+
+This is a milestone-level implementation history, not a release promise or active backlog. Exact historical plans and completion notes are retained in [the archive](archive/README.md).
+
+## V4.1 — identity and CORS hardening, the v1 deployment, critical-path test coverage
+
+Branch `v4.1`, cut on 2026-11-11 from commit `585825c` (`fix: align local dev scripts with the current repo`). It contains every change in this section, up to and including the local dev script fixes. The MCP endpoint and webhook endpoint auditing came after it and are not in this branch. The release has no tag yet; per [Decisions](decisions.md#public-apis-use-url-segment-versions), a tag, not the branch name, identifies a release.
+
+- Local dev script fixes. `scripts/dev.sh run` now binds the API to `API_URL` (`--urls`); before, the launch profile put it on `5238` while `smoke` checked `5000`. `run` also fails early when PostgreSQL or Redis is unreachable. `test` no longer exits when `/tmp/dotnet-tools/dotnet-ef` is missing, now runs the BillingService typecheck, and warns when Docker is unreachable. `smoke` parses JSON with Node instead of Python and requires `202` from the placeholder webhook endpoint.
+- Test coverage for the critical paths (tenant resolution, entitlement evaluation, auth brute-force protection, outbound webhooks and secret rotation), with Testcontainers PostgreSQL and Redis fixtures; see [Operations](operations.md#validation-and-tests). Fixes found along the way:
+  - The plan-aware monthly limiter read the Redis counter before incrementing it, so concurrent requests could all pass the limit. It now increments atomically and undoes the increment of a rejected call.
+  - One outbound-webhook endpoint with an unparsable callback URL aborted the dispatcher's whole batch, so other tenants' deliveries in it were re-sent every pass. A delivery error longer than the 1000-character `LastError` column made the batch save fail on PostgreSQL with the same effect. Both now fail only their own delivery.
+  - Webhook endpoint create/update now requires an absolute `http`/`https` callback URL and enforces field lengths (`400`), and returns `409` instead of `500` for a duplicate name.
+  - MFA code verification (`mfa/enroll/verify`, `mfa/step-up`) is now limited to 5 attempts per 5 minutes per user, and the anonymous account-recovery routes (verification, password reset, invite acceptance) to 10 requests per minute per client. The ASP.NET rate limiter now runs after authentication.
+- Entitlement evaluation follow-ups from the V4 tech-debt plan: `IEntitlementEvaluator.EvaluateManyAsync` resolves several keys with the same three queries as one, `EvaluateAsync` now runs through it, and results are memoized for the rest of an HTTP request (never outside one). New query-count tests pin the cost. No API response changes. Status of the whole plan, and what is still open, is in [the V4 tech-debt status](plans/2026-10-24-v4-tech-debt-status.md).
+- Per-tenant CORS origins. Tenant admins list, add and remove exact `https` origins at `/api/v1/admin/tenant/cors-origins` (`tenants.read` / `tenants.manage` plus the new `feature.security.cors_origins.manage` entitlement, granted by both seeded plans). Wildcards, `null`, paths and `http` are rejected; `http://localhost` is accepted only in `Development`. Outside `Development`, a new `TenantAwareCorsPolicyProvider` also allows an origin registered by an active tenant: that tenant's only on its subdomain host, any active tenant's on other hosts. These origins get no `Access-Control-Allow-Credentials`; `Cors:AllowedOrigins` behaves as before. Origin lists are cached in Redis for 5 minutes and invalidated on add, remove, suspension and reactivation. New migration `AddTenantAllowedOrigins` adds the `TenantAllowedOrigins` table and seeds the entitlement.
+- Added the v1 deployment and [a deployment roadmap](deployment-roadmap.md) from one EC2 host to multi-region active-passive DR. `deploy/terraform/` creates a VPC with a public subnet, an internet gateway and a security group, plus a `t3.small` Debian 12 EC2 instance, and targets the local Floci AWS emulator by default. `deploy/ansible/` configures the instance with PostgreSQL 16, Redis 7, the ASP.NET Core 10 runtime, Node 22 and NGINX, and runs the API and BillingService as systemd services. Releases are built on the controller, migrated with an EF Core migrations bundle and kept in versioned directories. Secrets come from Ansible Vault. Application code is unchanged.
+- **Breaking for browser clients outside `Development`:** CORS no longer allows any origin. The new `ApiCorsPolicy` reads allowed origins from `Cors:AllowedOrigins` (`Cors__AllowedOrigins=https://a,https://b` or `Cors__AllowedOrigins__0=...`) and allows credentials for those origins only. Other origins get no CORS headers, and none are allowed when the setting is empty. `Development` keeps allowing any origin, without credentials. An invalid entry, such as `*` or a URL with a path, stops the API at startup. The Ansible deployment sets it from `api_cors_allowed_origins` (empty by default).
+- Emails are now stored lowercase, so login, invites, verification, password reset and admin add-user ignore case. Migration `NormalizeUserEmails` lowercases existing rows; run the duplicate check in `docs/operations.md` first. A registration that loses a race to a simultaneous one now gets the normal `400` or `202` answer instead of a `500`.
+- Login and refresh now return the access token's real expiry (`Jwt:ExpirationMinutes`) instead of a fixed 60 minutes. Registration, login, refresh and invite-acceptance audit entries now record the acting user's id instead of an empty `UserId`.
+- Corrected the documented internal billing callback signing format in `docs/contracts.md` to match what the API verifies: an ISO 8601 timestamp, a signing input of `<timestamp>\n<body>`, and a `sha256=`-prefixed signature. Added a published known-answer test vector. API behaviour is unchanged.
+- Operator tenant suspension: signed `POST /api/internal/tenants/{id}/suspend` and `/reactivate`, keyed by a new `TenantOperations:SharedSecret`. Suspending revokes the tenant's refresh tokens and is audited. A suspended tenant is now also blocked on authenticated `/auth/*` routes and on invite acceptance and password reset. NGINX now rejects `/api/internal/*` from outside the Compose network. New migration `AddTenantSuspensionState`.
+- `POST /api/v1/auth/register` no longer returns `400 "Email already registered"`. A known email gets the same `202` as a new registration, creates nothing, and triggers an existing-account notice. Login with an unknown email now costs the same as a wrong password. The invite and add-user duplicate-email errors now read `"Email is already in use"`.
+- **Breaking:** `POST /api/v1/auth/register` now returns `202 Accepted` with `{ tenantId, status, verificationExpiresAt }` instead of `200` with tokens. The tenant stays `PendingVerification` until the admin completes `/api/v1/auth/verification/complete`, then logs in through `/api/v1/auth/login`. Unverified registrations release their subdomain and email after 48 hours.
+
+## V4 — pre-deployment engineering maturity
+
+Implemented local engineering maturity includes:
+
+- deterministic `bootstrap`, `reset`, `seed`, `run`, `smoke`, and `test` workflows;
+- .NET/BillingService billing contract conformance tests;
+- fixture-driven replay, duplicate, out-of-order, stale, and invalid-signature billing tests;
+- tenant-isolation and authorization regression coverage across sensitive surfaces;
+- expanded entitlement precedence and lifecycle matrix tests;
+- local health, metrics, correlation, diagnostic-field, and sensitive-data quality gates;
+- extraction of authentication orchestration from `AuthController` into an application service;
+- request tenant-resolution caching and entitlement query batching;
+- explicit auth endpoint throttling and explicit local CORS policy;
+- outbound-webhook endpoint management and signing-secret rotation initiation;
+- Docker Compose and NGINX local Ubuntu VM profile; and
+- consolidated durable documentation with historical planning artifacts archived.
+
+Live provider runtime wiring, production telemetry, hardened public CORS, deployed recovery procedures, and deployment topology remain outside the completed scope.
+
+## V3 — platform capability foundations
+
+V3 established entitlements and progressive enforcement, tenant usage analytics, outbound tenant-webhook infrastructure, BillingService durable workflow/reconciliation foundations, identity lifecycle hardening, and associated isolation/security tests. Some V3 observability and provider-integration documents were designs rather than completed production runtime features.
+
+## V2 — identity, authorization, administration, and billing foundations
+
+V2 added refresh-token rotation and revocation, tenant-scoped RBAC and permissions, tenant administration, provider-ready internal billing boundaries, background workflow foundations, and broader security and operations coverage.
+
+## V1 — core multi-tenant API
+
+V1 established the layered ASP.NET Core solution, tenant registration and login, tenant resolution, PostgreSQL persistence, plan/subscription foundations, Redis-backed plan limits, audit logging, health checks, and initial automated tests.

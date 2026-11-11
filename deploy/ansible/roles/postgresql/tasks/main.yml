@@ -1,0 +1,43 @@
+---
+- name: Add the PGDG signing key
+  ansible.builtin.get_url:
+    url: "{{ postgresql_repo_key_url }}"
+    dest: /etc/apt/keyrings/pgdg.asc
+    mode: "0644"
+
+- name: Add the PGDG repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/pgdg.asc] https://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    filename: pgdg
+    state: present
+
+# Debian's packaging creates and starts the <version>/main cluster, listening on localhost only.
+- name: Install PostgreSQL
+  ansible.builtin.apt:
+    name:
+      - postgresql-{{ postgresql_version }}
+      - python3-psycopg2
+    state: present
+
+- name: Start PostgreSQL
+  ansible.builtin.systemd_service:
+    name: postgresql@{{ postgresql_version }}-main
+    enabled: true
+    state: started
+
+- name: Create the application role
+  community.postgresql.postgresql_user:
+    name: "{{ app_db_user }}"
+    password: "{{ vault_db_password }}"
+    role_attr_flags: LOGIN
+  become: true
+  become_user: postgres
+  no_log: true
+
+- name: Create the application database
+  community.postgresql.postgresql_db:
+    name: "{{ app_db_name }}"
+    owner: "{{ app_db_user }}"
+    encoding: UTF8
+  become: true
+  become_user: postgres
