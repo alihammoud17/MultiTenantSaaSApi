@@ -182,7 +182,7 @@ claude mcp add --transport http saas-api http://localhost:5238/api/v1/mcp \
 ## Block 5: Stretch (optional, 45 min)
 
 - [ ] **Token refresh for Claude Code.** Instead of a fixed header, use a `headersHelper` script (local, not committed) that logs in and prints `{"Authorization": "Bearer …"}`, so the 60-minute expiry stops breaking the connection. See the Claude Code MCP docs.
-- [ ] **Audit MCP calls.** Log each tool call through `IAuditService` (action like `mcp.tool.called`, tool name), so MCP use shows up in the tenant's audit log like any other client.
+- [x] **Audit MCP calls.** Log each tool call through `IAuditService` (action like `mcp.tool.called`, tool name), so MCP use shows up in the tenant's audit log like any other client.
 - [ ] Read the ProtectedMcpServer sample and write down what full MCP OAuth would need here (protected-resource metadata, an authorization server, audience checks). Notes only, kept outside this repo; no code.
 
 ---

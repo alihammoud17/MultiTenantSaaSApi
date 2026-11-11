@@ -7,6 +7,7 @@ using Domain.Authorization;
 using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol;
 using ModelContextProtocol.Client;
@@ -107,7 +108,8 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
 
         var usage = await CallToolJsonAsync(mcp, "get_usage_summary");
         usage.GetProperty("tenantId").GetGuid().Should().Be(tenantA.TenantId);
-        usage.GetProperty("totalEvents").GetInt32().Should().Be(auditLogs.GetArrayLength(), "the summary counts only A's audit rows");
+        usage.GetProperty("totalEvents").GetInt32().Should().Be(
+            auditLogs.GetArrayLength() + 1, "the summary counts only A's audit rows, plus the audit entry of the list_audit_logs call itself");
 
         var webhooks = await CallToolJsonAsync(mcp, "list_webhook_endpoints");
         webhooks.EnumerateArray().Select(e => e.GetProperty("name").GetString()).Should().Equal("a-hook");
@@ -170,6 +172,36 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
 
         result.IsError.Should().BeTrue();
         result.Content.OfType<TextContentBlock>().Single().Text.Should().Contain(EntitlementKeys.AnalyticsAuditLogsRead);
+
+        // The denied call still passed RBAC, so it is audited, marked as an error.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            // AuditLog has a tenant query filter, and this test scope has no tenant context (same as ApiEndpointsTests).
+            var audit = db.AuditLogs.IgnoreQueryFilters()
+                .Single(a => a.TenantId == admin.TenantId && a.Action == McpToolCallAuditFilter.AuditAction);
+            audit.EntityId.Should().Be("list_audit_logs");
+            audit.Changes.Should().Contain("\"isError\":true");
+        }
+    }
+
+    [Fact]
+    public async Task ToolCalls_ShouldBeAuditedForTheCallersTenant()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-audit-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        await using var mcp = await CreateMcpClientAsync(admin.Token);
+
+        await CallToolJsonAsync(mcp, "list_webhook_endpoints");
+        var entries = await CallToolJsonAsync(mcp, "list_audit_logs", new() { ["action"] = McpToolCallAuditFilter.AuditAction });
+
+        // Newest first: this list_audit_logs call is audited only after it returns, so it isn't in its own result.
+        var entry = entries.EnumerateArray().Should().ContainSingle().Subject;
+        entry.GetProperty("tenantId").GetGuid().Should().Be(admin.TenantId);
+        entry.GetProperty("entityType").GetString().Should().Be(McpToolCallAuditFilter.AuditEntityType);
+        entry.GetProperty("entityId").GetString().Should().Be("list_webhook_endpoints");
+        entry.GetProperty("userId").GetGuid().Should().NotBe(Guid.Empty, "the acting user comes from the token");
+        entry.GetProperty("changes").GetString().Should().Be("{\"isError\":false}");
     }
 
     // The token is still valid; TenantMiddleware rejects the suspended tenant before MCP runs, same as the REST API.
