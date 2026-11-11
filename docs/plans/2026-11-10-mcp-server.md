@@ -10,8 +10,8 @@
 Tutor mode: I type the commands and write the code. Claude explains each step, reviews it (build, tests) and ticks the boxes. Claude writes a step's code only when I say "hand it over".
 
 ## Deliverables
-- [ ] **D1.** ASP.NET Core MCP server (`ModelContextProtocol.AspNetCore`) with 4 tenant-scoped read tools
-- [ ] **D2.** Working from Claude Code
+- [x] **D1.** ASP.NET Core MCP server (`ModelContextProtocol.AspNetCore`) with 4 tenant-scoped read tools
+- [x] **D2.** Working from Claude Code
 
 ## Resources
 - MCP C# SDK docs (v2): https://csharp.sdk.modelcontextprotocol.io/v2/
@@ -149,8 +149,8 @@ Use the existing `ApiWebApplicationFactory` (SQLite in-memory, always-allow rate
 ```bash
 dotnet run --project Presentation --launch-profile http
 ```
-- [ ] API is up on `http://localhost:5238` (use the **http** profile: Claude Code may not trust the local HTTPS dev certificate). `scripts/dev.sh run` would serve the API on `http://localhost:5000` instead and also start BillingService, which isn't needed here. PostgreSQL and Redis must be reachable.
-- [ ] Create two tenant admins (A and B). Locally the email-verification token can't be obtained: `IdentityNotificationService` doesn't log it and the database stores only its hash. So for each tenant:
+- [x] API is up on `http://localhost:5238` (use the **http** profile: Claude Code may not trust the local HTTPS dev certificate). `scripts/dev.sh run` would serve the API on `http://localhost:5000` instead and also start BillingService, which isn't needed here. PostgreSQL and Redis must be reachable.
+- [x] Create two tenant admins (A and B). Locally the email-verification token can't be obtained: `IdentityNotificationService` doesn't log it and the database stores only its hash. So for each tenant:
   1. `POST /api/v1/auth/register` with `{ "companyName", "subdomain", "adminEmail", "adminPassword" }` → `202` with `tenantId`
   2. Local database only: activate it by hand, e.g. `UPDATE "Tenants" SET "Status" = 0 WHERE "Id" = '<tenantId>';` (`0` = `Active`, stored as an int) and `UPDATE "Users" SET "EmailVerifiedAt" = now() WHERE "TenantId" = '<tenantId>';`
   3. `POST /api/v1/auth/login` with `{ "email", "password" }` → copy `token` (expires after 60 min)
@@ -161,15 +161,15 @@ dotnet run --project Presentation --launch-profile http
 claude mcp add --transport http saas-api http://localhost:5238/api/v1/mcp \
   --header "Authorization: Bearer <token>"
 ```
-- [ ] Local scope only. **Never** put a token in a committed `.mcp.json`.
-- [ ] `claude` → `/mcp`: `saas-api` connected, 4 tools listed
-- [ ] Prompts to try (approve each call):
+- [x] Local scope only. **Never** put a token in a committed `.mcp.json`.
+- [x] `claude` → `/mcp`: `saas-api` connected, 4 tools listed
+- [x] Prompts to try (approve each call):
   - *"How has my tenant's usage looked over the last 7 days?"*
   - *"Show the 10 most recent audit log entries."*
   - *"Which webhook endpoints are active, and which events do they subscribe to?"*
   - *"Which CORS origins are allowed for my tenant?"*
-- [ ] Log in as a **second tenant**, re-add the server with that token (`claude mcp remove saas-api` first), ask the same questions: different data, nothing from tenant A
-- [ ] Screenshot of Claude Code answering from your API ✅ **D2 done**
+- [x] Switch to the **second tenant** and ask the same questions: different data, nothing from tenant A. With the `headersHelper` from Block 5 that's `echo b > ~/.config/saas-api-mcp/active` and a reconnect in `/mcp`; with a fixed header, `claude mcp remove saas-api` and re-add it with tenant B's token
+- [x] Screenshot of Claude Code answering from your API ✅ **D2 done**
 
 **Troubleshooting**
 - 401 from `/mcp`: token missing, expired (60 min) or for another environment. Log in again and re-add.
@@ -181,9 +181,9 @@ claude mcp add --transport http saas-api http://localhost:5238/api/v1/mcp \
 
 ## Block 5: Stretch (optional, 45 min)
 
-- [ ] **Token refresh for Claude Code.** Instead of a fixed header, use a `headersHelper` script (local, not committed) that logs in and prints `{"Authorization": "Bearer …"}`, so the 60-minute expiry stops breaking the connection. See the Claude Code MCP docs.
+- [x] **Token refresh for Claude Code.** Instead of a fixed header, use a `headersHelper` script (local, not committed) that logs in and prints `{"Authorization": "Bearer …"}`, so the 60-minute expiry stops breaking the connection. See the Claude Code MCP docs.
 - [x] **Audit MCP calls.** Log each tool call through `IAuditService` (action like `mcp.tool.called`, tool name), so MCP use shows up in the tenant's audit log like any other client.
-- [ ] Read the ProtectedMcpServer sample and write down what full MCP OAuth would need here (protected-resource metadata, an authorization server, audience checks). Notes only, kept outside this repo; no code.
+- [x] Read the ProtectedMcpServer sample and write down what full MCP OAuth would need here (protected-resource metadata, an authorization server, audience checks). Notes only, kept outside this repo; no code.
 
 ---
 
