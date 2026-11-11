@@ -267,6 +267,7 @@ The default publisher only logs callback payloads, so successful local queue pro
 - Disable an endpoint to contain an incident without deleting its history.
 - Treat newly issued and pending signing secrets as sensitive; never put them in logs or tickets.
 - Rotation initiation does not by itself complete active-secret cutover.
+- Every successful endpoint change is audited for the caller's tenant, with entity type `TenantWebhookEndpoint` and the endpoint id: `WEBHOOK_ENDPOINT_CREATED`, `WEBHOOK_ENDPOINT_UPDATED` (changes hold the name, callback URL and event types before and after), `WEBHOOK_ENDPOINT_ACTIVATED`, `WEBHOOK_ENDPOINT_DEACTIVATED`, `WEBHOOK_ENDPOINT_SECRET_ROTATED` (with the pending secret's issue time) and `WEBHOOK_ENDPOINT_DELETED`. Signing secrets are never recorded. A change that fails (`404`, `409`) writes no entry. As with CORS origins, the change and its audit entry are saved separately, not in one transaction.
 - Investigate retries using delivery ID, event ID, tenant ID, correlation ID, attempt count, HTTP status, and error category rather than payload secrets.
 
 ## Docker Compose local VM profile

@@ -3,16 +3,16 @@
 - **Date:** found Wed 11 Nov 2026, while trying the MCP read tools (see [the MCP server plan](2026-11-10-mcp-server.md))
 - **Repo:** MultiTenantSaaSApi
 - **Branch:** `feat/webhook-endpoint-audit` (from `master`, after the MCP branch is merged)
-- **Status:** planned, not started
+- **Status:** implemented on `feat/webhook-endpoint-audit`; PR not opened yet
 - **Focus:** Close an audit gap on a security-relevant tenant surface
 - **Time:** ~1.5–2 h
 
 Tutor mode: I type the commands and write the code. Claude explains each step, reviews it (build, tests) and ticks the boxes. Claude writes a step's code only when I say "hand it over".
 
 ## Deliverables
-- [ ] **D1.** Every successful webhook endpoint change writes a tenant audit entry, with no signing secrets in it
-- [ ] **D2.** An integration test that pins the audit actions and checks that no secret leaks into `Changes`
-- [ ] **D3.** Docs updated (`docs/operations.md`, `docs/CHANGELOG.md`)
+- [x] **D1.** Every successful webhook endpoint change writes a tenant audit entry, with no signing secrets in it
+- [x] **D2.** An integration test that pins the audit actions and checks that no secret leaks into `Changes`
+- [x] **D3.** Docs updated (`docs/operations.md`, `docs/CHANGELOG.md`)
 
 ---
 
@@ -59,24 +59,24 @@ Rotate-secret and delete matter most: today nobody can tell from the audit log w
 ---
 
 ## Block 1: Implement (45 min)
-- [ ] Inject `IAuditService` into `WebhookEndpointManagementService`. It's already registered as scoped in `Presentation/Program.cs:75`, so no DI change is needed.
-- [ ] Add one `LogAsync` call per method, using the table above.
-- [ ] Update: capture the "before" values before assigning the new ones.
-- [ ] Status: choose the action from `isActive`.
-- [ ] Check that every unit test which builds the service by hand still compiles. Pass a fake or no-op `IAuditService` where needed.
+- [x] Inject `IAuditService` into `WebhookEndpointManagementService`. It's already registered as scoped in `Presentation/Program.cs:75`, so no DI change is needed.
+- [x] Add one `LogAsync` call per method, using the table above.
+- [x] Update: capture the "before" values before assigning the new ones.
+- [x] Status: choose the action from `isActive`.
+- [x] Check that every unit test which builds the service by hand still compiles. Pass a fake or no-op `IAuditService` where needed.
 
 ## Block 2: Tests (45 min)
-- [ ] Integration test in `Tests/Integration/WebhookEndpointManagementTests.cs` (same style as `TenantCorsOriginTests.cs:242`):
+- [x] Integration test in `Tests/Integration/WebhookEndpointManagementTests.cs` (same style as `TenantCorsOriginTests.cs:242`):
   - Create, update, deactivate, activate, rotate-secret and delete one endpoint through the API.
   - Read `AuditLogs` with `IgnoreQueryFilters()`, filtered by tenant and `EntityId`, and assert the 6 actions.
   - Assert that no `Changes` value contains the secret returned by create or rotate.
-- [ ] Negative case: an update or delete of an unknown id (`404`) and a duplicate-name create (`409`) write no audit entry.
-- [ ] Tenant isolation: tenant B's entries never show up in tenant A's audit log (`GET /api/v1/tenant/audit-logs` or the `list_audit_logs` MCP tool).
+- [x] Negative case: an update or delete of an unknown id (`404`) and a duplicate-name create (`409`) write no audit entry.
+- [x] Tenant isolation: tenant B's entries never show up in tenant A's audit log (`GET /api/v1/tenant/audit-logs` or the `list_audit_logs` MCP tool).
 
 ## Block 3: Docs, validation and PR (30 min)
-- [ ] `docs/operations.md` → "Outbound-webhook operations": list the audited actions. The CORS sentence at `:362` is the model to copy.
-- [ ] `docs/CHANGELOG.md` → Unreleased: one line, "Webhook endpoint create, update, activate/deactivate, secret rotation and delete are now audited (`WEBHOOK_ENDPOINT_*`); no secrets are logged."
-- [ ] `dotnet build`, `dotnet test` (or `scripts/dev.sh test`), `git diff --check`. Record the exact results in the PR.
+- [x] `docs/operations.md` → "Outbound-webhook operations": list the audited actions. The CORS sentence at `:362` is the model to copy.
+- [x] `docs/CHANGELOG.md` → Unreleased: one line, "Webhook endpoint create, update, activate/deactivate, secret rotation and delete are now audited (`WEBHOOK_ENDPOINT_*`); no secrets are logged."
+- [x] `dotnet build`, `dotnet test` (or `scripts/dev.sh test`), `git diff --check`. Record the exact results in the PR.
 
 ---
 
