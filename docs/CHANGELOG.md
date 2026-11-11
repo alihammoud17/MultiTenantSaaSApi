@@ -2,7 +2,9 @@
 
 This is a milestone-level implementation history, not a release promise or active backlog. Exact historical plans and completion notes are retained in [the archive](archive/README.md).
 
-## Unreleased
+## V4.1 — identity and CORS hardening, the v1 deployment, critical-path test coverage
+
+Branch `v4.1`, cut on 2026-11-11 from commit `585825c` (`fix: align local dev scripts with the current repo`). It contains every change in this section, up to and including the local dev script fixes. The MCP endpoint and webhook endpoint auditing came after it and are not in this branch. The release has no tag yet; per [Decisions](decisions.md#public-apis-use-url-segment-versions), a tag, not the branch name, identifies a release.
 
 - Local dev script fixes. `scripts/dev.sh run` now binds the API to `API_URL` (`--urls`); before, the launch profile put it on `5238` while `smoke` checked `5000`. `run` also fails early when PostgreSQL or Redis is unreachable. `test` no longer exits when `/tmp/dotnet-tools/dotnet-ef` is missing, now runs the BillingService typecheck, and warns when Docker is unreachable. `smoke` parses JSON with Node instead of Python and requires `202` from the placeholder webhook endpoint.
 - Test coverage for the critical paths (tenant resolution, entitlement evaluation, auth brute-force protection, outbound webhooks and secret rotation), with Testcontainers PostgreSQL and Redis fixtures; see [Operations](operations.md#validation-and-tests). Fixes found along the way:
