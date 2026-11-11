@@ -2,7 +2,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Domain.Entities;
 using FluentAssertions;
+using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Tests.Integration;
 
@@ -198,6 +202,132 @@ public class WebhookEndpointManagementTests : IClassFixture<ApiWebApplicationFac
         var response = await tenantB.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new { name = "shared-name", callbackUrl = "https://example.com/webhooks/b" });
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public async Task EndpointChanges_ShouldBeAudited_WithoutSigningSecrets()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"wh-audit-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
+
+        var create = await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new
+        {
+            name = "audited",
+            callbackUrl = "https://example.com/webhooks/audited",
+            subscribedEventTypes = "tenant.subscription.updated"
+        });
+        create.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createBody = await create.Content.ReadFromJsonAsync<JsonElement>();
+        var endpointId = createBody.GetProperty("endpoint").GetProperty("id").GetGuid();
+        var createdSecret = createBody.GetProperty("secret").GetProperty("signingSecret").GetString()!;
+
+        (await client.PutAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}", new
+        {
+            name = "audited-renamed",
+            callbackUrl = "https://example.com/webhooks/renamed",
+            subscribedEventTypes = "*"
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.PatchAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}/status", new { isActive = false })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.PatchAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}/status", new { isActive = true })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var rotate = await client.PostAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}/rotate-secret", null);
+        rotate.StatusCode.Should().Be(HttpStatusCode.OK);
+        var rotatedSecret = (await rotate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("secret").GetProperty("signingSecret").GetString()!;
+        (await client.DeleteAsync($"/api/v1/tenant/webhook-endpoints/{endpointId}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var entries = ReadWebhookAuditEntries(admin.TenantId).Where(a => a.EntityId == endpointId.ToString()).ToList();
+
+        entries.Select(a => a.Action).Should().BeEquivalentTo(
+        [
+            "WEBHOOK_ENDPOINT_CREATED",
+            "WEBHOOK_ENDPOINT_UPDATED",
+            "WEBHOOK_ENDPOINT_DEACTIVATED",
+            "WEBHOOK_ENDPOINT_ACTIVATED",
+            "WEBHOOK_ENDPOINT_SECRET_ROTATED",
+            "WEBHOOK_ENDPOINT_DELETED"
+        ]);
+        entries.Should().OnlyContain(a => a.EntityType == nameof(TenantWebhookEndpoint));
+        foreach (var entry in entries)
+        {
+            entry.Changes.Should().NotBeNullOrWhiteSpace();
+            entry.Changes.Should().NotContain(createdSecret).And.NotContain(rotatedSecret);
+            using var changes = JsonDocument.Parse(entry.Changes!);
+            PropertyNames(changes.RootElement).Should().NotContain(name => name.Contains("Secret", StringComparison.Ordinal) && !name.EndsWith("IssuedAtUtc", StringComparison.Ordinal));
+        }
+
+        using var update = JsonDocument.Parse(entries.Single(a => a.Action == "WEBHOOK_ENDPOINT_UPDATED").Changes!);
+        update.RootElement.GetProperty("Before").GetProperty("Name").GetString().Should().Be("audited");
+        update.RootElement.GetProperty("Before").GetProperty("SubscribedEventTypes").GetString().Should().Be("tenant.subscription.updated");
+        update.RootElement.GetProperty("After").GetProperty("Name").GetString().Should().Be("audited-renamed");
+        update.RootElement.GetProperty("After").GetProperty("CallbackUrl").GetString().Should().Be("https://example.com/webhooks/renamed");
+
+        using var rotated = JsonDocument.Parse(entries.Single(a => a.Action == "WEBHOOK_ENDPOINT_SECRET_ROTATED").Changes!);
+        rotated.RootElement.GetProperty("NextSigningSecretIssuedAtUtc").ValueKind.Should().Be(JsonValueKind.String);
+    }
+
+    [Fact]
+    public async Task FailedEndpointChanges_ShouldNotBeAudited()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"wh-audit-fail-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
+        var existing = await CreateEndpointAsync(client, "taken");
+        var unknown = Guid.NewGuid();
+
+        (await client.PutAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{unknown}", new { name = "x", callbackUrl = "https://example.com/x" })).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await client.PatchAsJsonAsync($"/api/v1/tenant/webhook-endpoints/{unknown}/status", new { isActive = false })).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await client.PostAsync($"/api/v1/tenant/webhook-endpoints/{unknown}/rotate-secret", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await client.DeleteAsync($"/api/v1/tenant/webhook-endpoints/{unknown}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await client.PostAsJsonAsync("/api/v1/tenant/webhook-endpoints", new { name = "taken", callbackUrl = "https://example.com/webhooks/other" })).StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var entries = ReadWebhookAuditEntries(admin.TenantId);
+
+        entries.Should().ContainSingle()
+            .Which.Should().Match<AuditLog>(a => a.Action == "WEBHOOK_ENDPOINT_CREATED" && a.EntityId == existing.ToString());
+    }
+
+    [Fact]
+    public async Task WebhookAuditEntries_ShouldOnlyBeVisibleToTheirOwnTenant()
+    {
+        using var tenantA = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var adminA = await SecurityTestHelpers.RegisterTenantAsync(tenantA, $"wh-audit-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        tenantA.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminA.Token);
+        using var tenantB = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var adminB = await SecurityTestHelpers.RegisterTenantAsync(tenantB, $"wh-audit-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        tenantB.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminB.Token);
+
+        var endpointA = await CreateEndpointAsync(tenantA, "tenant-a");
+        var endpointB = await CreateEndpointAsync(tenantB, "tenant-b");
+        (await tenantB.PostAsync($"/api/v1/tenant/webhook-endpoints/{endpointB}/rotate-secret", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await tenantA.GetAsync("/api/v1/tenant/audit-logs?action=WEBHOOK_ENDPOINT_CREATED");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var logsA = await response.Content.ReadFromJsonAsync<JsonElement>();
+        logsA.EnumerateArray().Select(l => l.GetProperty("entityId").GetString()).Should().Equal(endpointA.ToString());
+
+        var rotations = await (await tenantA.GetAsync("/api/v1/tenant/audit-logs?action=WEBHOOK_ENDPOINT_SECRET_ROTATED")).Content.ReadFromJsonAsync<JsonElement>();
+        rotations.GetArrayLength().Should().Be(0);
+    }
+
+    private List<AuditLog> ReadWebhookAuditEntries(Guid tenantId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return db.AuditLogs
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(a => a.TenantId == tenantId && a.Action.StartsWith("WEBHOOK_ENDPOINT_"))
+            .ToList();
+    }
+
+    private static IEnumerable<string> PropertyNames(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object) yield break;
+        foreach (var property in element.EnumerateObject())
+        {
+            yield return property.Name;
+            foreach (var nested in PropertyNames(property.Value)) yield return nested;
+        }
     }
 
     private async Task<HttpClient> CreateAdminClientAsync()
