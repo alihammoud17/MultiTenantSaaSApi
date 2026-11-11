@@ -11,7 +11,7 @@ The services communicate through the signed, versioned internal billing contract
 
 ## .NET solution layers
 
-- `Presentation` hosts controllers, middleware, JWT and authorization wiring, CORS, rate limiting, Swagger, health, metrics, and the outbound-webhook dispatcher.
+- `Presentation` hosts controllers, the MCP endpoint, middleware, JWT and authorization wiring, CORS, rate limiting, Swagger, health, metrics, and the outbound-webhook dispatcher.
 - `Application` implements authentication orchestration, refresh tokens, identity lifecycle, MFA, RBAC, auditing, rate limiting, billing callbacks, entitlements, analytics, and outbound-webhook management.
 - `Domain` contains entities, DTOs, service interfaces, responses, entitlement keys, and authorization constants.
 - `Infrastructure` owns EF Core persistence, model mappings, PostgreSQL migrations, and tenant-context support.
@@ -45,6 +45,10 @@ Tenant-scoped RBAC uses roles, permissions, policy handlers, and service-layer a
 
 Unauthenticated auth routes use in-process fixed-window per-client limiters: register and login share a budget of 10 requests per minute, and refresh has its own budget of 30 per minute so login or register floods cannot block session renewal. The anonymous account-recovery routes (`verification/request`, `verification/complete`, `password-reset/request`, `password-reset/complete`, `invites/accept`) share a separate budget of 10 per minute, which limits both mail flooding and token guessing. Clients are keyed by IPv4 address or IPv6 /64 prefix. Behind a reverse proxy, the client address comes from `X-Forwarded-For` only when the proxy is listed in `ForwardedHeaders:KnownNetworks`/`KnownProxies` (see `docs/operations.md`). MFA code checks (`mfa/enroll/verify` and `mfa/step-up`) share a budget of 5 attempts per 5 minutes per user, keyed by the JWT's tenant and subject rather than the client address, so a stolen access token cannot be used to enumerate TOTP codes. The rate limiter runs after authentication so that policy can see the caller. There is no account lockout. Authenticated tenant traffic also passes through a plan-aware Redis-backed monthly limiter, which counts with an atomic increment so concurrent requests cannot exceed the plan limit, and fails open when Redis is unavailable. The controls are independent.
 
+## MCP endpoint
+
+The API also serves the Model Context Protocol at `POST /api/v1/mcp` for AI clients such as Claude Code. It is a presentation transport next to the controllers (`Presentation/Mcp/`), not a separate service. In stateless Streamable HTTP mode each MCP message is an ordinary HTTP request through the same pipeline: JWT authentication (the endpoint requires an authenticated caller), `TenantMiddleware`, `RateLimitMiddleware`, then per-tool RBAC policies and entitlement checks. Stateless mode is what keeps tools tenant-scoped: their services come from the request's own DI scope, so they see the `ITenantContext` that `TenantMiddleware` set. Tools take no tenant argument and call Application services only. The four tools are read-only and mirror existing REST reads; a call-tool filter audits each call that passed RBAC. Tools, inputs and failure modes are in [contracts.md](contracts.md#mcp-endpoint); the decision is in [decisions.md](decisions.md#the-mcp-endpoint-is-an-in-process-stateless-transport-in-presentation).
+
 ## Plans, subscriptions, and entitlements
 
 The API owns the plan catalog and internal subscription lifecycle. Entitlements are assembled from plan mappings, active add-ons, and tenant overrides with deterministic precedence. Current enforcement covers selected billing reads and mutations, plan upgrades, advanced tenant administration, tenant CORS origin management, and audit-log analytics; enforcement is not claimed for every possible API surface.
@@ -74,7 +78,7 @@ Endpoint lookup and management are tenant-scoped. Callback URLs must be absolute
 
 ## Usage analytics and audit
 
-Audit entries and usage analytics belong to the API and are queried in tenant scope. Analytics is an internal aggregation/query foundation rather than a separate warehouse. Access is protected by authorization and entitlements where applicable.
+Audit entries and usage analytics belong to the API and are queried in tenant scope. Analytics is an internal aggregation/query foundation rather than a separate warehouse. Access is protected by authorization and entitlements where applicable. MCP tool calls are audited as `MCP_TOOL_CALLED`, so they show up in the audit log and usage analytics like other activity.
 
 ## Persistence and background processing
 

@@ -46,6 +46,17 @@ Both services expose local JSON health/metrics and correlation-aware structured 
 
 Active tenants can also register exact `https` origins (`TenantAllowedOrigins`), managed by tenant administrators and gated by the `feature.security.cors_origins.manage` entitlement. Preflights carry no credentials, so on a shared API host an origin is accepted if any active tenant registered it; on a tenant subdomain only that tenant's origins count. Since one tenant's origin is then accepted for all tenants' routes on a shared host, tenant origins never get `Access-Control-Allow-Credentials`; only `Cors:AllowedOrigins` does. This is safe while the API authenticates with bearer tokens only. Adding cookie-based authentication would need this revisited. The origin lists are cached in Redis and invalidated on change; see [Operations](operations.md#origin-cache).
 
+### The MCP endpoint is an in-process, stateless transport in Presentation
+
+AI clients reach the API through an MCP endpoint at `POST /api/v1/mcp` in the existing host, not a separate service. It is one more presentation transport next to the controllers, so it reuses JWT authentication, `TenantMiddleware`, the plan-aware rate limiter, RBAC policies, entitlements and the Application services instead of re-implementing them. The route follows the `/api/v1/...` convention and is not in any middleware skip list.
+
+- **Stateless Streamable HTTP, set explicitly** even though it is the SDK default. In stateless mode tools resolve services from the HTTP request's own scope, so they see the `ITenantContext` that `TenantMiddleware` set. A stateful session would resolve a fresh, empty tenant context, and the entitlement-gated tools would fail. `McpServerTests` fails if the mode is switched.
+- **The tenant always comes from the token.** No tool has a tenant parameter.
+- **Same rules as the matching REST action.** Each tool carries the action's RBAC policy (`[Authorize]` with the SDK's authorization filters) and entitlement check, and calls the same Application service; tool classes do not use `ApplicationDbContext`.
+- **The endpoint itself requires an authenticated caller** (`RequireAuthorization`), so an anonymous request gets `401` before `TenantMiddleware` could accept a tenant hint for it.
+- **Read-only for now.** No create, update, delete, secret-rotation or billing tools, and no secrets in outputs. Write tools would need their own review (confirmation, idempotency, audit).
+- **Bearer tokens, not MCP OAuth.** Clients are given an access token. Full MCP OAuth (protected-resource metadata, an authorization server issuing tenant-aware tokens, audience checks) is left until remote clients are in scope; see open item 13.
+
 ## Open owner-review items
 
 1. Select the environment count and the release/promotion process. The first topology is chosen: one Debian 12 EC2 host provisioned by Terraform and configured by Ansible with native systemd services, growing toward multi-region active-passive DR ([deployment roadmap](deployment-roadmap.md)). Still open: how many environments, and how a release is promoted between them.
@@ -60,3 +71,4 @@ Active tenants can also register exact `https` origins (`TenantAllowedOrigins`),
 10. Define migration rollback, database backup/restore, disaster recovery, and incident procedures.
 11. Decide whether Redis must participate in API readiness checks.
 12. Complete and rehearse outbound-webhook active-secret rotation cutover.
+13. Decide whether the MCP endpoint must serve remote clients. If so, add MCP OAuth: protected-resource metadata, an authorization server whose tokens carry `tenant_id` and the user, audience checks for this server, and enforced scopes.

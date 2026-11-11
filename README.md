@@ -12,6 +12,7 @@ The repository is designed for deterministic local validation. It is **not yet a
 - Query-aligned PostgreSQL indexes for tenant audit history, action-filtered audit analytics, billing invoice history, and email-only authentication lookups.
 - Signed, versioned, idempotent internal billing callbacks applied by the .NET API.
 - Tenant outbound-webhook endpoint management and file/database-backed delivery, retry, signing, and replay protection.
+- An MCP endpoint (`POST /api/v1/mcp`) with four read-only, tenant-scoped tools (usage summary, audit logs, webhook endpoints, CORS origins) for AI clients such as Claude Code, protected by the same authentication, tenant resolution, rate limit, RBAC and entitlement checks as the REST API.
 - BillingService placeholder webhook ingestion, normalized events, a file-backed retry/dead-letter queue, reconciliation logic, and a tested Stripe gateway slice.
 - Local JSON health and metrics endpoints, structured correlation-aware logs, and security/contract regression tests.
 
@@ -20,7 +21,7 @@ See [Architecture](docs/architecture.md), [Contracts](docs/contracts.md), and [D
 ## Repository layout
 
 ```text
-Presentation/    ASP.NET Core host, controllers, middleware, authorization, health and metrics
+Presentation/    ASP.NET Core host, controllers, MCP endpoint, middleware, authorization, health and metrics
 Application/     Authentication, RBAC, billing, entitlements, audit and workflow services
 Domain/          Entities, DTOs, interfaces, responses and authorization constants
 Infrastructure/  EF Core DbContext, mappings and migrations
@@ -79,12 +80,34 @@ Never commit real secrets. Repository env examples contain placeholders only.
 
 - Public API routes use URL-segment versioning under `/api/v1/...`.
 - Internal billing callback: `POST /api/internal/billing/subscription-events`.
+- MCP endpoint for AI clients: `POST /api/v1/mcp` (Streamable HTTP, bearer JWT); see [below](#using-the-mcp-endpoint-from-claude-code) and [Service contracts](docs/contracts.md#mcp-endpoint).
 - API diagnostics: `GET /health` and `GET /metrics`.
 - BillingService diagnostics: `GET /health` and `GET /metrics`.
 - BillingService provider entry point: `POST /webhooks/provider` (placeholder runtime behavior).
 - Swagger UI is available in the Development and Testing environments.
 
 The API health endpoint checks the process and PostgreSQL, but not Redis. The metrics endpoints expose in-memory JSON snapshots; they are not production telemetry exporters.
+
+## Using the MCP endpoint from Claude Code
+
+The MCP endpoint takes the same access token as the REST API (`POST /api/v1/auth/login` returns it as `token`; it expires after `Jwt:ExpirationMinutes`). The tools act for that token's tenant and user only.
+
+```bash
+# API on http://localhost:5238 (needs PostgreSQL and Redis). Use the http profile:
+# Claude Code may not trust the local HTTPS development certificate.
+dotnet run --project Presentation --launch-profile http
+
+claude mcp add --transport http saas-api http://localhost:5238/api/v1/mcp \
+  --header "Authorization: Bearer <access-token>"
+```
+
+In Claude Code, `/mcp` then shows `saas-api` and its tools: all four for a tenant admin, fewer for users without the matching permissions.
+
+- Keep the default local scope. Never put a token in a committed `.mcp.json`.
+- The token expires. Instead of a fixed `--header`, a `headersHelper` script can log in and print `{"Authorization": "Bearer …"}` on each connection (see the [Claude Code MCP docs](https://code.claude.com/docs/en/mcp)). Keep the script and its credentials outside the repository.
+- Locally, verification email is not delivered, so activate a tenant you registered yourself first: see [Pending tenant registrations](docs/operations.md#pending-tenant-registrations).
+- Each MCP request counts against the tenant's monthly plan limit, and each tool call is recorded in its audit log as `MCP_TOOL_CALLED`.
+- Other MCP clients, such as the MCP Inspector, connect the same way: Streamable HTTP to the URL above with the `Authorization` header. The server has no stdio transport.
 
 ## Testing
 
@@ -103,6 +126,7 @@ Or run the service-specific commands documented in [Operations](docs/operations.
 - The default callback publisher is a no-op logger, and default reconciliation sources return no live records.
 - Billing workflow durability uses a local JSON file, not a distributed queue.
 - API CORS is permissive in `Development` only. Every other environment allows the origins in `Cors:AllowedOrigins` (`Cors__AllowedOrigins`, none by default, with credentials) plus exact `https` origins that active tenants register through `/api/v1/admin/tenant/cors-origins` (without credentials); see [Operations](docs/operations.md#cors). The production allowlist itself is still an owner decision.
+- The MCP endpoint offers read tools only and has no MCP OAuth discovery; clients must be given an access token.
 - There is no deployed OpenTelemetry exporter, telemetry backend, alerting/SLO practice, or deployment-proven backup/restore process.
 - The v1 deployment (one EC2 host, Terraform + Ansible) is verified against the Floci emulator and a local systemd container, not yet on real AWS. TLS/DNS, environment count, browser-client scope, provider scope, and secret-store choices require owner decisions.
 
