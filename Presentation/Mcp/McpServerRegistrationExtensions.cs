@@ -14,6 +14,8 @@ public static class McpServerRegistrationExtensions
         services.AddMcpServer()
             .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)
             .AddAuthorizationFilters()
+            // After the authorization filters: only calls that passed the tool's RBAC policy are audited.
+            .WithRequestFilters(filters => filters.AddCallToolFilter(McpToolCallAuditFilter.Create))
             .WithTools<TenantReadTools>();
 
         return services;
