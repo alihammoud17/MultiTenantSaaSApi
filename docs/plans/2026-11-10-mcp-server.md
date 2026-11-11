@@ -137,13 +137,13 @@ internal sealed class TenantReadTools(
 
 ### 4.1 Integration tests (`Tests/Integration/McpServerTests.cs`)
 Use the existing `ApiWebApplicationFactory` (SQLite in-memory, always-allow rate limiter) and the SDK client: `McpClient.CreateAsync` over `new HttpClientTransport(options, httpClient, loggerFactory, ownsHttpClient)` (that constructor exists in 2.4.0), with the client from `SecurityTestHelpers.CreateHttpsClient(factory)` (HTTPS base address, because of `UseHttpsRedirection`). Fall back to raw JSON-RPC POSTs if the client is awkward. No new package is needed in `Tests`: the SDK comes through the `Presentation` project reference. Reuse `SecurityTestHelpers` to register tenants and get tokens.
-- [ ] No token → **401**
-- [ ] Admin token → `tools/list` returns exactly the 4 tools; none has a `tenantId`-like property in its `inputSchema`
-- [ ] **Tenant isolation:** tenant A's token → `get_usage_summary`, `list_audit_logs`, `list_webhook_endpoints`, `list_cors_origins` return only tenant A's data, even when tenant B has data
-- [ ] **RBAC:** a MEMBER user (`SecurityTestHelpers.CreateMemberAndLoginAsync`; MEMBER lacks `auditlogs.read`) doesn't see `get_usage_summary` / `list_audit_logs` in `tools/list`, and calling one directly fails. The SDK docs disagree on the exact failure shape (Identity page: JSON-RPC error; Filters page: `McpException("Access forbidden")`), so the test pins down what 2.4.0 actually returns.
-- [ ] **Entitlement:** with a `TenantEntitlementOverride` setting `AnalyticsAuditLogsRead` to `"false"` (same pattern as `AuthorizationSecurityTests`), the tool returns an error result with the denial reason
-- [ ] **Suspended tenant:** after `SecurityTestHelpers.SuspendTenantAsync`, the tenant's token gets **403 `TenantSuspended`** from `TenantMiddleware`, same as the REST API
-- [ ] All tests pass: `dotnet test --no-build`
+- [x] No token → **401**
+- [x] Admin token → `tools/list` returns exactly the 4 tools; none has a `tenantId`-like property in its `inputSchema`
+- [x] **Tenant isolation:** tenant A's token → `get_usage_summary`, `list_audit_logs`, `list_webhook_endpoints`, `list_cors_origins` return only tenant A's data, even when tenant B has data
+- [x] **RBAC:** a MEMBER user (`SecurityTestHelpers.CreateMemberAndLoginAsync`; MEMBER lacks `auditlogs.read`) doesn't see `get_usage_summary` / `list_audit_logs` in `tools/list`, and calling one directly fails. The SDK docs disagree on the exact failure shape (Identity page: JSON-RPC error; Filters page: `McpException("Access forbidden")`), so the test pins down what 2.4.0 actually returns.
+- [x] **Entitlement:** with a `TenantEntitlementOverride` setting `AnalyticsAuditLogsRead` to `"false"` (same pattern as `AuthorizationSecurityTests`), the tool returns an error result with the denial reason
+- [x] **Suspended tenant:** after `SecurityTestHelpers.SuspendTenantAsync`, the tenant's token gets **403 `TenantSuspended`** from `TenantMiddleware`, same as the REST API
+- [x] All tests pass: `dotnet test --no-build`
 
 ### 4.2 Run locally and get a token
 ```bash
