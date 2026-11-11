@@ -9,11 +9,13 @@ public sealed class WebhookEndpointManagementService : IWebhookEndpointManagemen
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly IWebhookEndpointSecretIssuer _secretIssuer;
+    private readonly IAuditService _auditService;
 
-    public WebhookEndpointManagementService(ApplicationDbContext dbContext, IWebhookEndpointSecretIssuer secretIssuer)
+    public WebhookEndpointManagementService(ApplicationDbContext dbContext, IWebhookEndpointSecretIssuer secretIssuer, IAuditService auditService)
     {
         _dbContext = dbContext;
         _secretIssuer = secretIssuer;
+        _auditService = auditService;
     }
 
     public async Task<WebhookEndpointManagementResult> CreateEndpointAsync(Guid tenantId, string name, string callbackUrl, string subscribedEventTypes, CancellationToken cancellationToken = default)
@@ -38,6 +40,7 @@ public sealed class WebhookEndpointManagementService : IWebhookEndpointManagemen
 
         _dbContext.TenantWebhookEndpoints.Add(endpoint);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditAsync("WEBHOOK_ENDPOINT_CREATED", endpoint, new { endpoint.Name, endpoint.CallbackUrl, endpoint.SubscribedEventTypes });
         return new WebhookEndpointManagementResult(MapView(endpoint), secret, false);
     }
 
@@ -65,11 +68,17 @@ public sealed class WebhookEndpointManagementService : IWebhookEndpointManagemen
         var endpoint = await _dbContext.TenantWebhookEndpoints.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == endpointId, cancellationToken);
         if (endpoint is null) return null;
 
+        var before = new { endpoint.Name, endpoint.CallbackUrl, endpoint.SubscribedEventTypes };
         endpoint.Name = name;
         endpoint.CallbackUrl = callbackUrl;
         endpoint.SubscribedEventTypes = string.IsNullOrWhiteSpace(subscribedEventTypes) ? "*" : subscribedEventTypes;
         endpoint.UpdatedAtUtc = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditAsync("WEBHOOK_ENDPOINT_UPDATED", endpoint, new
+        {
+            Before = before,
+            After = new { endpoint.Name, endpoint.CallbackUrl, endpoint.SubscribedEventTypes }
+        });
         return MapView(endpoint);
     }
 
@@ -84,6 +93,7 @@ public sealed class WebhookEndpointManagementService : IWebhookEndpointManagemen
         if (endpoint is null) return false;
         _dbContext.TenantWebhookEndpoints.Remove(endpoint);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditAsync("WEBHOOK_ENDPOINT_DELETED", endpoint, new { endpoint.Name, endpoint.CallbackUrl });
         return true;
     }
 
@@ -94,6 +104,7 @@ public sealed class WebhookEndpointManagementService : IWebhookEndpointManagemen
         endpoint.IsActive = isActive;
         endpoint.UpdatedAtUtc = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditAsync(isActive ? "WEBHOOK_ENDPOINT_ACTIVATED" : "WEBHOOK_ENDPOINT_DEACTIVATED", endpoint, new { endpoint.Name });
         return MapView(endpoint);
     }
 
@@ -106,8 +117,14 @@ public sealed class WebhookEndpointManagementService : IWebhookEndpointManagemen
         endpoint.NextSigningSecretIssuedAtUtc = DateTime.UtcNow;
         endpoint.UpdatedAtUtc = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditAsync("WEBHOOK_ENDPOINT_SECRET_ROTATED", endpoint, new { endpoint.Name, endpoint.NextSigningSecretIssuedAtUtc });
         return new WebhookEndpointManagementResult(MapView(endpoint), endpoint.NextSigningSecret, true);
     }
+
+    // Called only after a successful save. Callers build `changes` field by field: never pass the entity or a
+    // WebhookEndpointManagementResult, because both can carry a plaintext signing secret.
+    private Task AuditAsync(string action, TenantWebhookEndpoint endpoint, object changes)
+        => _auditService.LogAsync(action, nameof(TenantWebhookEndpoint), endpoint.Id.ToString(), changes);
 
     private static WebhookEndpointManagementView MapView(TenantWebhookEndpoint endpoint)
         => new(
