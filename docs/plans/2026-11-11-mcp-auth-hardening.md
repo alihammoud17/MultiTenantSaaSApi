@@ -39,19 +39,36 @@ Authorization is **optional** in MCP and applies to HTTP transports only. When a
 - **SHOULD** return **403** with `error="insufficient_scope"` for insufficient scopes
 - Confused deputy (best practices) concerns MCP proxy servers that use a static client ID with a third-party authorization server and dynamic client registration: not applicable here (no OAuth proxy), say so in the ADR
 
-- [ ] Read the Authorization page (Token handling, Error handling) and the token-passthrough and confused-deputy parts of the security best practices
-- [ ] Fill in this table in your own words (it goes into `docs/decisions.md` in Block 3):
+- [x] Read the Authorization page (Token handling, Error handling) and the token-passthrough and confused-deputy parts of the security best practices
+- [x] Fill in this table in your own words (it goes into `docs/decisions.md` in Block 3):
 
 | Spec rule | Today | Gap? |
 |---|---|---|
-| Tokens validated (MUST, OAuth 2.1 §5.2) | JwtBearer validates signature, issuer, audience, lifetime on each request (stateless) | |
-| Invalid/expired token → 401 | | test missing for expired / wrong key / wrong audience / wrong issuer |
-| Audience = this server | Same `Jwt:Audience` as the REST API: a REST token works on MCP and vice versa | **yes**: acceptable while MCP is one resource with the API; must change for remote clients (Block 4) |
-| No token passthrough | Tools call Application services in-process; the token goes nowhere | check: no outbound call forwards `Authorization` |
-| Protected Resource Metadata, discoverable via `WWW-Authenticate: Bearer resource_metadata=…` **or** `/.well-known/oauth-protected-resource` | Not implemented (no OAuth authorization server) | **yes**: open item 13 |
-| 403 for insufficient scope (SHOULD) | RBAC denial is a JSON-RPC error inside a 200 (tool-level, from `AddAuthorizationFilters`) | note the difference: HTTP 403 is for whole-request scope failures |
-| Tenant never from model input | No tool parameter; `ITenantContext` from the claim | test missing for a smuggled argument |
-| Confused deputy | No OAuth proxy, no third-party authorization server | N/A |
+| Tokens validated (MUST, OAuth 2.1 §5.2) | JwtBearer checks signature, issuer, audience and expiry on every request. The transport is stateless, so no session skips the check. | No |
+| Invalid/expired token → 401 (MUST) | `RequireAuthorization()` rejects before `TenantMiddleware` and the MCP handler. JwtBearer should send `WWW-Authenticate: Bearer error="invalid_token"`. | Behavior: probably no gap. Proof: **tests missing** for expired, wrong key, wrong audience and wrong issuer (2.1–2.3). The header is expected but not yet confirmed. |
+| Audience = this server (MUST, RFC 8707) | One `Jwt:Audience` for the whole API, so a REST token works on MCP and the other way round. | **Yes.** Acceptable while MCP and REST are one resource with trusted, local clients. Must change for remote clients (Block 4, open item 13). |
+| No token passthrough (MUST NOT accept or transit other tokens) | Tools call Application services in-process. The only outbound HTTP is the webhook dispatcher, which signs with HMAC and sends no `Authorization`. | No. Checked by reading the code (2.8). Our server also accepts only its own tokens, but "its own" covers REST and MCP together; see the audience row. |
+| Protected Resource Metadata (MUST), discovered via `WWW-Authenticate` `resource_metadata` **or** `/.well-known/oauth-protected-resource` | Not implemented. No OAuth authorization server; clients are given a token from `POST /api/v1/auth/login`. | **Yes**, deliberately deferred. It only matters once clients must discover how to authorize on their own (remote clients): open item 13. |
+| 403 + `insufficient_scope` (SHOULD) | No scopes exist. Missing RBAC permissions are handled per tool: the tool is hidden from `tools/list`, and `tools/call` returns a JSON-RPC error inside HTTP 200. Whole-request rejections (suspended tenant, tenant mismatch) are HTTP 403. | No violation today (no scopes, and it's a SHOULD). Different layer: the spec's 403 is for whole-request scope failures. Revisit when scopes map to RBAC (open item 13). |
+| Tenant never from model input (our rule) | No tool has a tenant parameter (the schema test proves it). The tenant comes from the `tenant_id` claim through `ITenantContext`, and a conflicting hint gets 403 `TenantMismatch`. | **Tests missing:** smuggled `tenantId` argument (2.6), token for A + hint for B (2.5), tenant-less token + hint (2.4). |
+| Confused deputy | No OAuth proxy, no third-party authorization server, no dynamic client registration. | N/A |
+
+### References for the table
+
+Start with `Presentation/Program.cs:89-103`, `Presentation/Middleware/TenantMiddleware.cs:81-102` and the spec's *Token Handling* section; they cover most rows.
+
+| Row | Code and docs | Spec and standards |
+|---|---|---|
+| Tokens validated | `Presentation/Program.cs:89-103` (JwtBearer: issuer, audience, lifetime, signing key all validated); `Presentation/Program.cs:221-225` (`UseAuthentication` → `UseAuthorization` → `TenantMiddleware`); `Presentation/Mcp/McpServerRegistrationExtensions.cs:15` (stateless: each POST carries its own token) | Authorization, *Token Handling* |
+| Invalid/expired → 401 | `Presentation/Mcp/McpServerRegistrationExtensions.cs:24-28` (`RequireAuthorization()`); `Tests/Integration/McpServerTests.cs:29` and `:41` (only "no token" is tested today); `docs/contracts.md:153` (Failure modes) | Authorization, *Error Handling*; [RFC 6750 §3](https://www.rfc-editor.org/rfc/rfc6750#section-3) (`WWW-Authenticate: Bearer error="invalid_token"`) |
+| Audience = this server | `Application/Services/JwtService.cs:44` (`aud` = `Jwt:Audience`); `Presentation/appsettings.json:8-13` (one audience for the whole API); `Presentation/Program.cs:99` (`ValidAudience`) | Authorization, *Token Handling*; [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707) |
+| No token passthrough | `Presentation/Program.cs:83` (the only `HttpClient`); `Presentation/Services/OutboundWebhookDeliveryDispatcher.cs:62-89` (background job, HMAC signature at `:87`, no `Authorization`); `Presentation/Mcp/Tools/TenantReadTools.cs` (in-process service calls) | Authorization, *Access Token Privilege Restriction*; Security best practices, *Token Passthrough* |
+| Protected Resource Metadata | `docs/decisions.md:58` ("Bearer tokens, not MCP OAuth"); `docs/decisions.md:74` (open item 13); `docs/contracts.md:134` (no MCP OAuth discovery) | [Authorization server discovery](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery); [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728) |
+| 403 for insufficient scope | `Presentation/Mcp/McpServerRegistrationExtensions.cs:16` (`AddAuthorizationFilters()`); `Presentation/Mcp/Tools/TenantReadTools.cs:26, 44, 66, 81` (tool policies); `Tests/Integration/McpServerTests.cs:122-140` (JSON-RPC "Access forbidden" inside HTTP 200); `Presentation/Authorization/PermissionAuthorizationHandler.cs:22-27` (`tenant_id` + `sub` claims, then a DB lookup) | Authorization, *Error Handling*; [C# SDK v2, Identity and roles](https://csharp.sdk.modelcontextprotocol.io/v2/concepts/identity/identity.html) |
+| Tenant never from model input | `Presentation/Mcp/Tools/TenantReadTools.cs:71, 84, 91` (`tenantContext.TenantId`); `Presentation/Middleware/TenantMiddleware.cs:81` (header hint), `:96` (`TenantMismatch`), `:102` (claim, else hint), `:131` (`GetJwtTenantId`); `Tests/Integration/McpServerTests.cs:56` (no "tenant" input in any schema); `Tests/UnitTests/TenantMiddlewareTests.cs:213` (fallback to the hint) | Not a spec rule; our own invariant |
+| Confused deputy | `docs/decisions.md:58` (no OAuth proxy, no third-party authorization server) | Security best practices, *Confused Deputy Problem* |
+
+Background: `docs/decisions.md:49-58` (the MCP ADR), `docs/contracts.md:124-168` (the MCP endpoint contract), `Tests/Integration/ApiWebApplicationFactory.cs:42-45` (test JWT settings, needed in 2.0).
 
 ---
 
