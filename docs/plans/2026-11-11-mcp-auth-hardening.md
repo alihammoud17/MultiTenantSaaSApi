@@ -194,4 +194,4 @@ Only if Blocks 1–3 are done and there's time left. This is the spec's "issued 
 
 ## End of block
 - [x] D1 checked
-- [ ] Continue with the ai-labs plan (`docs/plans/2026-11-11-mcp-client.md`)
+- [x] Continue with the ai-labs plan (`docs/plans/2026-11-11-mcp-client.md`)
