@@ -22,6 +22,11 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
     public const string TenantBaseDomain = "example.test";
     public const string TenantOperationsSecret = "tenant-operations-test-secret";
 
+    // Shared with SecurityTestHelpers.CreateTestJwt, so a hand-minted token differs from a real one only where a test says so.
+    public const string JwtSecret = "super_secret_key_for_tests_only_1234567890";
+    public const string JwtIssuer = "MultiTenantSaasApi";
+    public const string JwtAudience = "MultiTenantSaasApi";
+
     private readonly string _connectionString = $"Data Source=file:api-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
     private readonly SqliteConnection _keepAliveConnection;
 
@@ -39,9 +44,9 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
         {
             var settings = new Dictionary<string, string?>
             {
-                ["Jwt:Secret"] = "super_secret_key_for_tests_only_1234567890",
-                ["Jwt:Issuer"] = "MultiTenantSaasApi",
-                ["Jwt:Audience"] = "MultiTenantSaasApi",
+                ["Jwt:Secret"] = JwtSecret,
+                ["Jwt:Issuer"] = JwtIssuer,
+                ["Jwt:Audience"] = JwtAudience,
                 ["Jwt:ExpirationMinutes"] = "60",
                 ["BillingIntegration:SharedSecret"] = "billing-integration-test-secret",
                 ["BillingIntegration:AllowedClockSkewMinutes"] = "5",
