@@ -69,7 +69,7 @@ The API requires a PostgreSQL connection, Redis connection, strong JWT secret, a
 
 - `ConnectionStrings__DefaultConnection`
 - `Redis__ConnectionString`
-- `Jwt__Secret`, `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpirationMinutes`
+- `Jwt__Secret`, `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpirationMinutes`, and optionally `Jwt__McpAudience`, `Jwt__McpTokenExpirationMinutes`
 - `BillingIntegration__SharedSecret`, `BillingIntegration__AllowedClockSkewMinutes`
 
 BillingService variables include `BILLING_PROVIDER`, `WEBHOOK_SIGNING_SECRET`, `DOTNET_CALLBACK_BASE_URL`, `STRIPE_API_KEY`, `STRIPE_API_BASE_URL`, and the `WORKFLOW_*` and `RECONCILIATION_INTERVAL_MS` controls. Configuration of these values does not make an unwired provider or callback path live. See the complete [configuration reference](docs/operations.md#configuration-reference) and [BillingService README](BillingService/README.md).
@@ -80,7 +80,7 @@ Never commit real secrets. Repository env examples contain placeholders only.
 
 - Public API routes use URL-segment versioning under `/api/v1/...`.
 - Internal billing callback: `POST /api/internal/billing/subscription-events`.
-- MCP endpoint for AI clients: `POST /api/v1/mcp` (Streamable HTTP, bearer JWT); see [below](#using-the-mcp-endpoint-from-claude-code) and [Service contracts](docs/contracts.md#mcp-endpoint).
+- MCP endpoint for AI clients: `POST /api/v1/mcp` (Streamable HTTP, bearer MCP token from `POST /api/v1/auth/mcp-token`); see [below](#using-the-mcp-endpoint-from-claude-code) and [Service contracts](docs/contracts.md#mcp-endpoint).
 - API diagnostics: `GET /health` and `GET /metrics`.
 - BillingService diagnostics: `GET /health` and `GET /metrics`.
 - BillingService provider entry point: `POST /webhooks/provider` (placeholder runtime behavior).
@@ -90,21 +90,24 @@ The API health endpoint checks the process and PostgreSQL, but not Redis. The me
 
 ## Using the MCP endpoint from Claude Code
 
-The MCP endpoint takes the same access token as the REST API (`POST /api/v1/auth/login` returns it as `token`; it expires after `Jwt:ExpirationMinutes`). The tools act for that token's tenant and user only.
+The MCP endpoint accepts only MCP tokens. Log in (`POST /api/v1/auth/login` returns an access token as `token`), then exchange that access token at `POST /api/v1/auth/mcp-token` for an MCP token that expires after 15 minutes (`Jwt:McpTokenExpirationMinutes`). Login tokens get `401` on the MCP endpoint, and MCP tokens get `401` on the REST API. The tools act for the token's tenant and user only.
 
 ```bash
 # API on http://localhost:5238 (needs PostgreSQL and Redis). Use the http profile:
 # Claude Code may not trust the local HTTPS development certificate.
 dotnet run --project Presentation --launch-profile http
 
+curl -s -X POST http://localhost:5238/api/v1/auth/mcp-token -H "Authorization: Bearer <access-token>"
+# {"token":"<mcp-token>","expiresAt":"..."}
+
 claude mcp add --transport http saas-api http://localhost:5238/api/v1/mcp \
-  --header "Authorization: Bearer <access-token>"
+  --header "Authorization: Bearer <mcp-token>"
 ```
 
 In Claude Code, `/mcp` then shows `saas-api` and its tools: all four for a tenant admin, fewer for users without the matching permissions.
 
 - Keep the default local scope. Never put a token in a committed `.mcp.json`.
-- The token expires. Instead of a fixed `--header`, a `headersHelper` script can log in and print `{"Authorization": "Bearer …"}` on each connection (see the [Claude Code MCP docs](https://code.claude.com/docs/en/mcp)). Keep the script and its credentials outside the repository.
+- The MCP token expires after 15 minutes. Instead of a fixed `--header`, a `headersHelper` script can log in, exchange the access token at `/api/v1/auth/mcp-token` and print `{"Authorization": "Bearer …"}` on each connection (see the [Claude Code MCP docs](https://code.claude.com/docs/en/mcp)). Keep the script and its credentials outside the repository.
 - Locally, verification email is not delivered, so activate a tenant you registered yourself first: see [Pending tenant registrations](docs/operations.md#pending-tenant-registrations).
 - Each MCP request counts against the tenant's monthly plan limit, and each tool call is recorded in its audit log as `MCP_TOOL_CALLED`.
 - Other MCP clients, such as the MCP Inspector, connect the same way: Streamable HTTP to the URL above with the `Authorization` header. The server has no stdio transport.

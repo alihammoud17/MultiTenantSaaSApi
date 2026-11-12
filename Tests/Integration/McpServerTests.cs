@@ -20,6 +20,7 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
 {
     private const string WebhookEndpointsRoute = "/api/v1/tenant/webhook-endpoints";
     private const string CorsOriginsRoute = "/api/v1/admin/tenant/cors-origins";
+    private const string McpTokenRoute = "/api/v1/auth/mcp-token";
 
     private readonly ApiWebApplicationFactory _factory = factory;
 
@@ -57,7 +58,7 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-tools-{Guid.NewGuid():N}@example.com", "Passw0rd!");
-        await using var mcp = await CreateMcpClientAsync(admin.Token);
+        await using var mcp = await CreateMcpClientForAccessTokenAsync(admin.Token);
 
         var tools = await mcp.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
@@ -100,7 +101,7 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         await PostAsAsync(client, tenantA.Token, CorsOriginsRoute, new { origin = originA });
         await PostAsAsync(client, tenantB.Token, CorsOriginsRoute, new { origin = originB });
 
-        await using var mcp = await CreateMcpClientAsync(tenantA.Token);
+        await using var mcp = await CreateMcpClientForAccessTokenAsync(tenantA.Token);
 
         var auditLogs = await CallToolJsonAsync(mcp, "list_audit_logs", new() { ["pageSize"] = 200 });
         auditLogs.GetArrayLength().Should().BeGreaterThan(0, "tenant A's registration and login are audited");
@@ -126,7 +127,7 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin.Token);
         var memberToken = await SecurityTestHelpers.CreateMemberAndLoginAsync(client);
 
-        await using var mcp = await CreateMcpClientAsync(memberToken);
+        await using var mcp = await CreateMcpClientForAccessTokenAsync(memberToken);
 
         // RBAC filtering hides the audit tools (a MEMBER holds none of the four tools' permissions).
         var tools = await mcp.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -165,7 +166,7 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using var mcp = await CreateMcpClientAsync(admin.Token);
+        await using var mcp = await CreateMcpClientForAccessTokenAsync(admin.Token);
 
         // Not CallToolJsonAsync: that helper requires success.
         var result = await mcp.CallToolAsync("list_audit_logs", cancellationToken: TestContext.Current.CancellationToken);
@@ -190,7 +191,7 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-audit-{Guid.NewGuid():N}@example.com", "Passw0rd!");
-        await using var mcp = await CreateMcpClientAsync(admin.Token);
+        await using var mcp = await CreateMcpClientForAccessTokenAsync(admin.Token);
 
         await CallToolJsonAsync(mcp, "list_webhook_endpoints");
         var entries = await CallToolJsonAsync(mcp, "list_audit_logs", new() { ["action"] = McpToolCallAuditFilter.AuditAction });
@@ -204,17 +205,19 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         entry.GetProperty("changes").GetString().Should().Be("{\"isError\":false}");
     }
 
-    // The token is still valid; TenantMiddleware rejects the suspended tenant before MCP runs, same as the REST API.
+    // The MCP token is still valid; TenantMiddleware rejects the suspended tenant before MCP runs, same as the REST API.
     [Fact]
     public async Task SuspendedTenant_ShouldBeRejectedWith403()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var tenant = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-suspended-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        // Exchanged before the suspension: afterwards /auth/mcp-token refuses the tenant too.
+        var mcpToken = await SecurityTestHelpers.GetMcpTokenAsync(client, tenant.Token);
         using var suspend = await SecurityTestHelpers.SuspendTenantAsync(client, tenant.TenantId);
         suspend.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using var request = CreateRawToolsListRequest();
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tenant.Token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", mcpToken);
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -228,16 +231,18 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-minted-{Guid.NewGuid():N}@example.com", "Passw0rd!");
-        var token = SecurityTestHelpers.CreateTestJwt(SecurityTestHelpers.GetUserId(admin.Token), admin.TenantId, DateTime.UtcNow.AddMinutes(10));
+        var token = MintMcpToken(SecurityTestHelpers.GetUserId(admin.Token), admin.TenantId, DateTime.UtcNow.AddMinutes(10));
 
         using var response = await SendRawToolsListAsync(client, token);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
-    // Spec (2026-07-28): invalid or expired tokens MUST get 401. Each case changes one property of an otherwise valid token.
-    // Expired is 10 minutes old because JwtBearer accepts 5 minutes of clock skew by default.
+    // Spec (2026-07-28): invalid or expired tokens MUST get 401, and tokens must be issued for this server (audience).
+    // Each case changes one property of an otherwise valid MCP token; "api-audience" is the caller's real login token,
+    // which REST accepts. Expired is 10 minutes old because JwtBearer accepts 5 minutes of clock skew by default.
     [Theory]
+    [InlineData("api-audience")]
     [InlineData("expired")]
     [InlineData("wrong-signing-key")]
     [InlineData("wrong-audience")]
@@ -251,11 +256,12 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
 
         var token = defect switch
         {
-            "expired" => SecurityTestHelpers.CreateTestJwt(userId, admin.TenantId, DateTime.UtcNow.AddMinutes(-10)),
+            "api-audience" => admin.Token,
+            "expired" => MintMcpToken(userId, admin.TenantId, DateTime.UtcNow.AddMinutes(-10)),
             // At least 32 bytes, so HS256 signing succeeds and only validation can fail.
-            "wrong-signing-key" => SecurityTestHelpers.CreateTestJwt(userId, admin.TenantId, validUntil, signingKey: "a_different_signing_key_also_32_bytes_or_more"),
-            "wrong-audience" => SecurityTestHelpers.CreateTestJwt(userId, admin.TenantId, validUntil, audience: "https://other-resource.example.com"),
-            "wrong-issuer" => SecurityTestHelpers.CreateTestJwt(userId, admin.TenantId, validUntil, issuer: "https://other-issuer.example.com"),
+            "wrong-signing-key" => MintMcpToken(userId, admin.TenantId, validUntil, signingKey: "a_different_signing_key_also_32_bytes_or_more"),
+            "wrong-audience" => MintMcpToken(userId, admin.TenantId, validUntil, audience: "https://other-resource.example.com"),
+            "wrong-issuer" => MintMcpToken(userId, admin.TenantId, validUntil, issuer: "https://other-issuer.example.com"),
             _ => throw new ArgumentOutOfRangeException(nameof(defect), defect, null)
         };
 
@@ -275,7 +281,7 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-notenant-{Guid.NewGuid():N}@example.com", "Passw0rd!");
-        var token = SecurityTestHelpers.CreateTestJwt(SecurityTestHelpers.GetUserId(admin.Token), tenantId: null, DateTime.UtcNow.AddMinutes(10));
+        var token = MintMcpToken(SecurityTestHelpers.GetUserId(admin.Token), tenantId: null, DateTime.UtcNow.AddMinutes(10));
 
         using var response = await SendRawToolsListAsync(client, token);
 
@@ -294,7 +300,7 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         var attacker = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-notenant-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         var victim = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-notenant-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         await PostAsAsync(client, victim.Token, WebhookEndpointsRoute, new { name = "victim-hook", callbackUrl = "https://victim.example.com/hook" });
-        var token = SecurityTestHelpers.CreateTestJwt(SecurityTestHelpers.GetUserId(attacker.Token), tenantId: null, DateTime.UtcNow.AddMinutes(10));
+        var token = MintMcpToken(SecurityTestHelpers.GetUserId(attacker.Token), tenantId: null, DateTime.UtcNow.AddMinutes(10));
 
         await using var mcp = await CreateMcpClientAsync(token, tenantHint: victim.TenantId);
 
@@ -311,7 +317,9 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-mismatch-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
         var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-mismatch-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        using var response = await SendRawToolsListAsync(client, tenantA.Token, tenantHint: tenantB.TenantId);
+        var mcpTokenA = await SecurityTestHelpers.GetMcpTokenAsync(client, tenantA.Token);
+
+        using var response = await SendRawToolsListAsync(client, mcpTokenA, tenantHint: tenantB.TenantId);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("TenantMismatch");
@@ -330,7 +338,7 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         await PostAsAsync(client, tenantB.Token, WebhookEndpointsRoute, new { name = "b-hook", callbackUrl = "https://b.example.com/hook" });
         var smuggled = tenantB.TenantId.ToString();
 
-        await using var mcp = await CreateMcpClientAsync(tenantA.Token);
+        await using var mcp = await CreateMcpClientForAccessTokenAsync(tenantA.Token);
 
         // A tool without parameters.
         var webhooks = await CallToolJsonAsync(mcp, "list_webhook_endpoints", new() { ["tenantId"] = smuggled, ["tenant_id"] = smuggled });
@@ -342,18 +350,19 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         auditLogs.EnumerateArray().Select(e => e.GetProperty("tenantId").GetGuid()).Should().OnlyContain(id => id == tenantA.TenantId);
     }
 
-    // There is no user deactivation, only hard delete. The JWT stays valid until it expires, but every RBAC policy looks
+    // There is no user deactivation, only hard delete. The JWTs stay valid until they expire, but every RBAC policy looks
     // the user up per request, so REST and MCP both refuse a deleted user on policy-gated actions. Actions with only
-    // [Authorize] would still accept the token (known limit of stateless JWTs).
+    // [Authorize] would still accept the token (known limit of stateless JWTs); the MCP token's 15-minute lifetime bounds it.
     [Fact]
     public async Task DeletedUser_ShouldBeRefusedOnMcp_LikeOnRest()
     {
         using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
         var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-deleted-{Guid.NewGuid():N}@example.com", "Passw0rd!");
 
-        // Before the deletion the token works on both surfaces, so the refusals below come from the deletion.
+        // Before the deletion the tokens work on both surfaces, so the refusals below come from the deletion.
+        var mcpToken = await SecurityTestHelpers.GetMcpTokenAsync(client, admin.Token);
         (await GetAsAsync(client, admin.Token, WebhookEndpointsRoute)).Should().Be(HttpStatusCode.OK);
-        await using (var before = await CreateMcpClientAsync(admin.Token))
+        await using (var before = await CreateMcpClientAsync(mcpToken))
         {
             var toolsBefore = await before.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
             toolsBefore.Select(t => t.Name).Should().Contain("list_webhook_endpoints");
@@ -369,9 +378,10 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         }
 
         (await GetAsAsync(client, admin.Token, WebhookEndpointsRoute)).Should().Be(HttpStatusCode.Forbidden);
+        (await PostAsStatusAsync(client, admin.Token, McpTokenRoute)).Should().Be(HttpStatusCode.Unauthorized, "a deleted user gets no new MCP token");
 
-        // Still authenticates (the MCP handshake succeeds), but no tool is visible or callable.
-        await using var mcp = await CreateMcpClientAsync(admin.Token);
+        // The MCP token issued before still authenticates (the handshake succeeds), but no tool is visible or callable.
+        await using var mcp = await CreateMcpClientAsync(mcpToken);
         var tools = await mcp.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
         tools.Should().BeEmpty();
         await AssertToolCallForbiddenAsync(mcp, "list_webhook_endpoints");
@@ -396,6 +406,25 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         }
 
         return await client.SendAsync(request, TestContext.Current.CancellationToken);
+    }
+
+    // A token minted with the test signing settings; the audience defaults to the MCP resource.
+    private static string MintMcpToken(
+        Guid userId,
+        Guid? tenantId,
+        DateTime expiresUtc,
+        string signingKey = ApiWebApplicationFactory.JwtSecret,
+        string issuer = ApiWebApplicationFactory.JwtIssuer,
+        string audience = ApiWebApplicationFactory.JwtMcpAudience)
+        => SecurityTestHelpers.CreateTestJwt(userId, tenantId, expiresUtc, signingKey: signingKey, issuer: issuer, audience: audience);
+
+    private static async Task<HttpStatusCode> PostAsStatusAsync(HttpClient client, string token, string route)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, route);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+        return response.StatusCode;
     }
 
     private static async Task<HttpStatusCode> GetAsAsync(HttpClient client, string token, string route)
@@ -436,7 +465,14 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         return request;
     }
 
-    // Connects an MCP client to the in-process test server as the token's user, optionally sending an X-Tenant-ID hint.
+    // Exchanges an API access token for an MCP token, then connects with it.
+    private async Task<McpClient> CreateMcpClientForAccessTokenAsync(string accessToken)
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        return await CreateMcpClientAsync(await SecurityTestHelpers.GetMcpTokenAsync(client, accessToken));
+    }
+
+    // Connects an MCP client to the in-process test server with an MCP token, optionally sending an X-Tenant-ID hint.
     // The transport owns the HttpClient, so disposing the McpClient disposes both.
     private async Task<McpClient> CreateMcpClientAsync(string token, Guid? tenantHint = null)
     {

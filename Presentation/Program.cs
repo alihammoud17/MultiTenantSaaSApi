@@ -86,21 +86,25 @@ builder.Services.AddHostedService<OutboundWebhookDeliveryDispatcher>();
 // RBAC
 builder.Services.AddScoped<IRbacAuthorizationService, RbacAuthorizationService>();
 
+// Two audiences, one key and issuer: API tokens (Jwt:Audience) for REST, MCP tokens (Jwt:McpAudience) for
+// /api/v1/mcp only. Configuration is read inside the options callbacks, when every source is loaded;
+// the two audiences are checked to differ right after Build.
+TokenValidationParameters CreateTokenValidationParameters(string audienceKey) => new()
+{
+    ValidateIssuer = true,
+    ValidateAudience = true,
+    ValidateLifetime = true,
+    ValidateIssuerSigningKey = true,
+    ValidIssuer = builder.Configuration["Jwt:Issuer"],
+    ValidAudience = builder.Configuration[audienceKey],
+    IssuerSigningKey = new SymmetricSecurityKey(
+        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!))
+};
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!))
-        };
-    });
+    .AddJwtBearer(options => options.TokenValidationParameters = CreateTokenValidationParameters("Jwt:Audience"))
+    .AddJwtBearer(McpServerRegistrationExtensions.AuthenticationScheme,
+        options => options.TokenValidationParameters = CreateTokenValidationParameters("Jwt:McpAudience"));
 
 builder.Services.AddRbacAuthorization();
 builder.Services.AddTenantMcpServer();
@@ -200,6 +204,14 @@ builder.Services.AddHealthChecks()
 
 
 var app = builder.Build();
+
+// Equal audiences would make REST accept MCP tokens and MCP accept REST tokens. Checked after Build so every
+// configuration source, including a test host's, is applied.
+if (string.IsNullOrWhiteSpace(app.Configuration["Jwt:McpAudience"]) ||
+    string.Equals(app.Configuration["Jwt:McpAudience"], app.Configuration["Jwt:Audience"], StringComparison.Ordinal))
+{
+    throw new InvalidOperationException("Jwt:McpAudience must be set and differ from Jwt:Audience.");
+}
 
 // Must run first so the rate limiter, audit and refresh-token IP fields see the real client address.
 app.UseForwardedHeaders();

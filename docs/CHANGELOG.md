@@ -4,6 +4,7 @@ This is a milestone-level implementation history, not a release promise or activ
 
 ## Unreleased
 
+- **Breaking for MCP clients:** `/api/v1/mcp` now accepts only audience-bound MCP tokens. Clients exchange their access token at the new `POST /api/v1/auth/mcp-token` for a token with the same claims, `aud` = `Jwt:McpAudience` (default `MultiTenantSaasApi/mcp`) and a 15-minute lifetime (`Jwt:McpTokenExpirationMinutes`), with no refresh token. Login tokens get `401` on MCP; MCP tokens get `401` on REST and can't be exchanged again. Issuance is audited as `MCP_TOKEN_ISSUED`. The API refuses to start if `Jwt:McpAudience` is empty or equals `Jwt:Audience`; deployments need no new setting. This meets the MCP spec's audience rule; Protected Resource Metadata, an OAuth authorization server and scopes remain in open item 13. See [Service contracts](contracts.md#token-exchange), [Decisions](decisions.md#the-mcp-endpoint-is-an-in-process-stateless-transport-in-presentation), [Operations](operations.md#aspnet-core-api) and the README for the Claude Code setup. Coverage: `Tests/Integration/McpTokenTests.cs`, `Tests/Integration/McpServerTests.cs`. No schema change.
 - The MCP endpoint's authentication was checked against the MCP authorization spec (revision `2026-07-28`), and new tests in `Tests/Integration/McpServerTests.cs` pin it:
   - expired, wrong-key, wrong-audience and wrong-issuer tokens get `401` with `WWW-Authenticate: Bearer error="invalid_token"`
   - a tenant hint that disagrees with the token gets `403` `TenantMismatch`

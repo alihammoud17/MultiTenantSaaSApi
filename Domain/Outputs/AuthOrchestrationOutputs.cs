@@ -41,6 +41,11 @@ namespace Domain.Outputs
         AuthFlowError Error,
         AuthResponse? Response);
 
+    public sealed record McpTokenResult(
+        bool Succeeded,
+        AuthFlowError Error,
+        AccessToken? Token);
+
     public sealed record InitiateMfaEnrollmentResult(
         bool Succeeded,
         AuthFlowError Error,
