@@ -53,22 +53,82 @@ Authorization is **optional** in MCP and applies to HTTP transports only. When a
 | Tenant never from model input (our rule) | No tool has a tenant parameter (the schema test proves it). The tenant comes from the `tenant_id` claim through `ITenantContext`, and a conflicting hint gets 403 `TenantMismatch`. | **Tests missing:** smuggled `tenantId` argument (2.6), token for A + hint for B (2.5), tenant-less token + hint (2.4). |
 | Confused deputy | No OAuth proxy, no third-party authorization server, no dynamic client registration. | N/A |
 
-### References for the table
+### How the table was filled
 
-Start with `Presentation/Program.cs:89-103`, `Presentation/Middleware/TenantMiddleware.cs:81-102` and the spec's *Token Handling* section; they cover most rows.
+The table above is final: reviewed and accepted on 12 Nov 2026. This section records how each cell was established, so the ADR entry in Block 3 can cite it and a later reader can re-check it.
 
-| Row | Code and docs | Spec and standards |
-|---|---|---|
-| Tokens validated | `Presentation/Program.cs:89-103` (JwtBearer: issuer, audience, lifetime, signing key all validated); `Presentation/Program.cs:221-225` (`UseAuthentication` → `UseAuthorization` → `TenantMiddleware`); `Presentation/Mcp/McpServerRegistrationExtensions.cs:15` (stateless: each POST carries its own token) | Authorization, *Token Handling* |
-| Invalid/expired → 401 | `Presentation/Mcp/McpServerRegistrationExtensions.cs:24-28` (`RequireAuthorization()`); `Tests/Integration/McpServerTests.cs:29` and `:41` (only "no token" is tested today); `docs/contracts.md:153` (Failure modes) | Authorization, *Error Handling*; [RFC 6750 §3](https://www.rfc-editor.org/rfc/rfc6750#section-3) (`WWW-Authenticate: Bearer error="invalid_token"`) |
-| Audience = this server | `Application/Services/JwtService.cs:44` (`aud` = `Jwt:Audience`); `Presentation/appsettings.json:8-13` (one audience for the whole API); `Presentation/Program.cs:99` (`ValidAudience`) | Authorization, *Token Handling*; [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707) |
-| No token passthrough | `Presentation/Program.cs:83` (the only `HttpClient`); `Presentation/Services/OutboundWebhookDeliveryDispatcher.cs:62-89` (background job, HMAC signature at `:87`, no `Authorization`); `Presentation/Mcp/Tools/TenantReadTools.cs` (in-process service calls) | Authorization, *Access Token Privilege Restriction*; Security best practices, *Token Passthrough* |
-| Protected Resource Metadata | `docs/decisions.md:58` ("Bearer tokens, not MCP OAuth"); `docs/decisions.md:74` (open item 13); `docs/contracts.md:134` (no MCP OAuth discovery) | [Authorization server discovery](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery); [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728) |
-| 403 for insufficient scope | `Presentation/Mcp/McpServerRegistrationExtensions.cs:16` (`AddAuthorizationFilters()`); `Presentation/Mcp/Tools/TenantReadTools.cs:26, 44, 66, 81` (tool policies); `Tests/Integration/McpServerTests.cs:122-140` (JSON-RPC "Access forbidden" inside HTTP 200); `Presentation/Authorization/PermissionAuthorizationHandler.cs:22-27` (`tenant_id` + `sub` claims, then a DB lookup) | Authorization, *Error Handling*; [C# SDK v2, Identity and roles](https://csharp.sdk.modelcontextprotocol.io/v2/concepts/identity/identity.html) |
-| Tenant never from model input | `Presentation/Mcp/Tools/TenantReadTools.cs:71, 84, 91` (`tenantContext.TenantId`); `Presentation/Middleware/TenantMiddleware.cs:81` (header hint), `:96` (`TenantMismatch`), `:102` (claim, else hint), `:131` (`GetJwtTenantId`); `Tests/Integration/McpServerTests.cs:56` (no "tenant" input in any schema); `Tests/UnitTests/TenantMiddlewareTests.cs:213` (fallback to the hint) | Not a spec rule; our own invariant |
-| Confused deputy | `docs/decisions.md:58` (no OAuth proxy, no third-party authorization server) | Security best practices, *Confused Deputy Problem* |
+#### Method
 
-Background: `docs/decisions.md:49-58` (the MCP ADR), `docs/contracts.md:124-168` (the MCP endpoint contract), `Tests/Integration/ApiWebApplicationFactory.cs:42-45` (test JWT settings, needed in 2.0).
+1. **Read the repo's own account first:** this plan, `AGENTS.md`, `CLAUDE.md`, the MCP ADR (`docs/decisions.md:49-58`), open item 13 (`docs/decisions.md:74`), `docs/contracts.md#mcp-endpoint` (`docs/contracts.md:124-168`) and `Tests/Integration/McpServerTests.cs`. This gives the claims to verify, not the evidence.
+2. **Read the code paths a request takes:** JwtBearer setup and middleware order in `Presentation/Program.cs`, the MCP route and filters in `Presentation/Mcp/McpServerRegistrationExtensions.cs`, `Presentation/Middleware/TenantMiddleware.cs`, `Presentation/Authorization/PermissionAuthorizationHandler.cs`, `Application/Services/RbacAuthorizationService.cs`, the tools in `Presentation/Mcp/Tools/TenantReadTools.cs`, and token issuance in `Application/Services/JwtService.cs`.
+3. **Search the code for anything that could forward a token:** across `Presentation`, `Application` and `Infrastructure`, searched for `HttpClient`, `IHttpClientFactory`, `AddHttpClient`, `IHttpContextAccessor`, `DefaultRequestHeaders`, `Headers.Authorization` and `Bearer`, then read every hit.
+4. **Read the existing tests that already pin behavior:** `Tests/Integration/McpServerTests.cs` (what MCP proves today) and `Tests/UnitTests/TenantMiddlewareTests.cs` (how the middleware treats claims and hints).
+5. **Read the spec pages linked in Resources (fetched 12 Nov 2026), not from memory,** checking each Block 1 bullet against the exact wording and its MUST/SHOULD level. Pages: Authorization (`/specification/latest/`, whose internal links point to revision `2026-07-28`), Authorization server discovery (`2026-07-28`), Security best practices, and the C# SDK v2 Identity and roles page.
+6. **Fill each row by comparing:** what the spec requires (step 5) against what the code does (steps 2–4), then mark a gap only where the code does not meet the requirement, and "test missing" where it probably does but nothing proves it.
+
+#### Sources
+
+| Source | What was taken from it |
+|---|---|
+| [MCP Authorization](https://modelcontextprotocol.io/specification/latest/basic/authorization), *Token Handling*, *Error Handling*, *Access Token Privilege Restriction* | MUST validate tokens; MUST 401 invalid/expired tokens; MUST validate audience (RFC 8707); MUST NOT accept or transit other tokens; MUST implement PRM; SHOULD 403 `insufficient_scope`; applies to HTTP transports only |
+| [Authorization server discovery](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery) | PRM discovery is one of two options: `WWW-Authenticate` `resource_metadata` **or** `/.well-known/oauth-protected-resource`; clients must support both |
+| [Security best practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices), *Token Passthrough*, *Confused Deputy Problem* | Passthrough definition and why it's forbidden; confused deputy is about OAuth proxy servers with a static client ID and dynamic client registration |
+| [C# SDK v2, Identity and roles](https://csharp.sdk.modelcontextprotocol.io/v2/concepts/identity/identity.html) | With `AddAuthorizationFilters()`, unauthorized items are removed from list results and individual calls get a JSON-RPC "access forbidden" error (no code given); silent on unknown tool arguments |
+| [RFC 6750 §3](https://www.rfc-editor.org/rfc/rfc6750#section-3), [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707), [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728) | Background for the `WWW-Authenticate: Bearer error="invalid_token"` format, resource indicators (audience), and PRM |
+| `docs/decisions.md:49-58`, `:74`; `docs/contracts.md:124-168` | The decisions already made (bearer tokens, not MCP OAuth; read-only tools; tenant from the token) and the documented failure modes |
+| Code and tests listed per row below | The evidence for each "Today" cell |
+
+#### Evidence per row
+
+Line numbers are as of commit `feed20c`.
+
+**1. Tokens validated (MUST, OAuth 2.1 §5.2)**
+- Spec: "MCP servers, acting in their role as an OAuth 2.1 resource server, MUST validate access tokens as described in OAuth 2.1 Section 5.2." The only "every request" sentence in the spec is client-side ("authorization MUST be included in every HTTP request from client to server").
+- Code: `Presentation/Program.cs:89-103` sets `ValidateIssuer`, `ValidateAudience`, `ValidateLifetime` and `ValidateIssuerSigningKey` to `true`, with `ValidIssuer`, `ValidAudience` and the signing key from `Jwt:*`. `Presentation/Program.cs:221-225` runs `UseAuthentication` → `UseAuthorization` → `TenantMiddleware`. `Presentation/Mcp/McpServerRegistrationExtensions.cs:15` sets `HttpServerSessionMode.Stateless`, so each POST is authenticated on its own; there is no session that could carry an earlier authentication forward.
+- Verdict: no gap. All four token properties are checked on each request.
+
+**2. Invalid/expired token → 401 (MUST)**
+- Spec: "Invalid or expired tokens MUST receive a HTTP 401 response." The Error Handling table lists 401 as "Authorization required or token invalid".
+- Code: `Presentation/Mcp/McpServerRegistrationExtensions.cs:24-28` maps the route with `RequireAuthorization()`; a request whose token fails JwtBearer validation is unauthenticated, so `UseAuthorization` challenges with 401 before `TenantMiddleware` or the MCP handler run. JwtBearer's challenge is expected to carry `WWW-Authenticate: Bearer error="invalid_token"` (RFC 6750 format).
+- Tests: `Tests/Integration/McpServerTests.cs:29` (`NoToken_ShouldReturn401`) and `:41` (`NoToken_WithTenantHint_ShouldReturn401`) cover only a missing token. `docs/contracts.md:153` documents "Missing or invalid token → 401", but nothing tests an invalid one.
+- Verdict: behavior probably compliant, unproven. The header contents are expected, not observed; steps 2.1–2.3 pin them.
+
+**3. Audience = this server (MUST, RFC 8707)**
+- Spec: "MCP servers MUST validate that access tokens were issued specifically for them as the intended audience, according to RFC 8707 Section 2."
+- Code: `Application/Services/JwtService.cs:44` writes `aud` = `Jwt:Audience` on every token; `Presentation/appsettings.json:8-13` defines one audience (`MultiTenantSaasApi`) for the whole API; `Presentation/Program.cs:99` accepts exactly that audience. So the audience *is* validated, but it names the whole API, not the MCP resource: a REST token works on `/api/v1/mcp` and an MCP caller's token works on REST.
+- Verdict: gap. Acceptable while MCP and REST are one resource used by trusted local clients (`docs/decisions.md:58`); must change for remote clients (Block 4, open item 13).
+
+**4. No token passthrough (MUST NOT accept or transit other tokens)**
+- Spec: "MCP servers MUST only accept tokens that are valid for use with their own resources" and "MUST NOT accept or transit any other tokens." Best practices: passthrough is "explicitly forbidden in the authorization specification".
+- Code: the search in method step 3 found one registered client, `Presentation/Program.cs:83` (`AddHttpClient("outbound-webhooks")`), used only in `Presentation/Services/OutboundWebhookDeliveryDispatcher.cs:62-89`. That is a background service with no request context: it signs each delivery with the endpoint's HMAC secret (`:87`, `X-Tenant-Webhook-Signature`) and sets no `Authorization` header. `IHttpContextAccessor` appears only in `Application/Services/AuditService.cs` and `Application/Services/EntitlementEvaluator.cs`, which read request data and make no HTTP calls. `Presentation/Mcp/Tools/TenantReadTools.cs` calls Application services in-process. The only other `Authorization` / `Bearer` hits are the Swagger security definition in `Program.cs`.
+- Verdict: no gap (this is also step 2.8's evidence). "Accepts only its own tokens" holds only with "own" meaning the whole API; see row 3.
+
+**5. Protected Resource Metadata (MUST)**
+- Spec: "MCP servers MUST implement OAuth 2.0 Protected Resource Metadata (RFC 9728)." Discovery page: servers "MUST implement one of the following discovery mechanisms": the `resource_metadata` parameter in `WWW-Authenticate` on 401, or a well-known URI (`/.well-known/oauth-protected-resource`, at the root or path-based).
+- Code: no PRM document, no well-known route, no `resource_metadata` in any challenge, and no OAuth authorization server. Clients get a token from `POST /api/v1/auth/login`. `docs/decisions.md:58` ("Bearer tokens, not MCP OAuth"), `docs/decisions.md:74` (open item 13) and `docs/contracts.md:134` ("There is no MCP OAuth discovery") record this as deliberate.
+- Verdict: gap, deliberately deferred. PRM exists so a client can discover how to obtain a token by itself; our clients are handed one. It becomes necessary with remote clients (open item 13).
+
+**6. 403 + `insufficient_scope` (SHOULD)**
+- Spec: for insufficient scope "the server SHOULD respond with HTTP 403 Forbidden" and `error="insufficient_scope"`. The Error Handling table lists 403 as "Invalid scopes or insufficient permissions".
+- Code: no scopes exist in our tokens (`Application/Services/JwtService.cs` issues `sub`, `email`, `tenant_id`, `role`, `jti`). Permissions are RBAC, enforced per tool: `Presentation/Mcp/McpServerRegistrationExtensions.cs:16` (`AddAuthorizationFilters()`), the `[Authorize(Policy = …)]` attributes at `Presentation/Mcp/Tools/TenantReadTools.cs:26, 44, 66, 81`, and `Presentation/Authorization/PermissionAuthorizationHandler.cs:22-27` (needs the `sub` and `tenant_id` claims, then checks the database through `RbacAuthorizationService`). `Tests/Integration/McpServerTests.cs:122-140` pins the result: the tool is left out of `tools/list`, and calling it returns a JSON-RPC error ("Access forbidden", `-32600`) inside HTTP 200. That matches the SDK page (filtered lists, JSON-RPC error on calls). Whole-request rejections are HTTP 403: `TenantSuspended` and `TenantMismatch` in `Presentation/Middleware/TenantMiddleware.cs`.
+- Verdict: no violation. There are no scopes, the rule is a SHOULD, and per-tool RBAC is a different layer from the spec's whole-request scope check. Revisit when scopes are mapped to RBAC (open item 13).
+
+**7. Tenant never from model input (our own rule, not a spec rule)**
+- Code: no tool parameter carries a tenant; the tools read `tenantContext.TenantId` (`Presentation/Mcp/Tools/TenantReadTools.cs:71, 84, 91`). `Presentation/Middleware/TenantMiddleware.cs` takes a hint from the subdomain or `X-Tenant-ID` (`:81`), rejects a hint that disagrees with the claim with 403 `TenantMismatch` (`:96`), and otherwise uses the claim, falling back to the hint (`:102`); `GetJwtTenantId` (`:131`) reads `tenant_id` only from an authenticated identity.
+- Tests: `Tests/Integration/McpServerTests.cs:56` proves no tool's input schema contains "tenant". `Tests/UnitTests/TenantMiddlewareTests.cs:213` pins that an authenticated token without a usable `tenant_id` falls back to the hint, which is why 2.4 exists.
+- Verdict: holds in code; tests missing for a smuggled `tenantId` argument (2.6), token for A with a hint for B (2.5), and a tenant-less token with a hint (2.4).
+
+**8. Confused deputy**
+- Best practices: the attack targets MCP proxy servers that use a static client ID with a third-party authorization server while allowing dynamic client registration; a consent cookie lets an attacker skip consent and obtain an authorization code.
+- Code: none of those parts exist. No OAuth proxy, no third-party authorization server, no dynamic client registration (`docs/decisions.md:58`).
+- Verdict: not applicable. Re-check if an OAuth authorization server is added (open item 13).
+
+#### Limits of this research
+
+- The Authorization page was read at `/specification/latest/`. The page shows no version; revision `2026-07-28` is inferred from its internal links.
+- The `WWW-Authenticate` header in row 2 is expected from JwtBearer's defaults, not observed. Step 2.1 records what is actually sent.
+- The SDK docs don't say how unknown tool arguments are handled; step 2.6 records it.
+- The passthrough search covers the .NET API only. BillingService doesn't receive caller tokens and its default callback publisher is a no-op (`CLAUDE.md`, "What is not live").
 
 ---
 
