@@ -3,7 +3,7 @@
 - **Date:** Wednesday's focus (week 6, day 3), planned for 11 Nov 2026, worked on 12 Nov 2026
 - **Repo:** MultiTenantSaaSApi
 - **Branch:** `feat/mcp-auth-hardening` (from `master`)
-- **Status:** in progress
+- **Status:** Blocks 1–3 done; Block 4 (optional) not started
 - **Focus:** Secure the server
 - **Time:** ~1.5–2 h (Blocks 1–3); Block 4 is optional
 - **Companion plan:** ai-labs `docs/plans/2026-11-11-mcp-client.md` (consuming these tools from my `IChatClient` app). Do this plan first.
@@ -11,7 +11,7 @@
 Tutor mode: I type the commands and write the code. Claude explains each step, reviews it (build, tests) and ticks the boxes. Claude writes a step's code only when I say "hand it over".
 
 ## Deliverable
-- [ ] **D1.** The server authenticates the caller and resolves the tenant from the token, never from model input, and tests prove each part
+- [x] **D1.** The server authenticates the caller and resolves the tenant from the token, never from model input, and tests prove each part
 
 ## Where we start
 Most of D1 already exists from PR #156: `RequireAuthorization()` on `/api/v1/mcp`, JWT bearer validation on every request (the transport is stateless), `TenantMiddleware` takes the tenant from the `tenant_id` claim, no tool has a tenant parameter, and `McpServerTests` covers no token, a tenant hint without a token, isolation, RBAC, entitlements and suspension.
@@ -176,11 +176,11 @@ Minting the bad tokens: the factory's JWT settings are inline literals today (`A
 
 ## Block 3: Docs (20 min)
 
-- [ ] `docs/decisions.md`: extend the MCP ADR with the spec comparison (Block 1 table, short, citing revision `2026-07-28`), what the new tests pin, and the tenant-less-token follow-up from 2.4
-- [ ] Update open item 13 with the concrete list for remote clients: audience-bound tokens for the MCP resource, Protected Resource Metadata discoverable via `WWW-Authenticate` `resource_metadata` or `/.well-known/oauth-protected-resource`, an OAuth 2.1 authorization server (PKCE, resource indicators), scopes mapped to RBAC permissions
-- [ ] `docs/contracts.md#mcp-endpoint`: the 401 cases and the `WWW-Authenticate` header, plus Failure modes rows for a tenant-less token and a deleted user
-- [ ] `docs/CHANGELOG.md` entry
-- [ ] Run and report the AGENTS.md .NET validation commands; commit, push, PR
+- [x] `docs/decisions.md`: extend the MCP ADR with the spec comparison (Block 1 table, short, citing revision `2026-07-28`), what the new tests pin, and the tenant-less-token follow-up from 2.4
+- [x] Update open item 13 with the concrete list for remote clients: audience-bound tokens for the MCP resource, Protected Resource Metadata discoverable via `WWW-Authenticate` `resource_metadata` or `/.well-known/oauth-protected-resource`, an OAuth 2.1 authorization server (PKCE, resource indicators), scopes mapped to RBAC permissions
+- [x] `docs/contracts.md#mcp-endpoint`: the 401 cases and the `WWW-Authenticate` header, plus Failure modes rows for a tenant-less token and a deleted user
+- [x] `docs/CHANGELOG.md` entry
+- [x] Run and report the AGENTS.md .NET validation commands; commit, push, PR
 
 ---
 
@@ -193,5 +193,5 @@ Only if Blocks 1–3 are done and there's time left. This is the spec's "issued 
 ---
 
 ## End of block
-- [ ] D1 checked
+- [x] D1 checked
 - [ ] Continue with the ai-labs plan (`docs/plans/2026-11-11-mcp-client.md`)

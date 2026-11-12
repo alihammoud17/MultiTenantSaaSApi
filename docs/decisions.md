@@ -56,6 +56,18 @@ AI clients reach the API through an MCP endpoint at `POST /api/v1/mcp` in the ex
 - **The endpoint itself requires an authenticated caller** (`RequireAuthorization`), so an anonymous request gets `401` before `TenantMiddleware` could accept a tenant hint for it.
 - **Read-only for now.** No create, update, delete, secret-rotation or billing tools, and no secrets in outputs. Write tools would need their own review (confirmation, idempotency, audit).
 - **Bearer tokens, not MCP OAuth.** Clients are given an access token. Full MCP OAuth (protected-resource metadata, an authorization server issuing tenant-aware tokens, audience checks) is left until remote clients are in scope; see open item 13.
+- **Checked against the MCP authorization spec (revision `2026-07-28`).** Authorization is optional in MCP; where the endpoint uses it, it meets these rules:
+  - every request's token is validated (signature, issuer, audience, expiry)
+  - invalid or expired tokens get `401` with `WWW-Authenticate: Bearer error="invalid_token"`
+  - no token passthrough: tools call Application services in-process, and the only outbound HTTP is the webhook dispatcher, which signs with HMAC and sends no `Authorization`
+
+  Two gaps are deliberate, acceptable while clients are local and handed a token, and tracked in open item 13: the audience names the whole API rather than the MCP resource, so REST and MCP tokens are interchangeable; and there is no Protected Resource Metadata. RBAC is enforced per tool (the tool is hidden from `tools/list`, and `tools/call` gets a JSON-RPC error), not as the spec's HTTP `403` `insufficient_scope`, which is a SHOULD for scopes the API doesn't have. The confused-deputy risk concerns OAuth proxy servers and doesn't apply.
+- **What `McpServerTests` pins.**
+  - Expired, wrong-key, wrong-audience and wrong-issuer tokens get `401` with that challenge and no `resource_metadata`.
+  - A tenant hint that disagrees with the token gets `403` `TenantMismatch`.
+  - A tenant argument the model adds to a call is ignored by the SDK (observed in 2.4.0), and the tools still use the token's tenant.
+  - A deleted user's token still authenticates until it expires (stateless JWT), but every tool is hidden and refused, the same way REST refuses policy-gated actions. Actions with only `[Authorize]` would still accept it.
+- **Known weakness: a token without `tenant_id` falls back to the tenant hint.** `TenantMiddleware` does this on purpose on every route, so a validly signed token without `tenant_id` plus `X-Tenant-ID` reaches the MCP handler under the hinted tenant. No tool runs: `PermissionAuthorizationHandler` requires the `tenant_id` claim, and every tool has an RBAC policy. A tool without a policy would run, so until open item 14 is decided every MCP tool must carry one. `JwtService` never issues such a token, so exploiting this needs the signing key.
 
 ## Open owner-review items
 
@@ -71,4 +83,9 @@ AI clients reach the API through an MCP endpoint at `POST /api/v1/mcp` in the ex
 10. Define migration rollback, database backup/restore, disaster recovery, and incident procedures.
 11. Decide whether Redis must participate in API readiness checks.
 12. Complete and rehearse outbound-webhook active-secret rotation cutover.
-13. Decide whether the MCP endpoint must serve remote clients. If so, add MCP OAuth: protected-resource metadata, an authorization server whose tokens carry `tenant_id` and the user, audience checks for this server, and enforced scopes.
+13. Decide whether the MCP endpoint must serve remote clients. If so, meet the rest of the MCP authorization spec (revision `2026-07-28`):
+    - tokens whose audience is the MCP resource (RFC 8707), accepted only on `/api/v1/mcp`, with REST tokens rejected there
+    - Protected Resource Metadata (RFC 9728), discoverable through `resource_metadata` in the `WWW-Authenticate` challenge or at `/.well-known/oauth-protected-resource`
+    - an OAuth 2.1 authorization server (PKCE, resource indicators) whose tokens carry `tenant_id` and the user
+    - scopes mapped to RBAC permissions, with `403` `insufficient_scope` when one is missing
+14. Decide whether `TenantMiddleware` should reject an authenticated token without a usable `tenant_id`, instead of falling back to the `X-Tenant-ID` or subdomain hint. Today the fallback is pinned by `TenantMiddlewareTests`; REST actions with only `[Authorize]` and any MCP tool without an RBAC policy would run under the hinted tenant. See [the MCP decision](#the-mcp-endpoint-is-an-in-process-stateless-transport-in-presentation).
