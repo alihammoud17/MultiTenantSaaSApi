@@ -221,6 +221,192 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("TenantSuspended");
     }
 
+    // Positive control for the hand-minted tokens below: without it, the 401 tests would also pass
+    // if CreateTestJwt produced tokens the server could never accept.
+    [Fact]
+    public async Task MintedValidToken_ShouldBeAccepted()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-minted-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var token = SecurityTestHelpers.CreateTestJwt(SecurityTestHelpers.GetUserId(admin.Token), admin.TenantId, DateTime.UtcNow.AddMinutes(10));
+
+        using var response = await SendRawToolsListAsync(client, token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // Spec (2026-07-28): invalid or expired tokens MUST get 401. Each case changes one property of an otherwise valid token.
+    // Expired is 10 minutes old because JwtBearer accepts 5 minutes of clock skew by default.
+    [Theory]
+    [InlineData("expired")]
+    [InlineData("wrong-signing-key")]
+    [InlineData("wrong-audience")]
+    [InlineData("wrong-issuer")]
+    public async Task InvalidToken_ShouldReturn401WithBearerInvalidTokenChallenge(string defect)
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-invalid-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var userId = SecurityTestHelpers.GetUserId(admin.Token);
+        var validUntil = DateTime.UtcNow.AddMinutes(10);
+
+        var token = defect switch
+        {
+            "expired" => SecurityTestHelpers.CreateTestJwt(userId, admin.TenantId, DateTime.UtcNow.AddMinutes(-10)),
+            // At least 32 bytes, so HS256 signing succeeds and only validation can fail.
+            "wrong-signing-key" => SecurityTestHelpers.CreateTestJwt(userId, admin.TenantId, validUntil, signingKey: "a_different_signing_key_also_32_bytes_or_more"),
+            "wrong-audience" => SecurityTestHelpers.CreateTestJwt(userId, admin.TenantId, validUntil, audience: "https://other-resource.example.com"),
+            "wrong-issuer" => SecurityTestHelpers.CreateTestJwt(userId, admin.TenantId, validUntil, issuer: "https://other-issuer.example.com"),
+            _ => throw new ArgumentOutOfRangeException(nameof(defect), defect, null)
+        };
+
+        using var response = await SendRawToolsListAsync(client, token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var challenge = response.Headers.WwwAuthenticate.Should().ContainSingle().Subject;
+        challenge.Scheme.Should().Be("Bearer");
+        challenge.Parameter.Should().Contain("error=\"invalid_token\"");
+        // No MCP OAuth discovery yet (open item 13). Adding Protected Resource Metadata must change this on purpose.
+        challenge.Parameter.Should().NotContain("resource_metadata");
+    }
+
+    // A validly signed token without tenant_id. JwtService never issues one, so this needs the signing key.
+    [Fact]
+    public async Task TokenWithoutTenantClaim_WithoutHint_ShouldReturn400TenantNotFound()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-notenant-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var token = SecurityTestHelpers.CreateTestJwt(SecurityTestHelpers.GetUserId(admin.Token), tenantId: null, DateTime.UtcNow.AddMinutes(10));
+
+        using var response = await SendRawToolsListAsync(client, token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("TenantNotFound");
+    }
+
+    // TenantMiddleware falls back to the hint when an authenticated token has no usable tenant_id (pinned in
+    // TenantMiddlewareTests), so this request reaches the MCP handler with the victim's tenant set. What keeps the tools
+    // closed is PermissionAuthorizationHandler, which needs a tenant_id claim: every tool has an RBAC policy, so all are
+    // hidden and refused. A tool without a policy would run here (ADR follow-up). Tenant B has data so a leak would show.
+    [Fact]
+    public async Task TokenWithoutTenantClaim_WithTenantHint_ShouldReachNoTool()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var attacker = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-notenant-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var victim = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-notenant-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        await PostAsAsync(client, victim.Token, WebhookEndpointsRoute, new { name = "victim-hook", callbackUrl = "https://victim.example.com/hook" });
+        var token = SecurityTestHelpers.CreateTestJwt(SecurityTestHelpers.GetUserId(attacker.Token), tenantId: null, DateTime.UtcNow.AddMinutes(10));
+
+        await using var mcp = await CreateMcpClientAsync(token, tenantHint: victim.TenantId);
+
+        var tools = await mcp.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+        tools.Should().BeEmpty("no RBAC policy succeeds without a tenant_id claim");
+        await AssertToolCallForbiddenAsync(mcp, "list_webhook_endpoints");
+        await AssertToolCallForbiddenAsync(mcp, "list_audit_logs");
+    }
+
+    [Fact]
+    public async Task TokenForTenantA_WithTenantBHint_ShouldReturn403TenantMismatch()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-mismatch-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-mismatch-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        using var response = await SendRawToolsListAsync(client, tenantA.Token, tenantHint: tenantB.TenantId);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("TenantMismatch");
+    }
+
+    // The model chooses tool arguments, so it could try to name another tenant. No tool declares a tenant input
+    // (see the schema test); this pins what the server does with one anyway: the SDK ignores unknown arguments
+    // (observed in 2.4.0) and the tools still read the tenant from the token.
+    [Fact]
+    public async Task SmuggledTenantArgument_ShouldBeIgnored_AndReturnOnlyTheCallersData()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var tenantA = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-smuggle-a-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        var tenantB = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-smuggle-b-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+        await PostAsAsync(client, tenantA.Token, WebhookEndpointsRoute, new { name = "a-hook", callbackUrl = "https://a.example.com/hook" });
+        await PostAsAsync(client, tenantB.Token, WebhookEndpointsRoute, new { name = "b-hook", callbackUrl = "https://b.example.com/hook" });
+        var smuggled = tenantB.TenantId.ToString();
+
+        await using var mcp = await CreateMcpClientAsync(tenantA.Token);
+
+        // A tool without parameters.
+        var webhooks = await CallToolJsonAsync(mcp, "list_webhook_endpoints", new() { ["tenantId"] = smuggled, ["tenant_id"] = smuggled });
+        webhooks.EnumerateArray().Select(e => e.GetProperty("name").GetString()).Should().Equal("a-hook");
+
+        // A tool with parameters: the smuggled ones sit next to valid input.
+        var auditLogs = await CallToolJsonAsync(mcp, "list_audit_logs", new() { ["pageSize"] = 200, ["tenantId"] = smuggled, ["tenant_id"] = smuggled });
+        auditLogs.GetArrayLength().Should().BeGreaterThan(0);
+        auditLogs.EnumerateArray().Select(e => e.GetProperty("tenantId").GetGuid()).Should().OnlyContain(id => id == tenantA.TenantId);
+    }
+
+    // There is no user deactivation, only hard delete. The JWT stays valid until it expires, but every RBAC policy looks
+    // the user up per request, so REST and MCP both refuse a deleted user on policy-gated actions. Actions with only
+    // [Authorize] would still accept the token (known limit of stateless JWTs).
+    [Fact]
+    public async Task DeletedUser_ShouldBeRefusedOnMcp_LikeOnRest()
+    {
+        using var client = SecurityTestHelpers.CreateHttpsClient(_factory);
+        var admin = await SecurityTestHelpers.RegisterTenantAsync(client, $"mcp-deleted-{Guid.NewGuid():N}@example.com", "Passw0rd!");
+
+        // Before the deletion the token works on both surfaces, so the refusals below come from the deletion.
+        (await GetAsAsync(client, admin.Token, WebhookEndpointsRoute)).Should().Be(HttpStatusCode.OK);
+        await using (var before = await CreateMcpClientAsync(admin.Token))
+        {
+            var toolsBefore = await before.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+            toolsBefore.Select(t => t.Name).Should().Contain("list_webhook_endpoints");
+        }
+
+        // Directly in the database: the REST delete needs step-up and an entitlement, which aren't under test here.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var userId = SecurityTestHelpers.GetUserId(admin.Token);
+            db.Users.Remove(db.Users.IgnoreQueryFilters().Single(u => u.Id == userId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        (await GetAsAsync(client, admin.Token, WebhookEndpointsRoute)).Should().Be(HttpStatusCode.Forbidden);
+
+        // Still authenticates (the MCP handshake succeeds), but no tool is visible or callable.
+        await using var mcp = await CreateMcpClientAsync(admin.Token);
+        var tools = await mcp.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+        tools.Should().BeEmpty();
+        await AssertToolCallForbiddenAsync(mcp, "list_webhook_endpoints");
+    }
+
+    // The RBAC denial shape pinned in Member_ShouldNotSeeOrCallAuditTools (SDK 2.4.0).
+    private static async Task AssertToolCallForbiddenAsync(McpClient mcp, string toolName)
+    {
+        var call = () => mcp.CallToolAsync(toolName, cancellationToken: TestContext.Current.CancellationToken).AsTask();
+        var denial = await call.Should().ThrowAsync<McpProtocolException>();
+        denial.Which.ErrorCode.Should().Be(McpErrorCode.InvalidRequest);
+        denial.Which.Message.Should().Contain("Access forbidden");
+    }
+
+    private static async Task<HttpResponseMessage> SendRawToolsListAsync(HttpClient client, string token, Guid? tenantHint = null)
+    {
+        using var request = CreateRawToolsListRequest();
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (tenantHint is not null)
+        {
+            request.Headers.Add("X-Tenant-ID", tenantHint.Value.ToString());
+        }
+
+        return await client.SendAsync(request, TestContext.Current.CancellationToken);
+    }
+
+    private static async Task<HttpStatusCode> GetAsAsync(HttpClient client, string token, string route)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, route);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+        return response.StatusCode;
+    }
+
     // Calls a tool, requires a successful (non-error) result, and returns the JSON from its text content.
     private static async Task<JsonElement> CallToolJsonAsync(McpClient mcp, string toolName, Dictionary<string, object?>? arguments = null)
     {
@@ -250,12 +436,16 @@ public class McpServerTests(ApiWebApplicationFactory factory) : IClassFixture<Ap
         return request;
     }
 
-    // Connects an MCP client to the in-process test server as the token's user.
+    // Connects an MCP client to the in-process test server as the token's user, optionally sending an X-Tenant-ID hint.
     // The transport owns the HttpClient, so disposing the McpClient disposes both.
-    private async Task<McpClient> CreateMcpClientAsync(string token)
+    private async Task<McpClient> CreateMcpClientAsync(string token, Guid? tenantHint = null)
     {
         var httpClient = SecurityTestHelpers.CreateHttpsClient(_factory);
         httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (tenantHint is not null)
+        {
+            httpClient.DefaultRequestHeaders.Add("X-Tenant-ID", tenantHint.Value.ToString());
+        }
 
         var transport = new HttpClientTransport(
             new HttpClientTransportOptions

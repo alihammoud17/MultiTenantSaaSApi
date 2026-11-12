@@ -1,6 +1,8 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -8,6 +10,7 @@ using FluentAssertions;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Tests.Integration;
 
@@ -173,6 +176,47 @@ internal static class SecurityTestHelpers
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return db.Subscriptions.Single(x => x.TenantId == tenantId).Id;
     }
+
+    /// <summary>
+    /// Mints an access token with the same claims and HS256 signing as <c>JwtService</c>, using the factory's JWT settings
+    /// unless overridden. Pass <paramref name="tenantId"/> null to leave out the <c>tenant_id</c> claim. An expiry in the
+    /// past gives an expired token; <c>nbf</c> is then set before it, since <see cref="JwtSecurityToken"/> requires nbf &lt; exp.
+    /// A replacement <paramref name="signingKey"/> must be at least 32 bytes, or HS256 signing throws.
+    /// </summary>
+    internal static string CreateTestJwt(
+        Guid userId,
+        Guid? tenantId,
+        DateTime expiresUtc,
+        string role = "ADMIN",
+        string signingKey = ApiWebApplicationFactory.JwtSecret,
+        string issuer = ApiWebApplicationFactory.JwtIssuer,
+        string audience = ApiWebApplicationFactory.JwtAudience)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new(JwtRegisteredClaimNames.Email, $"{userId:N}@example.com"),
+            new("role", role),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+        };
+
+        if (tenantId is not null)
+        {
+            claims.Add(new Claim("tenant_id", tenantId.Value.ToString()));
+        }
+
+        var now = DateTime.UtcNow;
+        var notBefore = expiresUtc > now ? now : expiresUtc.AddMinutes(-5);
+        var credentials = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)), SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(issuer, audience, claims, notBefore, expiresUtc, credentials);
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>The user id (<c>sub</c> claim) of an access token returned by the API.</summary>
+    internal static Guid GetUserId(string token) =>
+        Guid.Parse(new JwtSecurityTokenHandler().ReadJwtToken(token).Subject);
 
     internal static string ComputeSignatureForTests(string timestamp, string payload)
     {
