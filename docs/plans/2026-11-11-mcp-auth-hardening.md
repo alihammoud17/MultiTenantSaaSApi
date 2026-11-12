@@ -187,8 +187,8 @@ Minting the bad tokens: the factory's JWT settings are inline literals today (`A
 ## Block 4: Stretch (optional, 60–90 min): audience-bound MCP tokens
 
 Only if Blocks 1–3 are done and there's time left. This is the spec's "issued for this server" rule, done without a full OAuth server.
-- [ ] Design first (write it in the ADR before coding): a short-lived token with `aud` = the MCP resource (e.g. `https://<host>/api/v1/mcp`), issued by an authenticated call (e.g. `POST /api/v1/auth/mcp-token`), accepted **only** on `/api/v1/mcp`; REST rejects it and MCP rejects REST tokens
-- [ ] Decide together whether to build it now or leave it in open item 13. The ai-labs client plan works either way, because its token provider just calls whichever endpoint issues the token.
+- [x] Design first (write it in the ADR before coding): a short-lived token with `aud` = the MCP resource (e.g. `https://<host>/api/v1/mcp`), issued by an authenticated call (e.g. `POST /api/v1/auth/mcp-token`), accepted **only** on `/api/v1/mcp`; REST rejects it and MCP rejects REST tokens
+- [x] Decide together whether to build it now or leave it in open item 13. **Decided 12 Nov 2026: build it now, in a separate PR stacked on this branch (`feat/mcp-audience-bound-tokens`), so this PR stays test- and docs-only.** The ai-labs client plan works either way, because its token provider just calls whichever endpoint issues the token.
 
 ---
 
