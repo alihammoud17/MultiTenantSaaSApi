@@ -134,6 +134,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for AI client
 ### Authentication and tenant
 
 - `Authorization: Bearer <access token>`: the same JWT as the REST API, from `POST /api/v1/auth/login`. There is no MCP OAuth discovery (protected-resource metadata); clients are given the token.
+- A token that fails validation (expired, wrong signing key, wrong audience or wrong issuer) gets `401` with `WWW-Authenticate: Bearer error="invalid_token", error_description="…"`. The challenge has no `resource_metadata` parameter. `error_description` is set by ASP.NET Core's JwtBearer handler and isn't part of the contract.
 - The tenant is the token's `tenant_id` claim, resolved by `TenantMiddleware` as for every `/api/v1` route. No tool takes a tenant identifier, so a client cannot ask for another tenant's data. An `X-Tenant-ID` or subdomain hint that disagrees with the token is rejected.
 - Every MCP request counts against the tenant's plan-aware monthly limit, like a REST request.
 
@@ -148,13 +149,17 @@ All four tools are read-only (`readOnlyHint: true`) and mirror a REST action: sa
 | `list_webhook_endpoints` | none | `GET /api/v1/tenant/webhook-endpoints` | `billing.manage` | none (the REST action has none) | Endpoints sorted by name; **no signing secrets** |
 | `list_cors_origins` | none | `GET /api/v1/admin/tenant/cors-origins` | `tenants.read` | `feature.security.cors_origins.manage` | Tenant-registered origins sorted by origin (not `Cors:AllowedOrigins`) |
 
-Results are JSON in a text content block.
+Results are JSON in a text content block. Arguments a tool doesn't declare, such as an added `tenantId`, are ignored (observed SDK 2.4.0 behavior); the tenant still comes from the token.
 
 ### Failure modes
 
 | Condition | Result |
 | --- | --- |
-| Missing or invalid token | `401` before MCP runs, including when an `X-Tenant-ID` hint names a real tenant |
+| Missing token | `401` before MCP runs, including when an `X-Tenant-ID` hint names a real tenant |
+| Invalid token (expired, wrong signing key, wrong audience or wrong issuer) | `401` before MCP runs, with `WWW-Authenticate: Bearer error="invalid_token"` |
+| Token without a `tenant_id` claim, no tenant hint | `400` `TenantNotFound` |
+| Token without a `tenant_id` claim, with an `X-Tenant-ID` hint | Reaches MCP under the hinted tenant, but no tool is listed or callable (RBAC requires the claim). The API never issues such tokens; see open item 14 in [Decisions](decisions.md#open-owner-review-items) |
+| User deleted after the token was issued | The token authenticates until it expires, but no tool is listed or callable |
 | Tenant not `Active` (suspended or pending verification) | `403` `TenantSuspended` from `TenantMiddleware` |
 | Tenant hint disagrees with the token | `403` `TenantMismatch` |
 | Monthly plan limit reached | `429` `RateLimitExceeded` |
