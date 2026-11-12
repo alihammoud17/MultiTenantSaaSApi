@@ -441,5 +441,32 @@ namespace Application.Services
 
             return new StepUpValidationResult(true, true, AuthFlowError.None);
         }
+
+        // Exchanges an authenticated API caller for a short-lived token whose audience is the MCP endpoint.
+        // No refresh token: the client exchanges again when it expires.
+        public async Task<McpTokenResult> IssueMcpTokenAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken = default)
+        {
+            _tenantContext.SetTenantId(tenantId);
+            var user = await _dbContext.Users
+                .Include(u => u.Tenant)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, cancellationToken);
+
+            if (user == null)
+                return new McpTokenResult(false, AuthFlowError.InvalidAuthenticatedContext, null);
+
+            // TenantMiddleware already rejects suspended tenants on authenticated auth routes; kept here so the
+            // service is safe on its own.
+            if (user.Tenant.Status != TenantStatus.Active)
+                return new McpTokenResult(false, AuthFlowError.TenantSuspended, null);
+
+            var token = _jwtService.GenerateMcpToken(user, user.Tenant);
+            await _auditService.LogAsync("MCP_TOKEN_ISSUED", nameof(User), user.Id.ToString(), new
+            {
+                token.ExpiresAt
+            }, actorUserId: user.Id);
+
+            return new McpTokenResult(true, AuthFlowError.None, token);
+        }
     }
 }

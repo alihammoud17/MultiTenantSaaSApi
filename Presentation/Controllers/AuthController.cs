@@ -316,6 +316,30 @@ namespace Presentation.Controllers
             return Ok(new { message = "Password reset successful." });
         }
 
+        // Exchanges an API access token (default scheme, so not an MCP token) for a short-lived MCP token.
+        [HttpPost("mcp-token")]
+        [Authorize]
+        public async Task<IActionResult> IssueMcpToken(CancellationToken cancellationToken)
+        {
+            var tenantId = ResolveCurrentTenantId();
+            var userId = ResolveCurrentUserId();
+            if (tenantId == Guid.Empty || userId == Guid.Empty)
+                return Unauthorized(new { error = "Invalid authenticated context" });
+
+            var result = await _authOrchestrationService.IssueMcpTokenAsync(tenantId, userId, cancellationToken);
+            return result.Error switch
+            {
+                AuthFlowError.InvalidAuthenticatedContext => Unauthorized(new { error = "Invalid authenticated context" }),
+                AuthFlowError.TenantSuspended => StatusCode(403, new { error = "Tenant account is suspended" }),
+                AuthFlowError.None when result.Token is not null => Ok(new
+                {
+                    token = result.Token.Token,
+                    expiresAt = result.Token.ExpiresAt
+                }),
+                _ => StatusCode(500, new { error = "MCP token issuance failed" })
+            };
+        }
+
         [HttpPost("mfa/enroll/initiate")]
         [Authorize]
         public async Task<IActionResult> InitiateMfaEnrollment(CancellationToken cancellationToken)

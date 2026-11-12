@@ -240,6 +240,9 @@ public class AuthControllerBoundaryTests
 
         public Task<StepUpValidationResult> ValidateStepUpAsync(Guid tenantId, Guid userId, string purpose, string? stepUpToken, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+
+        public Task<McpTokenResult> IssueMcpTokenAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 
     private sealed class NoOpAuditService : IAuditService

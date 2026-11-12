@@ -46,5 +46,10 @@ namespace Domain.Interfaces
             string purpose,
             string? stepUpToken,
             CancellationToken cancellationToken = default);
+
+        Task<McpTokenResult> IssueMcpTokenAsync(
+            Guid tenantId,
+            Guid userId,
+            CancellationToken cancellationToken = default);
     }
 }

@@ -20,7 +20,13 @@ namespace Application.Services
             _configuration = configuration;
         }
 
-        public AccessToken GenerateToken(User user, Tenant tenant)
+        public AccessToken GenerateToken(User user, Tenant tenant) =>
+            Generate(user, tenant, _configuration["Jwt:Audience"]!, int.Parse(_configuration["Jwt:ExpirationMinutes"]!));
+
+        public AccessToken GenerateMcpToken(User user, Tenant tenant) =>
+            Generate(user, tenant, _configuration["Jwt:McpAudience"]!, int.Parse(_configuration["Jwt:McpTokenExpirationMinutes"]!));
+
+        private AccessToken Generate(User user, Tenant tenant, string audience, int expirationMinutes)
         {
             var key = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(_configuration["Jwt:Secret"]!));
@@ -37,11 +43,11 @@ namespace Application.Services
             };
 
             // One value for the token's exp claim and the expiry reported to the client, so they cannot disagree.
-            var expiresAt = DateTime.UtcNow.AddMinutes(int.Parse(_configuration["Jwt:ExpirationMinutes"]!));
+            var expiresAt = DateTime.UtcNow.AddMinutes(expirationMinutes);
 
             var token = new JwtSecurityToken(
                 issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
+                audience: audience,
                 claims: claims,
                 expires: expiresAt,
                 signingCredentials: credentials

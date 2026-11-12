@@ -26,6 +26,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
     public const string JwtSecret = "super_secret_key_for_tests_only_1234567890";
     public const string JwtIssuer = "MultiTenantSaasApi";
     public const string JwtAudience = "MultiTenantSaasApi";
+    // Differs from the appsettings.json default on purpose: tests fail if issuance or validation ignores the host's configuration.
+    public const string JwtMcpAudience = "MultiTenantSaasApi/mcp-tests";
 
     private readonly string _connectionString = $"Data Source=file:api-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
     private readonly SqliteConnection _keepAliveConnection;
@@ -48,6 +50,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 ["Jwt:Issuer"] = JwtIssuer,
                 ["Jwt:Audience"] = JwtAudience,
                 ["Jwt:ExpirationMinutes"] = "60",
+                ["Jwt:McpAudience"] = JwtMcpAudience,
+                ["Jwt:McpTokenExpirationMinutes"] = "15",
                 ["BillingIntegration:SharedSecret"] = "billing-integration-test-secret",
                 ["BillingIntegration:AllowedClockSkewMinutes"] = "5",
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=unused;Username=unused;Password=unused",

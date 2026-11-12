@@ -133,10 +133,25 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for AI client
 
 ### Authentication and tenant
 
-- `Authorization: Bearer <access token>`: the same JWT as the REST API, from `POST /api/v1/auth/login`. There is no MCP OAuth discovery (protected-resource metadata); clients are given the token.
+- `Authorization: Bearer <MCP token>`: a JWT whose audience is `Jwt:McpAudience`, from the token exchange below. REST access tokens (audience `Jwt:Audience`) get `401` here, and MCP tokens get `401` on REST. There is no MCP OAuth discovery (protected-resource metadata); clients obtain the token themselves.
 - A token that fails validation (expired, wrong signing key, wrong audience or wrong issuer) gets `401` with `WWW-Authenticate: Bearer error="invalid_token", error_description="…"`. The challenge has no `resource_metadata` parameter. `error_description` is set by ASP.NET Core's JwtBearer handler and isn't part of the contract.
 - The tenant is the token's `tenant_id` claim, resolved by `TenantMiddleware` as for every `/api/v1` route. No tool takes a tenant identifier, so a client cannot ask for another tenant's data. An `X-Tenant-ID` or subdomain hint that disagrees with the token is rejected.
 - Every MCP request counts against the tenant's plan-aware monthly limit, like a REST request.
+
+### Token exchange
+
+```http
+POST /api/v1/auth/mcp-token
+Authorization: Bearer <REST access token>
+```
+
+Returns `200` with `{ "token": "<MCP token>", "expiresAt": "<UTC>" }`. The MCP token has the access token's claims (`sub`, `email`, `tenant_id`, `role`, `jti`), `aud` = `Jwt:McpAudience` and a lifetime of `Jwt:McpTokenExpirationMinutes` (15 by default). There is no refresh token: clients exchange again before `expiresAt`. Each issuance is audited as `MCP_TOKEN_ISSUED` for the caller's tenant and user; the token itself is not logged.
+
+| Condition | Result |
+| --- | --- |
+| Missing or invalid token, or an MCP token (it can't be exchanged for another) | `401` |
+| User deleted after the access token was issued | `401` `Invalid authenticated context` |
+| Tenant not `Active` | `403` `TenantSuspended` |
 
 ### Tools
 
@@ -156,10 +171,11 @@ Results are JSON in a text content block. Arguments a tool doesn't declare, such
 | Condition | Result |
 | --- | --- |
 | Missing token | `401` before MCP runs, including when an `X-Tenant-ID` hint names a real tenant |
+| REST access token (audience `Jwt:Audience`) | `401` before MCP runs, with `WWW-Authenticate: Bearer error="invalid_token"` |
 | Invalid token (expired, wrong signing key, wrong audience or wrong issuer) | `401` before MCP runs, with `WWW-Authenticate: Bearer error="invalid_token"` |
 | Token without a `tenant_id` claim, no tenant hint | `400` `TenantNotFound` |
 | Token without a `tenant_id` claim, with an `X-Tenant-ID` hint | Reaches MCP under the hinted tenant, but no tool is listed or callable (RBAC requires the claim). The API never issues such tokens; see open item 14 in [Decisions](decisions.md#open-owner-review-items) |
-| User deleted after the token was issued | The token authenticates until it expires, but no tool is listed or callable |
+| User deleted after the MCP token was issued | The MCP token authenticates until it expires (15 minutes by default), but no tool is listed or callable |
 | Tenant not `Active` (suspended or pending verification) | `403` `TenantSuspended` from `TenantMiddleware` |
 | Tenant hint disagrees with the token | `403` `TenantMismatch` |
 | Monthly plan limit reached | `429` `RateLimitExceeded` |
@@ -170,7 +186,7 @@ Results are JSON in a text content block. Arguments a tool doesn't declare, such
 
 Each tool call that passes the RBAC check writes one audit entry for the caller's tenant and user: action `MCP_TOOL_CALLED`, entity type `McpTool`, entity id the tool name, changes `{"isError": true|false}`. Arguments and results are not recorded. These entries appear in the tenant's audit log and usage analytics like any other activity.
 
-Integration coverage: `Tests/Integration/McpServerTests.cs`. The JSON-RPC error for an RBAC denial and the `isError` result for an entitlement denial are observed SDK 2.4.0 behavior, pinned there.
+Integration coverage: `Tests/Integration/McpServerTests.cs` and, for the token exchange, `Tests/Integration/McpTokenTests.cs`. The JSON-RPC error for an RBAC denial and the `isError` result for an entitlement denial are observed SDK 2.4.0 behavior, pinned there.
 
 ## Outbound tenant webhooks
 

@@ -52,6 +52,8 @@ Configuration can use user secrets for development or double-underscore environm
 | `Jwt:Issuer` | `Jwt__Issuer` | Valid token issuer; default documentation value is `MultiTenantSaasApi`. |
 | `Jwt:Audience` | `Jwt__Audience` | Valid token audience; default documentation value is `MultiTenantSaasApi`. |
 | `Jwt:ExpirationMinutes` | `Jwt__ExpirationMinutes` | Access-token lifetime; documented default is `60`. |
+| `Jwt:McpAudience` | `Jwt__McpAudience` | Audience of MCP tokens from `POST /api/v1/auth/mcp-token`, accepted only on `/api/v1/mcp`; default `MultiTenantSaasApi/mcp`. Must be set and differ from `Jwt:Audience`, or the API refuses to start. |
+| `Jwt:McpTokenExpirationMinutes` | `Jwt__McpTokenExpirationMinutes` | MCP token lifetime; default `15`. |
 | `BillingIntegration:SharedSecret` | `BillingIntegration__SharedSecret` | Internal callback HMAC key; required and sensitive. |
 | `BillingIntegration:AllowedClockSkewMinutes` | `BillingIntegration__AllowedClockSkewMinutes` | Callback timestamp tolerance; default is `5`. |
 | `TenantOperations:SharedSecret` | `TenantOperations__SharedSecret` | HMAC key for the operator suspend/reactivate endpoints; sensitive. Unset disables them. Must differ from the billing secret. |
