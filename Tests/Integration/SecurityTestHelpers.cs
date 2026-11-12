@@ -214,6 +214,18 @@ internal static class SecurityTestHelpers
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
+    /// <summary>Exchanges an API access token for an MCP token at <c>POST /api/v1/auth/mcp-token</c>.</summary>
+    internal static async Task<string> GetMcpTokenAsync(HttpClient client, string accessToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/mcp-token");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, "the MCP token exchange should succeed");
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("token").GetString()!;
+    }
+
     /// <summary>The user id (<c>sub</c> claim) of an access token returned by the API.</summary>
     internal static Guid GetUserId(string token) =>
         Guid.Parse(new JwtSecurityTokenHandler().ReadJwtToken(token).Subject);

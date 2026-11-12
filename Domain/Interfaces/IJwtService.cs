@@ -9,5 +9,8 @@ namespace Domain.Interfaces
     public interface IJwtService
     {
         AccessToken GenerateToken(User user, Tenant tenant);
+
+        // Same claims, but aud = Jwt:McpAudience and a short lifetime: accepted only on the MCP endpoint.
+        AccessToken GenerateMcpToken(User user, Tenant tenant);
     }
 }

@@ -299,6 +299,7 @@ public sealed class AuthOrchestrationServiceTests : IAsyncLifetime
     private sealed class FakeJwtService : IJwtService
     {
         public AccessToken GenerateToken(User user, Tenant tenant) => new($"jwt-{user.Id}", DateTime.UtcNow.AddHours(1));
+        public AccessToken GenerateMcpToken(User user, Tenant tenant) => new($"mcp-jwt-{user.Id}", DateTime.UtcNow.AddMinutes(15));
     }
 
     private sealed class FakeRefreshTokenService : IRefreshTokenService
