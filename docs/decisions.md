@@ -20,6 +20,18 @@ Internal billing callbacks use a versioned DTO and timestamped HMAC over the raw
 
 Public API routes use `/api/v1/...`. A new major API version is reserved for breaking contract changes. Backward-compatible additions do not require a new major version. Operational endpoints such as `/health` and `/metrics` are not public business API versions.
 
+The original choice (April 2026) did not record why the version goes in the path rather than a header, the media type or the query string. These reasons, from how the API works now, keep it in the path:
+
+- Requests already carry tenant information in the subdomain, `X-Tenant-ID` and the JWT `tenant_id` claim. A version header would be one more header that can be missing or conflict. A path version is visible in logs, metrics and traces without extra work.
+- `TenantMiddleware` and `RateLimitMiddleware` decide tenant resolution and rate-limit exemptions from the path. `ApiVersionedRouteMatcher` matches the auth and plans routes for any `/api/v{n}`. Header versioning would mean reading and validating a header before those checks.
+- MCP clients are configured with a URL only (`claude mcp add --transport http …/api/v1/mcp`). A path version needs no extra client configuration.
+- A custom version header makes browsers send a CORS preflight and must be added to the allowed headers next to the per-tenant CORS origins. A path version needs neither.
+- Swagger documents (`/swagger/v1/swagger.json`), `.http` files, curl and Postman all work with a path version as is.
+
+Date-based versions pinned per tenant (Stripe style) are the alternative worth revisiting if the API gains many outside integrators and frequent breaking changes. They need a layer that converts requests and responses between versions, which is not justified today.
+
+v1 is not frozen until the first public release. Until then, breaking changes may ship in v1 if they are marked **Breaking** in the [changelog](CHANGELOG.md), as the registration (`202 Accepted`) and CORS changes were. After the first public release, a breaking change needs a new major version. Versioning is hand-written in route attributes; there is no `Asp.Versioning` package and there are no deprecation or `Sunset` headers. Adding them is part of introducing v2. Internal routes under `/api/internal/...` are not URL-versioned; the billing callback versions its body with `contractVersion` (see [Service contracts](contracts.md)).
+
 Application releases should use Semantic Versioning. Branch names are workflow conventions; release tags, not branch names, identify releases.
 
 ### Local validation is the present maturity target
