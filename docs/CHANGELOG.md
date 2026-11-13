@@ -4,6 +4,7 @@ This is a milestone-level implementation history, not a release promise or activ
 
 ## Unreleased
 
+- The URL-segment versioning decision now records why the version stays in the path, when date-based versions pinned per tenant would be worth revisiting, and that v1 is not frozen until the first public release (breaking changes until then are marked **Breaking** here). See [Decisions](decisions.md#public-apis-use-url-segment-versions). No API behavior change.
 - The MCP endpoint's authentication was checked against the MCP authorization spec (revision `2026-07-28`), and new tests in `Tests/Integration/McpServerTests.cs` pin it:
   - expired, wrong-key, wrong-audience and wrong-issuer tokens get `401` with `WWW-Authenticate: Bearer error="invalid_token"`
   - a tenant hint that disagrees with the token gets `403` `TenantMismatch`
